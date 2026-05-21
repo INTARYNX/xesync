@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>XeSync</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+  <!-- ── TOP BAR ──────────────────────────────────────── -->
+  <div id="topbar" class="visible">
+    <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
+    <span id="tbar-user"></span>
+    <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
+    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;">DEBUG</button>
+  </div>
+
+  <!-- ── LOGIN ─────────────────────────────────────────── -->
+  <div id="screen-login" class="screen active">
+    <h1>XESYNC</h1>
+    <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="password" placeholder="password">
+    <button class="btn primary" onclick="doLogin()">LOGIN</button>
+    <div class="status-msg" id="login-status"></div>
+  </div>
+
+  <!-- ── HOME ─────────────────────────────────────────── -->
+  <div id="screen-home" class="screen">
+    <iframe id="home-frame" src="about:blank"></iframe>
+  </div>
+
+  <!-- ── SCAN ──────────────────────────────────────────── -->
+  <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
+
+    <div id="scan-idle">
+      <button class="btn primary" onclick="doScan()" style="font-size:1.6em;padding:20px 40px;letter-spacing:0.2em;max-width:none;">SCAN</button>
+    </div>
+
+    <div id="scan-active">
+      <div id="pulse-ring"></div>
+      <div id="scan-label">SCANNING...</div>
+      <div id="device-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ── CONNECTING ────────────────────────────────────── -->
+  <div id="screen-connecting" class="screen">
+    <div class="big-label" id="connecting-label">CONNECTING...</div>
+  </div>
+
+  <!-- ── ROWING ─────────────────────────────────────────── -->
+  <div id="screen-rowing" class="screen" style="position:relative;">
+    <!-- ROWING_DISPLAY -->
+    <div id="loading-overlay" class="rowing-overlay visible">
+      <div class="big-label">LOADING...</div>
+    </div>
+    <div id="reconnect-overlay" class="rowing-overlay" style="background:rgba(0,0,0,0.85);">
+      <div class="big-label">RECONNECTING...</div>
+      <button class="btn danger" onclick="doGiveUp()">STOP</button>
+    </div>
+  </div>
+
+
+  <script>
+    var appToken = null;
+    var appUsername = null;
+    var lastWebViewString = '';
+
+
+
+    // ── SCREENS ───────────────────────────────────────────
+    var SCREENS_NO_BAR = { 'screen-rowing': true };
+
+    function show(id) {
+      document.querySelectorAll('.screen').forEach(function(s) {
+        s.classList.remove('active');
+      });
+      document.getElementById(id).classList.add('active');
+
+      var bar = document.getElementById('topbar');
+      if (SCREENS_NO_BAR[id]) {
+        bar.classList.remove('visible');
+      } else {
+        bar.classList.add('visible');
+        var hideScan = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
+        document.getElementById('tbar-scan-btn').style.display = hideScan ? 'none' : '';
+        document.getElementById('tbar-debug-btn').style.display = id === 'screen-rowing' ? 'none' : '';
+      }
+    }
+
+    function debugMode() {
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      var i = 0;
+      var debugTimer = setInterval(function() {
+        if (i >= ftmsData.length) { clearInterval(debugTimer); return; }
+        ingestData(ftmsData[i]);
+        i++;
+      }, 500);
+    }
+
+    function doExit() {
+      appToken = null;
+      appUsername = null;
+      document.getElementById('tbar-user').textContent = '';
+      document.getElementById('password').value = '';
+      show('screen-login');
+    }
+
+    // ── APP INVENTOR BRIDGE ───────────────────────────────
+    function sendToApp(action, data) {
+      var payload = JSON.stringify(Object.assign({ action: action }, data));
+      var ai = window.AppInventor || (typeof AppInventor !== 'undefined' ? AppInventor : null);
+      if (ai && ai.setWebViewString) {
+        ai.setWebViewString(payload);
+      } else {
+        console.log('[→ App]', payload);
+      }
+    }
+
+    // App Inventor calls: WebViewer.RunJavaScript("handleAppResponse(JSON.stringify({...}))")
+    function handleAppResponse(json) {
+      if (!json) return;
+      lastWebViewString = json;
+      var msg;
+      try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch(e) {
+        // Not JSON — treat as raw FTMS bytes if it looks like numbers
+        if (typeof json === 'string' && /^\s*\d/.test(json)) {
+          ingestData(json.trim());
+        }
+        return;
+      }
+
+      switch (msg.action) {
+        case 'autoLogin':     doAutoLogin(msg);     break;
+        case 'scanResult':    onScanResult(msg);    break;
+        case 'connectResult': onConnectResult(msg); break;
+        case 'disconnected':  onDisconnected();     break;
+        case 'reconnected':   onReconnected();      break;
+        case 'ftmsData':      onFtmsData(msg);      break;
+        case 'saveAck':       onSaveAck();          break;
+        case 'goHome':        showHome();           break;
+        default: console.warn('Unknown action:', msg.action);
+      }
+    }
+    window.handleAppResponse = handleAppResponse;
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'shaderReady') {
+        document.getElementById('loading-overlay').classList.remove('visible');
+      }
+    });
+
+    // ── LOGIN ─────────────────────────────────────────────
+    function doAutoLogin(msg) {
+      if (!msg.token) return;
+      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/validate_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'token=' + encodeURIComponent(msg.token)
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === 'success') {
+          appToken = msg.token;
+          appUsername = data.username;
+          document.getElementById('tbar-user').textContent = data.username;
+          showHome();
+        } else {
+          setLoginStatus('Session expired. Please log in again.');
+          show('screen-login');
+        }
+      })
+      .catch(function() {
+        goOffline();
+      });
+    }
+
+    function doLogin() {
+      var u = document.getElementById('username').value.trim();
+      var p = document.getElementById('password').value;
+      if (!u || !p) { setLoginStatus('Username and password required'); return; }
+      setLoginStatus('');
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+      fetchLogin(u, p);
+    }
+
+    function fetchLogin(u, p) {
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+
+      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        if (data.token) {
+          appToken = data.token;
+          appUsername = u;
+          document.getElementById('tbar-user').textContent = u;
+          sendToApp('loginResult', { success: true, token: data.token, username: u });
+          showHome();
+        } else {
+          setLoginStatus(data.error || 'Login failed');
+          sendToApp('loginResult', { success: false, error: data.error || 'Login failed' });
+        }
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        console.error(e);
+        goOffline();
+      });
+    }
+
+    function setLoginStatus(msg) {
+      document.getElementById('login-status').textContent = msg;
+    }
+
+    function goScanWithoutLogin() {
+      document.getElementById('scan-idle').style.display = 'flex';
+      document.getElementById('scan-active').style.display = 'none';
+      show('screen-scan');
+    }
+
+    function startScan() {
+      show('screen-scan');
+      doScan();
+    }
+
+    function goOffline() {
+      sendToApp('loginResult', { success: false, offline: true });
+      show('screen-scan');
+      showOfflineBanner();
+    }
+
+    function showOfflineBanner() {
+      var existing = document.getElementById('offline-banner');
+      if (existing) return;
+      var banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1000;color:#886;' +
+        'font-size:11px;padding:6px 12px;text-align:center;border-top:1px solid #332200;z-index:50;';
+      banner.textContent = 'OFFLINE — workouts will be uploaded on next login';
+      document.body.appendChild(banner);
+    }
+
+    // ── HOME ──────────────────────────────────────────────
+    function showHome() {
+      var url = 'https://www.fournier-digital.ch/apex/r/mintaka/xesync/home' +
+                '?token=' + encodeURIComponent(appToken);
+      document.getElementById('home-frame').src = url;
+      show('screen-home');
+    }
+
+    // ── SCAN ──────────────────────────────────────────────
+    function doScan() {
+      document.getElementById('device-list').innerHTML = '';
+      document.getElementById('pulse-ring').style.display = '';
+      document.getElementById('scan-label').textContent = 'SCANNING...';
+      document.getElementById('scan-idle').style.display = 'none';
+      document.getElementById('scan-active').style.display = 'flex';
+      sendToApp('scan', {});
+    }
+
+    function onScanResult(msg) {
+      document.getElementById('pulse-ring').style.display = 'none';
+      document.getElementById('scan-label').textContent = 'SELECT ROWER';
+      var list = document.getElementById('device-list');
+      list.innerHTML = '';
+      var seen = {};
+      var devices = (msg.devices || []).reduce(function(acc, d) {
+        var parts = (d.id || '').trim().split(/\s+/);
+        var mac = parts[0];
+        if (!seen[mac]) { seen[mac] = true; acc.push({ id: mac, name: parts.slice(1).join(' ') || mac }); }
+        return acc;
+      }, []);
+      if (devices.length === 0) {
+        list.innerHTML = '<div class="empty-msg">No rower found</div>';
+        return;
+      }
+      devices.forEach(function(d) {
+        var item = document.createElement('div');
+        item.className = 'device-item';
+        item.innerHTML = '<span>' + escHtml(d.name) + '</span>' +
+                         '<span class="device-rssi">' + escHtml(d.id) + '</span>';
+        item.onclick = function() { doConnect(d); };
+        list.appendChild(item);
+      });
+    }
+
+    // ── CONNECT ───────────────────────────────────────────
+    function doConnect(device) {
+      document.getElementById('connecting-label').textContent = 'CONNECTING...';
+      show('screen-connecting');
+      sendToApp('connect', { deviceId: device.id, deviceName: device.name });
+    }
+
+    function onConnectResult(msg) {
+      if (msg.success) {
+        document.getElementById('loading-overlay').classList.add('visible');
+        show('screen-rowing');
+        initRowing();
+        initFtmsTracking();
+      } else {
+        document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
+        setTimeout(function() { show('screen-scan'); }, 2000);
+      }
+    }
+
+    function onDisconnected() {
+      document.getElementById('reconnect-overlay').classList.add('visible');
+      sendToApp('reconnect', {});
+    }
+
+    function onReconnected() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+    }
+
+    function onSaveAck() {
+      showHome();
+    }
+
+    function doGiveUp() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+      sendToApp('disconnect', {});
+      goScanWithoutLogin();
+    }
+
+    function onFtmsData(msg) {
+      console.log('[FTMS]', msg.data);
+      ingestData(msg.data);
+      sendRawData(msg.data);
+    }
+
+    function sendRawData(data) {
+      var d = new Date();
+      var p = function(n, w) { return String(n).padStart(w || 2, '0'); };
+      var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
+                    p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
+                    p(d.getMilliseconds(), 3);
+      var body = JSON.stringify({ date: dateStr, data: data });
+      console.log('[FTMS raw] POST', body);
+      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/rawdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+      })
+      .then(function(r) {
+        return r.text().then(function(t) {
+          console.log('[FTMS raw]', r.status, t);
+        });
+      })
+      .catch(function(e) { console.warn('[FTMS raw] fetch error:', e.message); });
+    }
+
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash.indexOf('#data=') === 0) {
+        ingestData(null);
+      }
+    });
+
+    // ── UTILS ─────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+  </script>
+  <script src="ftms_captured.js"></script>
+</body>
+</html>

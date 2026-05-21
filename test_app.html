@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XeSync Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; font-size: 11px; display: flex; flex-direction: column; height: 100vh; padding: 4px; gap: 4px; background: #111; color: #eee; }
+    .row { display: flex; gap: 4px; flex: 1; min-height: 0; }
+    .col { display: flex; flex-direction: column; gap: 4px; }
+    .col.left { flex: 0 0 auto; display: flex; flex-direction: column; }
+    .col.right { flex: 1; min-width: 0; }
+    .group { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+    .label { color: #888; white-space: nowrap; min-width: 28px; }
+    button { font-size: 10px; padding: 3px 6px; background: #333; color: #eee; border: 1px solid #555; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+    button:active { background: #555; }
+    button.out { border-color: #66aaff; }
+    button.in  { border-color: #88cc66; }
+    button.danger { border-color: #ff6666; }
+    textarea { font-size: 10px; font-family: monospace; background: #1a1a1a; color: #ccc; border: 1px solid #444; padding: 3px; resize: none; width: 100%; }
+    #rx { height: 40px; }
+    #log { flex: 1; }
+    #ftms-log { flex: 1; }
+    hr { border-color: #333; }
+  </style>
+</head>
+<body>
+
+<div class="row">
+  <!-- LEFT COLUMN: all buttons + ftms log below -->
+  <div class="col left">
+
+    <div class="group">
+      <span class="label">LOGIN</span>
+      <button class="in" onclick="send({action:'loginResult',success:true,token:'test123',username:'demo'})">loginResult OK</button>
+      <button class="in danger" onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
+    </div>
+
+    <div class="group">
+      <span class="label">SCAN</span>
+      <button class="out" onclick="send({action:'scan'})">scan</button>
+      <button class="in" onclick="send({action:'scanResult',devices:[{id:'D6:07:FD:51:EE:34 XEBEX-AR2-60980 -63'},{id:'AA:BB:CC:DD:EE:01 XEBEX-AR2-60981 -82'}]})">scanResult</button>
+    </div>
+
+    <div class="group">
+      <span class="label">CONN</span>
+      <button class="out" onclick="send({action:'connect',deviceId:'D6:07:FD:51:EE:34',deviceName:'Xebex Air 4'})">connect</button>
+      <button class="in" onclick="send({action:'connectResult',success:true})">OK</button>
+      <button class="in danger" onclick="send({action:'connectResult',success:false,error:'Device not found'})">FAIL</button>
+    </div>
+
+    <div class="group">
+      <span class="label">FTMS</span>
+      <button class="in" onclick="send({action:'ftmsData',data:'44, 11, 46, 10, 0, 49, 0, 0, 3, 1, 21, 0, 2, 0, 57, 1, 255, 0, 26, 0'})">moderate</button>
+      <button class="in" onclick="send({action:'ftmsData',data:'44, 11, 60, 18, 0, 78, 0, 0, 220, 0, 32, 0, 5, 0, 200, 1, 142, 0, 55, 0'})">hard+HR</button>
+      <button class="in" onclick="send({action:'ftmsData',data:'44, 11, 0, 0, 0, 0, 0, 0, 144, 95, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0'})">idle</button>
+    </div>
+
+    <div class="group">
+      <span class="label">DISC</span>
+      <button class="in" onclick="send({action:'disconnected'})">disconnected</button>
+      <button class="out" onclick="send({action:'reconnect'})">reconnect</button>
+      <button class="in" onclick="send({action:'reconnected'})">reconnected</button>
+      <button class="out danger" onclick="send({action:'disconnect'})">give up</button>
+    </div>
+
+    <div class="group">
+      <span class="label">SAVE</span>
+      <button class="out" onclick="sendSave()">saveData</button>
+      <button class="out" onclick="send({action:'synced'})">synced</button>
+      <button class="in" onclick="send({action:'saveAck'})">saveAck</button>
+    </div>
+
+    <div class="group">
+      <span class="label">HOME</span>
+      <button class="in" onclick="send({action:'goHome'})">goHome</button>
+    </div>
+
+    <div class="group">
+      <span class="label">API</span>
+      <button onclick="testUpload()" style="border-color:#ffaa00;">POST workout</button>
+    </div>
+
+    <div style="font-size:10px;color:#888;margin-top:4px;">FTMS:</div>
+    <textarea id="ftms-log" readonly></textarea>
+
+  </div>
+
+  <!-- RIGHT COLUMN: received + log -->
+  <div class="col right" style="display:flex; flex-direction:column; gap:4px;">
+    <div style="font-size:10px;color:#888;">IN:</div>
+    <textarea id="rx" readonly></textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:10px;color:#888;">LOG:</span>
+      <button onclick="document.getElementById('log').value=''">clear</button>
+    </div>
+    <textarea id="log" readonly style="flex:1;"></textarea>
+  </div>
+</div>
+
+<script>
+  var currentToken = '';
+
+  function handleAppResponse(val) {
+    document.getElementById('rx').value = val;
+    addLog('IN (RunJS): ' + val);
+    try {
+      var msg = JSON.parse(val);
+      if (msg.token) { currentToken = msg.token; addLog('TOKEN: ' + currentToken); }
+      if (msg.action === 'ftmsData' && msg.data) {
+        var p = parseFtms(msg.data);
+        if (p) addFtmsLog('spm=' + p.spm + ' dist=' + p.dist + 'm strk=' + p.strk + ' watt=' + p.watt + 'W pace=' + p.pace + ' cal=' + p.cal + ' hr=' + p.hr + ' time=' + p.time);
+      }
+    } catch(e) {}
+  }
+
+  function parseFtms(data) {
+    var b = data.split(',').map(function(x) { return parseInt(x); });
+    if (b.length < 20) return null;
+    // Xebex: u16 = high_byte * 255 + low_byte (NOT standard little-endian)
+    function u16(lo, hi) { return b[hi] * 255 + b[lo]; }
+    function fmt(sec) { var m = Math.floor(sec / 60), s = sec % 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s; }
+    return {
+      spm:  (b[2] * 0.5).toFixed(1),  // byte 2
+      strk: u16(3, 4),                  // bytes 3-4
+      dist: u16(5, 6),                  // bytes 5-6
+      pace: fmt(u16(8, 9)),             // bytes 8-9
+      watt: u16(10, 11),                // bytes 10-11
+      cal:  u16(12, 13),                // bytes 12-13
+      hr:   b[16],                      // byte 16
+      time: fmt(u16(18, 19))            // bytes 18-19
+    };
+  }
+
+  function send(obj) {
+    var json = JSON.stringify(obj);
+    if (window.AppInventor) window.AppInventor.setWebViewString(json);
+    addLog('OUT: ' + json);
+    if (obj.action === 'ftmsData') {
+      var p = parseFtms(obj.data);
+      if (p) addFtmsLog('spm=' + p.spm + ' dist=' + p.dist + ' strk=' + p.strk + ' watt=' + p.watt + ' pace=' + p.pace + ' cal=' + p.cal + ' hr=' + p.hr + ' time=' + p.time);
+      sendRawData(obj.data);
+    }
+  }
+
+  function sendSave() {
+    send({
+      action: 'saveData',
+      data: JSON.stringify({
+        version: 1,
+        summary: { duration:1200, distance:3200, strokes:300, calories:180, avgSpm:24, avgPace:112, avgWatts:160, avgHr:145 },
+        strokes: [[5,8,24,160,140,112],[10,16,25,162,141,111]]
+      })
+    });
+  }
+
+  function testUpload() {
+    var token = currentToken;
+    if (!token) { addLog('ERR: no token — do login first'); return; }
+    var wt = (function(){ var d=new Date(),p=function(n){return n<10?'0'+n:''+n;}; return 'workout_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); })();
+    var data = { version:1, summary:{duration:1200,distance:3200,strokes:300,calories:180,avgSpm:24,avgPace:112,avgWatts:160,avgHr:145}, strokes:[[5,8,24,160,140,112],[10,16,25,162,141,111]] };
+    var inner = JSON.stringify({ token: token, workout: wt, data: data });
+    var body = JSON.stringify({ token: token, workout: wt, data: inner });
+    addLog('POST: ' + body);
+    fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/workout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(t) { addLog('RESP: ' + t); })
+    .catch(function(e) { addLog('ERR: ' + e.message); });
+  }
+
+  function sendRawData(data) {
+    var d = new Date();
+    var p = function(n, w) { return String(n).padStart(w || 2, '0'); };
+    var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
+                  p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
+                  p(d.getMilliseconds(), 3);
+    var body = JSON.stringify({ date: dateStr, data: data });
+    addLog('[FTMS raw] POST ' + body);
+    fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/rawdata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body
+    })
+    .then(function(r) { return r.text().then(function(t) { addLog('[FTMS raw] ' + r.status + ' ' + t); }); })
+    .catch(function(e) { addLog('[FTMS raw] ERROR: ' + e.message); });
+  }
+
+  function addLog(txt) {
+    var el = document.getElementById('log');
+    el.value += txt + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function addFtmsLog(txt) {
+    var el = document.getElementById('ftms-log');
+    el.value += txt + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+</script>
+</body>
+</html>
