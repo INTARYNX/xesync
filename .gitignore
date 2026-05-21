@@ -6,7 +6,6 @@ plsql/
 site/
 dist/
 DotGothic16-Regular.ttf
-deploy.ps1
 web.cmd
 *.log
 .vscode/
