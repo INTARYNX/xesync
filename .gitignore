@@ -1,9 +1,6 @@
-inline/
-tools/
 deploy/
-other/
+tools/
 plsql/
-site/
 dist/
 DotGothic16-Regular.ttf
 web.cmd
