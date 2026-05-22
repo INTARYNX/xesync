@@ -301,7 +301,15 @@
     lastPacket = null;
     renderIdle();
     hideSaveDialog();
-    showBanner('READY TO ROW !');
+    // Only show "READY TO ROW" if we are actually on the rowing screen.
+    // After a successful save, app.html shows the home iframe — no banner
+    // should sit on top of it.
+    var rowingScreen = document.getElementById('screen-rowing');
+    if (rowingScreen && rowingScreen.classList.contains('active')) {
+      showBanner('READY TO ROW !');
+    } else {
+      hideBanner();
+    }
     if (DEBUG) console.log('[FTMS] phase → IDLE');
   }
 
