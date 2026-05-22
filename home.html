@@ -88,10 +88,7 @@
 
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: token })
         })
         .then(function (r) {
