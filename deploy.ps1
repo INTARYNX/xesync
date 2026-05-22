@@ -1,11 +1,30 @@
 # Build inline app.html, then deploy the full site to the remote server via SSH/SCP.
 
-# ── Config ────────────────────────────────────────────────────────────────────
-$SSH_USER   = 'almalinux'
-$SSH_HOST   = 'fournier-digital.ch'
-$SSH_KEY    = "$env:USERPROFILE\.ssh\id_rsa"
-$REMOTE_DIR = '/opt/www/xesync_enlistia_com'
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Load local config ─────────────────────────────────────────────────────────
+$configFile = Join-Path (Split-Path -Parent (Resolve-Path 'app.html')) 'deploy.config.ps1'
+if (-not (Test-Path $configFile)) {
+    Write-Error @"
+Missing deploy.config.ps1. Create one in the project root with:
+
+    `$SSH_USER   = 'your-user'
+    `$SSH_HOST   = 'your.host'
+    `$SSH_KEY    = "`$env:USERPROFILE\.ssh\id_rsa"
+    `$REMOTE_DIR = '/path/on/server'
+    `$SITE_URL   = 'https://your-site.example'
+
+This file is gitignored so it stays local.
+"@
+    exit 1
+}
+. $configFile
+
+# Validate required vars
+foreach ($v in @('SSH_USER', 'SSH_HOST', 'SSH_KEY', 'REMOTE_DIR')) {
+    if (-not (Get-Variable -Name $v -ValueOnly -ErrorAction SilentlyContinue)) {
+        Write-Error "deploy.config.ps1 is missing required variable: `$v"
+        exit 1
+    }
+}
 
 $base      = Split-Path -Parent (Resolve-Path 'app.html')
 $utf8      = [System.Text.Encoding]::UTF8
@@ -125,7 +144,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Deploy complete! https://xesync.enlistia.com"
+Write-Host "Deploy complete!$(if ($SITE_URL) { ' ' + $SITE_URL })"
 
 # ── Publish to GitHub ─────────────────────────────────────────────────────────
 

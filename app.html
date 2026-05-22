@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>XeSync</title>
   <link rel="stylesheet" href="app.css">
+  <script src="config.js"></script>
 </head>
 <body>
 
@@ -159,7 +160,7 @@
     // ── LOGIN ─────────────────────────────────────────────
     function doAutoLogin(msg) {
       if (!msg.token) return;
-      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/validate_token', {
+      fetch(XESYNC_CONFIG.apexBaseUrl + '/validate_token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'token=' + encodeURIComponent(msg.token)
@@ -197,7 +198,7 @@
       btn.disabled = true;
       btn.textContent = 'LOGGING IN...';
 
-      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/login', {
+      fetch(XESYNC_CONFIG.apexBaseUrl + '/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: u, password: p })
@@ -262,7 +263,7 @@
 
     // ── HOME ──────────────────────────────────────────────
     function showHome() {
-      var url = 'https://www.fournier-digital.ch/apex/r/mintaka/xesync/home' +
+      var url = XESYNC_CONFIG.apexHomeUrl +
                 '?token=' + encodeURIComponent(appToken);
       document.getElementById('home-frame').src = url;
       show('screen-home');
@@ -345,7 +346,7 @@
     function onFtmsData(msg) {
       console.log('[FTMS]', msg.data);
       ingestData(msg.data);
-      sendRawData(msg.data);
+      if (XESYNC_CONFIG.logRawData) sendRawData(msg.data);
     }
 
     function sendRawData(data) {
@@ -356,7 +357,7 @@
                     p(d.getMilliseconds(), 3);
       var body = JSON.stringify({ date: dateStr, data: data });
       console.log('[FTMS raw] POST', body);
-      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/rawdata', {
+      fetch(XESYNC_CONFIG.apexBaseUrl + '/rawdata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body

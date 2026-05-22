@@ -3,6 +3,7 @@ tools/
 plsql/
 dist/
 DotGothic16-Regular.ttf
+deploy.config.ps1
 web.cmd
 *.log
 .vscode/

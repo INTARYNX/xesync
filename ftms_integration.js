@@ -449,7 +449,7 @@
     });
 
     Promise.race([
-      fetch('https://www.fournier-digital.ch/apex/mintaka/xesync/workout', {
+      fetch(XESYNC_CONFIG.apexBaseUrl + '/workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body

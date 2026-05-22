@@ -1,0 +1,6 @@
+# Copy this file to deploy.config.ps1 (gitignored) and fill in your values.
+$SSH_USER   = 'your-user'
+$SSH_HOST   = 'your.host'
+$SSH_KEY    = "$env:USERPROFILE\.ssh\id_rsa"
+$REMOTE_DIR = '/path/on/server'
+$SITE_URL   = 'https://your-site.example'   # optional, shown in success message
