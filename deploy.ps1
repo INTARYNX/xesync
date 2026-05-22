@@ -119,7 +119,7 @@ Write-Utf8NoBom (Join-Path $dist 'app.html') $app
 Write-Host "Build complete: $(Join-Path $dist 'app.html')"
 
 # Root-level assets (app.css is inlined into app.html, no need to copy)
-foreach ($asset in @('DotGothic16-Regular.ttf', 'test_app.html')) {
+foreach ($asset in @('DotGothic16-Regular.ttf', 'test_app.html', 'home.html', 'home.css', 'config.js')) {
     $src = Join-Path $base $asset
     if (Test-Path $src) { Copy-Item $src $dist }
 }

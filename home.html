@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XeSync — Workouts</title>
+  <link rel="stylesheet" href="home.css">
+  <script src="config.js"></script>
+</head>
+<body class="rowing-dashboard">
+
+  <div id="status" class="status-msg">Loading…</div>
+  <div id="dashboard" class="dashboard-container"></div>
+
+  <script>
+    (function () {
+      var statusEl = document.getElementById('status');
+      var dashEl   = document.getElementById('dashboard');
+
+      function getQueryParam(name) {
+        var m = window.location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+        statusEl.style.display = text ? 'block' : 'none';
+      }
+
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+      function fmtDuration(s) {
+        s = Math.max(0, Math.round(s || 0));
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var r = s % 60;
+        return pad(h) + ':' + pad(m) + ':' + pad(r);
+      }
+
+      function fmtPace(s) {
+        s = Math.max(0, Math.round(s || 0));
+        var m = Math.floor(s / 60);
+        var r = s % 60;
+        return pad(m) + ':' + pad(r);
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear()
+             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+
+      function escHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function renderCard(w) {
+        return ''
+          + '<div class="rowing-card">'
+          +   '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
+          +   '<div class="card-stats">'
+          +     stat('Distance',   (w.distance_m || 0) + 'm')
+          +     stat('Elapsed',    fmtDuration(w.duration_sec))
+          +     stat('Strokes',    w.total_strokes || 0)
+          +     stat('Watts',      w.avg_watts || 0)
+          +     stat('SPM',        w.avg_spm || 0)
+          +     stat('Pace',       fmtPace(w.avg_pace_sec), true)
+          +     stat('Calories',   w.calories || 0)
+          +     stat('Heart Rate', w.avg_hr || 0)
+          +   '</div>'
+          + '</div>';
+      }
+
+      function stat(label, value, isPace) {
+        return '<div class="stat' + (isPace ? ' pace' : '') + '">'
+          + escHtml(label) + ': <span class="stat-value' + (isPace ? ' pace-value' : '') + '">'
+          + escHtml(value) + '</span></div>';
+      }
+
+      function load() {
+        var token = getQueryParam('token');
+        if (!token) {
+          setStatus('No token provided.');
+          return;
+        }
+
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ token: token })
+        })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (rows) {
+          if (!Array.isArray(rows) || rows.length === 0) {
+            setStatus('No workouts yet. Start rowing!');
+            return;
+          }
+          setStatus('');
+          dashEl.innerHTML = rows.map(renderCard).join('');
+        })
+        .catch(function (err) {
+          setStatus('Failed to load workouts: ' + err.message);
+        });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

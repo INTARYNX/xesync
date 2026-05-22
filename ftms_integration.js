@@ -441,15 +441,14 @@
     }
 
     var tag = workoutTag();
-    var inner = JSON.stringify({ token: token, workout: tag, data: payload });
-    var body  = JSON.stringify({ token: token, workout: tag, data: inner });
+    var body = JSON.stringify({ token: token, workout: tag, data: payload });
 
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error('timeout')); }, 10000);
     });
 
     Promise.race([
-      fetch(XESYNC_CONFIG.apexBaseUrl + '/workout', {
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body
@@ -473,11 +472,13 @@
         setTimeout(function () { hideBanner(); goHome(); }, 4000);
         return;
       }
-      if (json && json.status === 'success') {
+      // PostgREST returns an array; unwrap.
+      var row = Array.isArray(json) ? json[0] : json;
+      if (row && row.status === 'success') {
         showBanner('SAVED ✓');
         setTimeout(function () { hideBanner(); goHome(); }, 1000);
       } else {
-        showBanner('SAVE FAIL: ' + ((json && (json.error || json.status)) || resp.txt).toString().slice(0, 80));
+        showBanner('SAVE FAIL: ' + ((row && (row.error || row.status)) || resp.txt).toString().slice(0, 80));
         setTimeout(function () { hideBanner(); goHome(); }, 4000);
       }
     })

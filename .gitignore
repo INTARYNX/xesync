@@ -1,7 +1,7 @@
-deploy/
 tools/
 plsql/
 dist/
+dev/
 DotGothic16-Regular.ttf
 deploy.config.ps1
 web.cmd
