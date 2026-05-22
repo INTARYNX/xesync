@@ -130,22 +130,27 @@
 
       vec3 col;
 
+      // ============ BACKGROUND ============
       if (y > horizon) {
         float sy = (y - horizon) / (1.0 - horizon);
+
         float dayCycle = fract(u_time / 120.0);
 
-        vec3 skyTopDawn = vec3(0.58, 0.45, 0.65);
-        vec3 skyMidDawn = vec3(0.95, 0.65, 0.55);
-        vec3 skyBotDawn = vec3(1.00, 0.82, 0.62);
-        vec3 skyTopDay = vec3(0.30, 0.50, 0.85);
-        vec3 skyMidDay = vec3(0.62, 0.78, 0.92);
-        vec3 skyBotDay = vec3(0.88, 0.93, 0.95);
-        vec3 skyTopDusk = vec3(0.42, 0.28, 0.55);
-        vec3 skyMidDusk = vec3(0.92, 0.42, 0.40);
-        vec3 skyBotDusk = vec3(1.00, 0.72, 0.45);
-        vec3 skyTopNight = vec3(0.05, 0.06, 0.18);
-        vec3 skyMidNight = vec3(0.10, 0.12, 0.26);
-        vec3 skyBotNight = vec3(0.18, 0.20, 0.36);
+        vec3 skyTopDawn = vec3(0.62, 0.40, 0.62);
+        vec3 skyMidDawn = vec3(1.00, 0.60, 0.45);
+        vec3 skyBotDawn = vec3(1.00, 0.78, 0.50);
+
+        vec3 skyTopDay = vec3(0.38, 0.58, 0.88);
+        vec3 skyMidDay = vec3(0.78, 0.85, 0.92);
+        vec3 skyBotDay = vec3(0.98, 0.88, 0.75);
+
+        vec3 skyTopDusk = vec3(0.50, 0.22, 0.50);
+        vec3 skyMidDusk = vec3(1.00, 0.38, 0.28);
+        vec3 skyBotDusk = vec3(1.00, 0.65, 0.32);
+
+        vec3 skyTopNight = vec3(0.08, 0.06, 0.22);
+        vec3 skyMidNight = vec3(0.18, 0.10, 0.30);
+        vec3 skyBotNight = vec3(0.30, 0.18, 0.38);
 
         vec3 skyTop, skyMid, skyBottom;
         if (dayCycle < 0.25) {
@@ -271,8 +276,36 @@
         float haze = smoothstep(0.75, 1.0, yw);
         vec3 hazeCol = mix(vec3(0.95, 0.78, 0.70), vec3(0.20, 0.22, 0.36), darknessW);
         col = mix(col, hazeCol, haze * 0.6);
+
+        // ===== Reflet du soleil/lune dans l'eau =====
+        float dayCycleS = fract(u_time / 120.0);
+        float sunHeightS = sin(dayCycleS * 6.2831853 - 1.57);
+        bool isDayS = sunHeightS > -0.3;
+        float sunYS = horizon + 0.05 + max(sunHeightS, -0.3) * 0.40;
+        float sunXS = mod(0.30 + dayCycleS * 0.6, 1.0);
+        float visibilityFactor = smoothstep(horizon + 0.12, horizon + 0.22, sunYS);
+        if (visibilityFactor > 0.01) {
+          float distFromSunX = abs(P.x - sunXS);
+          float reflectWidth = mix(0.015, 0.12, 1.0 - yw);
+          float reflectShape = smoothstep(reflectWidth, reflectWidth * 0.2, distFromSunX);
+          float reflectFade = smoothstep(0.0, 0.8, yw);
+          float reflectRipple = smoothstep(0.3, 0.7, waves);
+          vec3 reflectSunCol;
+          float reflectIntensity;
+          if (isDayS) {
+            float warmth = 1.0 - abs(sunHeightS - 0.5) * 0.8;
+            reflectSunCol = mix(vec3(1.0, 0.55, 0.30), vec3(1.0, 0.92, 0.78), 1.0 - warmth);
+            reflectIntensity = 0.7;
+          } else {
+            reflectSunCol = vec3(0.85, 0.88, 0.95);
+            reflectIntensity = 0.4;
+          }
+          float sunReflect = reflectShape * reflectFade * reflectRipple * reflectIntensity * visibilityFactor;
+          col = mix(col, reflectSunCol, sunReflect);
+        }
       }
 
+      // ============ ROWER ANIMATION ============
       float strokesPerSec = u_spm / 60.0;
       float phase = u_phase;
       float fIdx = phase * 8.0;
@@ -353,6 +386,85 @@
       }
 
       vec2 boatCenter = vec2(0.5, origin.y + 0.012 * u_scale);
+
+      // ============ REFLET DU RAMEUR ============
+      if (y < boatCenter.y) {
+        float reflectCompress = 0.75;
+        float reflectY = boatCenter.y + (boatCenter.y - y) / reflectCompress;
+        vec2 reflectP = vec2(P.x, reflectY);
+        float reflectDist = boatCenter.y - y;
+        float reflectAtten = smoothstep(0.18 * u_scale, 0.0, reflectDist);
+        if (reflectAtten > 0.0) {
+          float ripple = sin(reflectDist * 80.0 + u_time * 1.5) * 0.003 * u_scale;
+          reflectP.x += ripple;
+          float refMask = 0.0;
+          float refS;
+          refS = sdSegment(reflectP, hip, knee);
+          refMask = max(refMask, smoothstep(0.012 * u_scale, 0.010 * u_scale, refS));
+          refS = sdSegment(reflectP, knee, foot);
+          refMask = max(refMask, smoothstep(0.010 * u_scale, 0.008 * u_scale, refS));
+          refS = sdSegment(reflectP, hip, shoulder);
+          refMask = max(refMask, smoothstep(0.017 * u_scale, 0.015 * u_scale, refS));
+          refS = sdSegment(reflectP, shoulder, elbow);
+          refMask = max(refMask, smoothstep(0.011 * u_scale, 0.009 * u_scale, refS));
+          refS = sdSegment(reflectP, elbow, hand);
+          refMask = max(refMask, smoothstep(0.010 * u_scale, 0.008 * u_scale, refS));
+          refS = distance(reflectP, head);
+          refMask = max(refMask, smoothstep(0.020 * u_scale, 0.017 * u_scale, refS));
+          vec2 neckTopR = head + vec2(0.0, -0.018 * u_scale);
+          refS = sdSegment(reflectP, shoulder, neckTopR);
+          refMask = max(refMask, smoothstep(0.008 * u_scale, 0.006 * u_scale, refS));
+          float capRadius = 0.020 * u_scale;
+          float capRefDist = distance(reflectP, head);
+          float capRefMask = smoothstep(capRadius, capRadius - 0.001, capRefDist) *
+                            step(head.y, reflectP.y);
+          refMask = max(refMask, capRefMask);
+          vec2 capFaceDirR = vec2(sign(hand.x - shoulder.x), 0.0);
+          vec2 visorCenterR = head + capFaceDirR * 0.014 * u_scale + vec2(0.0, 0.002 * u_scale);
+          float visorR = sdEllipse(reflectP - visorCenterR, vec2(0.012, 0.003) * u_scale);
+          float visorRefMask = smoothstep(0.001, -0.001, visorR);
+          refMask = max(refMask, visorRefMask);
+          vec2 oarVecR = bladeTip - hand;
+          float oarLenR = length(oarVecR);
+          vec2 oarTR = oarVecR / oarLenR;
+          vec2 oarNR = vec2(-oarTR.y, oarTR.x);
+          float bladeStartR = oarLenR * 0.85;
+          float shaftHalfR = 0.003 * u_scale;
+          float oarWaterlineR = boatCenter.y - 0.085 * u_scale;
+          vec2 dPR2 = reflectP - hand;
+          float sAlongR = dot(dPR2, oarTR);
+          float sPerpR  = dot(dPR2, oarNR);
+          if (sAlongR > 0.0 && sAlongR < bladeStartR) {
+            vec2 oarPtWorld = hand + oarTR * sAlongR;
+            if (oarPtWorld.y > oarWaterlineR) {
+              float dR = abs(sPerpR) - shaftHalfR;
+              float shaftRefMask = smoothstep(0.001, -0.001, dR);
+              refMask = max(refMask, shaftRefMask);
+            }
+          }
+          vec2 oarlockBR = boatCenter + vec2(-0.040, 0.005) * u_scale;
+          vec2 handBR = hand + vec2(0.0, 0.005 * u_scale);
+          vec2 oarBVecR = oarlockBR - handBR;
+          float oarBLenR = length(oarBVecR);
+          vec2 oarBTR = oarBVecR / oarBLenR;
+          vec2 oarBNR = vec2(-oarBTR.y, oarBTR.x);
+          float oarBHalfR = 0.003 * u_scale;
+          vec2 dPRB = reflectP - handBR;
+          float oarBAlongR = dot(dPRB, oarBTR);
+          float oarBPerpR  = dot(dPRB, oarBNR);
+          if (oarBAlongR > 0.0 && oarBAlongR < oarBLenR) {
+            float dRB = abs(oarBPerpR) - oarBHalfR;
+            float oarBRefMask = smoothstep(0.001, -0.001, dRB);
+            refMask = max(refMask, oarBRefMask);
+          }
+          vec2 hpR = reflectP - boatCenter;
+          float hullR = sdEllipse(hpR, vec2(0.55, 0.012) * u_scale);
+          float hullRefMask = smoothstep(0.002, -0.002, hullR);
+          vec3 reflectCol = vec3(0.20, 0.18, 0.25);
+          col = mix(col, reflectCol, refMask * reflectAtten * 0.35);
+          col = mix(col, vec3(0.18, 0.30, 0.20), hullRefMask * reflectAtten * 0.40);
+        }
+      }
 
       float speedFactor = clamp(u_speed, 0.0, 1.0);
       vec2 stern = boatCenter + vec2(-0.55 * u_scale, 0.0);
@@ -449,7 +561,7 @@
 
       float refl = smoothstep(0.020 * u_scale, 0.0, boatCenter.y - y) *
                    step(y, boatCenter.y) * step(y, horizon) *
-                   smoothstep(0.55 * u_scale, 0.15 * u_scale, abs(u - boatCenter.x));
+                   smoothstep(0.55 * u_scale, 0.15 * u_scale, abs(P.x - boatCenter.x));
       col *= 1.0 - refl * 0.15;
 
       vec2 riggerBase = boatCenter + vec2(-0.025, 0.012) * u_scale;
