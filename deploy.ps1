@@ -124,6 +124,8 @@ foreach ($asset in @('DotGothic16-Regular.ttf', 'test_app.html', 'home.html', 'h
     if (Test-Path $src) { Copy-Item $src $dist }
 }
 
+# debug_sim.js is inlined into app.html via the <script src> regex above
+
 # ── Deploy via SCP ────────────────────────────────────────────────────────────
 
 Write-Host "Deploying to $SSH_USER@${SSH_HOST}:$REMOTE_DIR ..."

@@ -13,6 +13,7 @@
   <div id="topbar" class="visible">
     <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
     <span id="tbar-user"></span>
+    <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
     <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
     <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
     <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;">DEBUG</button>
@@ -70,6 +71,7 @@
     var appUsername = null;
     var lastWebViewString = '';
     var bleConnected = false;
+    var inDebugMode = false;
 
 
 
@@ -90,29 +92,30 @@
         var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
         document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
         document.getElementById('tbar-debug-btn').style.display = id === 'screen-rowing' ? 'none' : '';
-        // ROW AGAIN only on home, when BLE is connected
-        document.getElementById('tbar-row-btn').style.display =
-          (id === 'screen-home' && bleConnected) ? '' : 'none';
+        // ROW AGAIN + DISCONNECT only on home, when BLE is connected
+        var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
+        document.getElementById('tbar-disconnect-btn').style.display = showRowerCtrls;
       }
     }
 
     function debugMode() {
+      bleConnected = true;
+      inDebugMode = true;
       document.getElementById('loading-overlay').classList.add('visible');
       show('screen-rowing');
       initRowing();
       initFtmsTracking();
-      var i = 0;
-      var debugTimer = setInterval(function() {
-        if (i >= ftmsData.length) { clearInterval(debugTimer); return; }
-        ingestData(ftmsData[i]);
-        i++;
-      }, 500);
+      DebugSim.reset();
+      DebugSim.start();
     }
 
     function doExit() {
       appToken = null;
       appUsername = null;
       bleConnected = false;
+      inDebugMode = false;
+      DebugSim.stop();
       document.getElementById('tbar-user').textContent = '';
       document.getElementById('password').value = '';
       show('screen-login');
@@ -359,6 +362,23 @@
       show('screen-rowing');
       initRowing();
       initFtmsTracking();
+      // In debug mode, restart the simulator from t=0 for a fresh session.
+      if (inDebugMode) {
+        DebugSim.reset();
+        DebugSim.start();
+      }
+    }
+
+    function disconnectRower() {
+      if (inDebugMode) {
+        DebugSim.stop();
+        inDebugMode = false;
+      } else {
+        sendToApp('disconnect', {});
+      }
+      bleConnected = false;
+      // Refresh the top bar so the buttons hide
+      show('screen-home');
     }
 
     function onFtmsData(msg) {
@@ -397,6 +417,6 @@
       if (e.key === 'Enter') doLogin();
     });
   </script>
-  <script src="ftms_captured.js"></script>
+  <script src="debug_sim.js"></script>
 </body>
 </html>
