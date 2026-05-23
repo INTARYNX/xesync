@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
@@ -27,6 +27,7 @@
     --accent-2: #0099ff;
     --font-sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+    --font-logo: 'Courier Prime', 'Courier New', Courier, monospace;
   }
   html, body { background: var(--bg); color: var(--fg); }
   body {
@@ -45,6 +46,19 @@
     top: 0; left: 0;
     z-index: 1;
     pointer-events: none;
+  }
+
+  /* Hidden span forces the browser to actually load the logo font
+     and keep it in active use, so canvas can render it. */
+  .font-preload {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    font-family: var(--font-logo);
+    font-weight: 700;
+    font-size: 120px;
+    top: -9999px;
+    left: -9999px;
   }
 
   /* ── NAV ───────────────────────────────────────────────────────── */
@@ -159,17 +173,17 @@
     overflow: hidden;
     aspect-ratio: 19.5 / 9;
   }
-  /* Notch on the left edge (landscape) */
   .phone-frame::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 0;
-    transform: translateY(-50%);
-    width: 18px;
-    height: 90px;
-    background: #1a1a1a;
-    border-radius: 0 12px 12px 0;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: #050505;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
     z-index: 3;
   }
   .phone-frame img {
@@ -178,7 +192,6 @@
     object-fit: cover;
     display: block;
   }
-  /* Subtle glow behind the phone */
   .phone-mockup::before {
     content: '';
     position: absolute;
@@ -195,7 +208,7 @@
   @media (max-width: 600px) {
     .phone-mockup { max-width: 100%; margin-top: 40px; }
     .phone-frame { border-width: 8px; border-radius: 24px; }
-    .phone-frame::before { width: 14px; height: 60px; }
+    .phone-frame::before { width: 10px; height: 10px; top: 10px; }
   }
 
   /* ── GRID ──────────────────────────────────────────────────────── */
@@ -401,6 +414,9 @@
 </head>
 <body>
 
+<!-- Forces the logo font into active CSS so it's actually fetched -->
+<span class="font-preload" aria-hidden="true">XEsync</span>
+
 <canvas id="bg" aria-hidden="true"></canvas>
 
 <nav class="nav">
@@ -410,7 +426,6 @@
 
 <main class="content">
 
-  <!-- ── HERO ────────────────────────────────────────────────── -->
   <header class="hero">
     <div class="logo-container" aria-hidden="true"></div>
     <h1 class="tagline">Track every stroke. Own every session.</h1>
@@ -433,10 +448,8 @@
     </div>
   </header>
 
-  <!-- ── MAIN GRID ───────────────────────────────────────────── -->
   <div class="grid">
 
-    <!-- LEFT: features -->
     <section>
       <h2 class="section-label">What it does</h2>
       <div class="features">
@@ -482,7 +495,6 @@
       </div>
     </section>
 
-    <!-- RIGHT: technical -->
     <section>
       <h2 class="section-label">Stack &amp; engineering</h2>
 
@@ -524,11 +536,12 @@
       </div>
 
       <div class="tech-card">
-        <h4><i class="fa-solid fa-database"></i> Backend on Oracle APEX</h4>
+        <h4><i class="fa-solid fa-database"></i> Backend on PostgreSQL + PostgREST</h4>
         <p>
-          A REST-style endpoint accepts the compressed workout payload (1 Hz samples,
-          ~3600 rows for 1 h) and stores it under the user's token. Login, validation, and
-          history dashboards all served from APEX pages.
+          A PostgreSQL schema with <code>SECURITY DEFINER</code> functions exposed as a REST
+          API by PostgREST. The app uploads the compressed workout payload (1 Hz samples,
+          ~3600 rows for 1 h) to <code>/rpc/save_workout</code> and authenticates with a
+          token bound to the user.
         </p>
       </div>
 
@@ -548,14 +561,14 @@
         <span class="pill">BLE / FTMS</span>
         <span class="pill">Vanilla JS</span>
         <span class="pill">WebGL · GLSL</span>
-        <span class="pill">Oracle APEX</span>
+        <span class="pill">PostgreSQL</span>
+        <span class="pill">PostgREST</span>
         <span class="pill">PowerShell</span>
       </div>
     </section>
 
   </div>
 
-  <!-- ── WHY ────────────────────────────────────────────────── -->
   <section class="why">
     <h2 class="section-label">Why this exists</h2>
     <p>
@@ -565,9 +578,9 @@
     <p>
       The challenge was the <strong>technical assembly</strong>: making MIT App Inventor talk
       to a Bluetooth rower, pipe FTMS bytes into a WebView, render them through a procedural
-      WebGL shader, persist sessions in Oracle APEX, and deploy the whole thing with a
-      PowerShell one-liner. Six unrelated technologies, none of which were designed to work
-      together.
+      WebGL shader, persist sessions through PostgREST into PostgreSQL, and deploy the whole
+      thing with a PowerShell one-liner. Six unrelated technologies, none of which were
+      designed to work together.
     </p>
     <p>
       That's the skill I wanted to exercise: <strong>making disparate pieces fit and ship a
@@ -577,7 +590,6 @@
     </p>
   </section>
 
-  <!-- ── FOOTER ──────────────────────────────────────────────── -->
   <footer class="footer">
     <span>© 2026 INTARYNX</span>
     <span><a href="confidentiality.html">Privacy Policy</a></span>
@@ -588,13 +600,14 @@
 
 <script>
   // ── Background logo wave animation ────────────────────────────
+  const LOGO_FONT_SPEC = '700 120px "Courier Prime", "Courier New", Courier, monospace';
+  const LOGO_FONT_FAMILY = '"Courier Prime"';
+
   const canvas = document.getElementById('bg');
   const ctx = canvas.getContext('2d');
 
   function sizeCanvas() {
     canvas.width = window.innerWidth;
-    // Limit canvas height to the hero zone (top padding + logo container area)
-    // so the animation stays in the hero and doesn't follow scroll.
     const topPad = window.innerWidth < 900 ? 80 : 100;
     canvas.height = topPad + 220;
   }
@@ -603,8 +616,9 @@
 
   let t = 0;
   let logoCanvas;
+  let animationStarted = false;
 
-  function createLogo() {
+  function buildLogo() {
     logoCanvas = document.createElement('canvas');
     logoCanvas.width = 700;
     logoCanvas.height = 180;
@@ -616,7 +630,7 @@
     grad.addColorStop(0.5, '#0099ff');
     grad.addColorStop(1,   '#0066cc');
 
-    lc.font = '800 120px "Courier New", Courier, monospace';
+    lc.font = LOGO_FONT_SPEC;
     lc.textAlign = 'left';
     lc.textBaseline = 'middle';
 
@@ -636,7 +650,7 @@
     ctx.fillStyle = 'rgba(10,10,10,0.10)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (!logoCanvas) return;
+    if (!logoCanvas) { requestAnimationFrame(draw); return; }
 
     const drawW = Math.min(logoCanvas.width, window.innerWidth * 0.78);
     const scale = drawW / logoCanvas.width;
@@ -663,8 +677,33 @@
     requestAnimationFrame(draw);
   }
 
-  createLogo();
-  draw();
+  function start() {
+    if (animationStarted) return;
+    animationStarted = true;
+    buildLogo();
+    draw();
+  }
+
+  // Wait for the logo font to actually load before rasterizing.
+  // document.fonts.load() returns a promise that resolves once the
+  // specified font face is downloaded and registered with the engine.
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load(LOGO_FONT_SPEC, 'XEsync')
+      .then(() => document.fonts.ready)
+      .then(() => {
+        // Final guard: rebuild if the font wasn't actually applied
+        if (!document.fonts.check(LOGO_FONT_SPEC)) {
+          // give it one more frame in case it's mid-registration
+          setTimeout(start, 100);
+        } else {
+          start();
+        }
+      })
+      .catch(() => start()); // start with fallback if something fails
+  } else {
+    // Older browsers: just wait a beat and hope
+    window.addEventListener('load', () => setTimeout(start, 300));
+  }
 </script>
 
 </body>
