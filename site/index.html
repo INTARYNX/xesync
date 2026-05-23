@@ -71,6 +71,9 @@
     display: flex;
     gap: 12px;
     align-items: center;
+    max-width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    justify-content: center;
   }
   .nav a {
     color: rgba(255,255,255,0.9);
@@ -84,6 +87,9 @@
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.15);
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .nav a:hover {
     background: rgba(0,212,255,0.18);
@@ -97,6 +103,12 @@
     font-weight: 600;
   }
   .nav a.primary:hover { background: #00b8e6; }
+
+  @media (max-width: 600px) {
+    .nav { gap: 8px; top: 12px; }
+    .nav a { padding: 8px 12px; font-size: 13px; }
+    .nav a .label { display: none; }
+  }
 
   /* ── LAYOUT ────────────────────────────────────────────────────── */
   .content {
@@ -421,10 +433,14 @@
 
 <nav class="nav">
   <a href="https://github.com/INTARYNX/xesync" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
-    <i class="fa-brands fa-github"></i> GitHub
+    <i class="fa-brands fa-github"></i><span class="label">GitHub</span>
   </a>
-  <a href="login.html"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
-  <a href="register.html" class="primary"><i class="fa-solid fa-user-plus"></i> Create Account</a>
+  <a href="login.html" aria-label="Login">
+    <i class="fa-solid fa-right-to-bracket"></i><span class="label">Login</span>
+  </a>
+  <a href="register.html" class="primary" aria-label="Create account">
+    <i class="fa-solid fa-user-plus"></i><span class="label">Create Account</span>
+  </a>
 </nav>
 
 <main class="content">

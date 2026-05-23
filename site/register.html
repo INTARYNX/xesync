@@ -26,6 +26,7 @@
             position: fixed;
             top: 24px;
             left: 24px;
+            z-index: 100;
             color: rgba(255,255,255,0.7);
             text-decoration: none;
             font-size: 13px;
@@ -44,6 +45,10 @@
             border-color: rgba(0,212,255,0.4);
             background: rgba(0,212,255,0.08);
             transform: translateX(-2px);
+        }
+        @media (max-width: 480px) {
+            body { padding-top: 80px; justify-content: flex-start; }
+            .back { top: 16px; left: 16px; padding: 7px 12px; font-size: 12px; }
         }
         .card {
             background: rgba(255,255,255,0.04);
