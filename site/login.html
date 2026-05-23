@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — XEsync</title>
     <script src="config.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -22,15 +26,25 @@
             position: fixed;
             top: 24px;
             left: 24px;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255,255,255,0.7);
             text-decoration: none;
-            font-size: 14px;
-            display: flex;
+            font-size: 13px;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
-            transition: color 0.2s;
+            padding: 8px 14px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            transition: all 0.2s ease;
         }
-        .back:hover { color: #fff; }
+        .back:hover {
+            color: #00d4ff;
+            border-color: rgba(0,212,255,0.4);
+            background: rgba(0,212,255,0.08);
+            transform: translateX(-2px);
+        }
         .card {
             background: rgba(255,255,255,0.04);
             border: 1px solid rgba(255,255,255,0.1);
@@ -43,7 +57,7 @@
         .logo {
             font-size: 28px;
             font-weight: 700;
-            font-family: 'Courier New', monospace;
+            font-family: 'Courier Prime', 'Courier New', monospace;
             color: #00d4ff;
             text-align: center;
             margin-bottom: 8px;
@@ -127,7 +141,7 @@
 </head>
 <body>
 
-    <a href="index.html" class="back">← Back</a>
+    <a href="index.html" class="back"><i class="fa-solid fa-arrow-left"></i> Back</a>
 
     <div class="card">
         <div class="logo">XEsync</div>
@@ -151,8 +165,6 @@
     </div>
 
     <div class="footer">
-        By <a href="https://www.fournier-digital.ch" target="_blank">Fournier Digital Services</a>
-        &nbsp;·&nbsp;
         <a href="confidentiality.html">Privacy Policy</a>
     </div>
 
