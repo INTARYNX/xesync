@@ -1,1 +1,0 @@
-ssh -L 6432:127.0.0.1:5432 almalinux@fournier-digital.ch -N -v
