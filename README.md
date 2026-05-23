@@ -1,4 +1,4 @@
-# XeSync
+# XEsync
 
 Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native Android app (App Inventor) that bridges BLE FTMS data to a WebView running this app.
 
@@ -64,9 +64,9 @@ site/                 # Static landing pages
 ### Runtime (`config.js`)
 
 ```js
-var XESYNC_CONFIG = {
-  apexBaseUrl: 'https://your-server/apex/your-workspace/xesync',
-  apexHomeUrl: 'https://your-server/apex/r/your-workspace/xesync/home',
+var XEsync_CONFIG = {
+  apexBaseUrl: 'https://your-server/apex/your-workspace/XEsync',
+  apexHomeUrl: 'https://your-server/apex/r/your-workspace/XEsync/home',
   logRawData:  false   // set true to POST every FTMS packet to /rawdata (debug only)
 };
 ```
