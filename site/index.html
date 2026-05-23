@@ -423,8 +423,8 @@
   <a href="https://github.com/INTARYNX/xesync" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository">
     <i class="fa-brands fa-github"></i> GitHub
   </a>
-  <a href="login.html">Login</a>
-  <a href="register.html" class="primary">Create Account</a>
+  <a href="login.html"><i class="fa-solid fa-right-to-bracket"></i> Login</a>
+  <a href="register.html" class="primary"><i class="fa-solid fa-user-plus"></i> Create Account</a>
 </nav>
 
 <main class="content">
@@ -650,8 +650,7 @@
   }
 
   function draw() {
-    ctx.fillStyle = 'rgba(10,10,10,0.10)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (!logoCanvas) { requestAnimationFrame(draw); return; }
 
