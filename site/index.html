@@ -65,14 +65,12 @@
   .nav {
     position: fixed;
     top: 16px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    right: 12px;
     z-index: 10;
     display: flex;
     gap: 12px;
     align-items: center;
-    max-width: calc(100vw - 24px);
-    flex-wrap: wrap;
     justify-content: center;
   }
   .nav a {
@@ -109,7 +107,7 @@
     .nav a { padding: 7px 11px; font-size: 12px; gap: 6px; }
   }
   @media (max-width: 380px) {
-    .nav a { padding: 6px 9px; font-size: 11px; }
+    .nav a { padding: 6px 8px; font-size: 11px; gap: 5px; }
   }
 
   /* ── LAYOUT ────────────────────────────────────────────────────── */
