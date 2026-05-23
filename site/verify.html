@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your email — XEsync</title>
+  <script src="config.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+      font-family: Helvetica, Arial, sans-serif;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 460px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      color: #00d4ff;
+      margin-bottom: 24px;
+      letter-spacing: 2px;
+    }
+    .icon { font-size: 56px; margin-bottom: 20px; }
+    .title { font-size: 22px; margin-bottom: 12px; }
+    .msg { font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.6; }
+    .btn {
+      display: inline-block;
+      margin-top: 28px;
+      padding: 12px 28px;
+      background: #00d4ff;
+      color: #0a0a0a;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+    }
+    .btn:hover { background: #00b8e6; }
+    .ok    { color: #00d4ff; }
+    .err   { color: #ff6b6b; }
+    .spin  { color: rgba(255,255,255,0.4); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">XEsync</div>
+    <div class="icon" id="icon">⏳</div>
+    <div class="title" id="title">Verifying…</div>
+    <div class="msg"   id="msg">Please wait while we confirm your email.</div>
+    <a href="login.html" class="btn" id="cta" style="display:none;">Sign in</a>
+  </div>
+
+  <script>
+    (function () {
+      function qp(name) {
+        var m = window.location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+
+      function setUI(state, title, msg) {
+        var icon = document.getElementById('icon');
+        var t    = document.getElementById('title');
+        var m    = document.getElementById('msg');
+        var cta  = document.getElementById('cta');
+        if (state === 'ok')  { icon.textContent = '✓'; icon.className = 'icon ok';  cta.style.display = 'inline-block'; }
+        if (state === 'err') { icon.textContent = '✕'; icon.className = 'icon err'; cta.style.display = 'none'; }
+        t.textContent = title;
+        m.textContent = msg;
+      }
+
+      var token = qp('token');
+      if (!token) {
+        setUI('err', 'Invalid link', 'No verification token provided.');
+        return;
+      }
+
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/verify_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (arr) {
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success') {
+          setUI('ok', 'Email verified', 'Welcome, ' + (data.username || 'rower') + '! You can now sign in.');
+        } else {
+          setUI('err', 'Verification failed', (data && data.error) || 'Unknown error.');
+        }
+      })
+      .catch(function (err) {
+        setUI('err', 'Verification failed', err.message);
+      });
+    })();
+  </script>
+</body>
+</html>
