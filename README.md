@@ -12,7 +12,7 @@ Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native A
 - Displays live metrics: SPM, distance, watts, pace, calories, heart rate, elapsed time
 - Animated WebGL rowing scene (day/night cycle, weather, reflections)
 - Tracks sessions with automatic workout detection (starts on first stroke, ends after 5s inactivity)
-- Saves workout data to a backend (APEX REST or any REST API)
+- Saves workout data to a PostgreSQL + PostgREST backend
 - Offline mode: hands the payload to the native Android app if no token is available
 
 ---
@@ -25,6 +25,11 @@ Android App (App Inventor)
                                           ├─ ftms_integration.js  (session tracking, UI)
                                           ├─ rowing_display.html  (WebGL scene)
                                           └─ config.js            (endpoints)
+
+Server
+  ├─ PostgreSQL (xesync schema, SECURITY DEFINER functions)
+  ├─ PostgREST  (auto-generated REST API on /rpc/*)
+  └─ Mail worker (cron → SMTP for verification emails)
 ```
 
 The build process (`deploy.ps1`) inlines all CSS and JS into a single self-contained `app.html` for deployment. No bundler, no npm, no framework.
@@ -35,8 +40,11 @@ The build process (`deploy.ps1`) inlines all CSS and JS into a single self-conta
 
 - **Frontend**: Vanilla JS, WebGL (GLSL fragment shader)
 - **Native bridge**: MIT App Inventor (Android)
-- **Backend**: Oracle APEX REST (can be replaced — see [Configuration](#configuration))
+- **Backend**: PostgreSQL + PostgREST
+- **Mail worker**: Python (psycopg) + local MTA, cron-driven
 - **Deploy**: PowerShell + SSH/SCP
+
+See [API.md](API.md) for the full API reference.
 
 ---
 
@@ -55,6 +63,13 @@ test_app.html         # Browser-based test harness (simulates the Android bridge
 deploy.ps1            # Build + deploy script
 deploy.config.ps1.example  # Deploy config template (copy → deploy.config.ps1)
 site/                 # Static landing pages
+
+server/
+  xesync_schema.sql   # Full PostgreSQL schema (idempotent)
+  install.sh          # First-time install
+  migrate.sh          # Apply schema changes to existing DB
+  setup_worker.sh     # Set up the mail worker (venv, cron, DB user)
+  mail_worker.py      # Email queue worker (local MTA)
 ```
 
 ---
@@ -65,20 +80,26 @@ site/                 # Static landing pages
 
 ```js
 var XEsync_CONFIG = {
-  apexBaseUrl: 'https://your-server/apex/your-workspace/XEsync',
-  apexHomeUrl: 'https://your-server/apex/r/your-workspace/XEsync/home',
-  logRawData:  false   // set true to POST every FTMS packet to /rawdata (debug only)
+  apiBaseUrl: 'https://your-server/api',   // PostgREST root
+  homeUrl:    'https://your-server/',
+  logRawData: false                        // set true to POST every FTMS packet (debug only)
 };
 ```
 
-Replace with your own REST backend. The app expects these endpoints:
+The app calls PostgREST RPC endpoints under `apiBaseUrl/rpc/*`:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/login` | `{username, password}` → `{token}` |
-| POST | `/validate_token` | `token=...` (form) → `{status, username}` |
-| POST | `/workout` | `{token, workout, data}` → `{status}` |
-| POST | `/rawdata` | `{date, data}` → (debug only, guarded by `logRawData`) |
+| POST | `/rpc/register`            | `{username, email, password}` → queues verification email |
+| POST | `/rpc/verify_email`        | `{token}` → activates account |
+| POST | `/rpc/resend_verification` | `{email}` → re-issues verification token |
+| POST | `/rpc/login`               | `{username, password}` → `{token, username_out}` |
+| POST | `/rpc/validate_token`      | `{token}` → `{status, username}`; extends expiry |
+| POST | `/rpc/save_workout`        | `{token, workout, data}` → persists summary + samples |
+| POST | `/rpc/list_workouts`       | `{token}` → workouts for the user, newest first |
+| POST | `/rpc/log_rawdata`         | `{date, data}` → raw FTMS frame (debug, guarded by `logRawData`) |
+
+All endpoints return a JSON array with a `status` field (`"success"` / `"error"`). See [API.md](API.md) for full schemas.
 
 ### Deploy (`deploy.config.ps1`)
 
@@ -96,7 +117,33 @@ $SITE_URL   = 'https://your-site.example'
 
 ---
 
-## Build & deploy
+## Server setup
+
+On the server, from the `server/` directory:
+
+```bash
+# 1. Create the DB and roles (one-time, manual)
+sudo -u postgres createdb xesync
+sudo -u postgres psql -c "CREATE ROLE web_anon NOLOGIN;"
+
+# 2. Install the schema
+sudo bash install.sh
+
+# 3. Set up the mail worker (creates venv, DB user, cron job)
+sudo bash setup_worker.sh
+```
+
+To update an existing installation after pulling schema changes:
+
+```bash
+sudo bash migrate.sh
+```
+
+Both scripts are idempotent.
+
+---
+
+## Build & deploy (client)
 
 ```powershell
 .\deploy.ps1
@@ -139,8 +186,11 @@ Xebex air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
 
 ## Roadmap
 
-- [ ] Migrate backend to PostgreSQL + PostgREST
+- [x] Migrate backend to PostgreSQL + PostgREST
+- [x] Email verification flow
 - [ ] Multi-session history view
+- [ ] Password reset by email
+- [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 
 ---
 
