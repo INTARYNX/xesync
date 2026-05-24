@@ -73,7 +73,9 @@
     var bleConnected = false;
     var inDebugMode = false;
     var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
-    if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+    document.addEventListener('DOMContentLoaded', function() {
+      if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+    });
 
 
 
@@ -93,7 +95,7 @@
         bar.classList.add('visible');
         var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
         document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
-        document.getElementById('tbar-debug-btn').style.display = id === 'screen-rowing' ? 'none' : '';
+        document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
         // ROW AGAIN + DISCONNECT only on home, when BLE is connected
         var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
         document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
