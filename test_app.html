@@ -9,15 +9,13 @@
 <b>AUTH</b><br>
 <button onclick="doAutoLogin()">autoLogin</button>
 <button onclick="doLoginOk()">loginResult OK</button>
-<button onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
-<button onclick="send({action:'goHome'})">goHome</button>
-<button onclick="send({action:'saveAck'})">saveAck</button>
+<button onclick="doLoginFail()">loginResult FAIL</button>
 <br><br>
 
 <b>OFFLINE SAVE CYCLE</b><br>
-<button onclick="doSaveData()">saveData (offline)</button>
-<button onclick="doUploadWorkout()">uploadWorkout</button>
-<button onclick="doUploadAck()">uploadAck</button>
+<button onclick="doSaveData()">1. saveData (offline)</button>
+<button onclick="doUploadWorkout()">2. uploadWorkout</button>
+<button onclick="doUploadAck()">3. uploadAck</button>
 <br><br>
 
 <b>LOG</b> <button onclick="log.value=''">clear</button><br>
@@ -29,23 +27,43 @@
   var lastWorkoutTag = '';
 
   function send(obj) {
-    var json = JSON.stringify(obj);
-    if (window.AppInventor && AppInventor.setWebViewString) AppInventor.setWebViewString(json);
-    addLog('→ ' + json);
+    if (window.AppInventor && AppInventor.setWebViewString) {
+      AppInventor.setWebViewString(JSON.stringify(obj));
+    }
   }
 
   function handleAppResponse(val) {
-    addLog('← ' + val);
-    try {
-      var msg = JSON.parse(val);
-      if (msg.token) { currentToken = msg.token; addLog('  [token saved]'); }
-      if (msg.workout) { lastWorkoutTag = msg.workout; addLog('  [workout tag: ' + msg.workout + ']'); }
-    } catch(e) {}
+    var msg;
+    try { msg = JSON.parse(val); } catch(e) { addLog('ERROR: bad JSON from app: ' + val); return; }
+    switch (msg.action) {
+      case 'autoLogin':
+        addLog('APP → autoLogin with token ' + (msg.token || '(none)'));
+        break;
+      case 'loginResult':
+        if (msg.success) {
+          currentToken = msg.token;
+          addLog('APP → loginResult OK, user=' + msg.username + ', token=' + msg.token.slice(0,16) + '...');
+        } else {
+          addLog('APP → loginResult FAIL: ' + msg.error);
+        }
+        break;
+      case 'saveAck':
+        addLog('APP → saveAck (workout stored in TinyDB)');
+        break;
+      case 'uploadAck':
+        addLog('APP → uploadAck cleared TinyDB tag: ' + msg.workout);
+        break;
+      case 'uploadWorkout':
+        addLog('APP → uploadWorkout tag=' + msg.workout);
+        break;
+      default:
+        addLog('APP → ' + msg.action + ' ' + JSON.stringify(msg));
+    }
   }
   window.handleAppResponse = handleAppResponse;
 
   function fetchToken(cb) {
-    addLog('  [fetching token for demo...]');
+    addLog('Fetching real token for demo/demo1234...');
     fetch(API + '/rpc/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,35 +74,51 @@
       var row = Array.isArray(arr) ? arr[0] : arr;
       if (row && row.status === 'success') {
         currentToken = row.token;
-        addLog('  [token: ' + row.token.slice(0,16) + '...]');
+        addLog('Login OK — token=' + row.token.slice(0,16) + '...');
         cb(row.token);
       } else {
-        addLog('  [login failed: ' + (row && row.error) + ']');
+        addLog('Login FAILED: ' + (row && row.error));
       }
     })
-    .catch(function(e) { addLog('  [error: ' + e.message + ']'); });
+    .catch(function(e) { addLog('Login ERROR: ' + e.message); });
   }
 
   function doAutoLogin() {
-    fetchToken(function(t) { send({ action: 'autoLogin', token: t }); });
+    fetchToken(function(t) {
+      addLog('Sending autoLogin to app...');
+      send({ action: 'autoLogin', token: t });
+    });
   }
 
   function doLoginOk() {
-    fetchToken(function(t) { send({ action: 'loginResult', success: true, token: t, username: 'demo' }); });
+    fetchToken(function(t) {
+      addLog('Sending loginResult OK to app...');
+      send({ action: 'loginResult', success: true, token: t, username: 'demo' });
+    });
+  }
+
+  function doLoginFail() {
+    addLog('Sending loginResult FAIL to app...');
+    send({ action: 'loginResult', success: false, error: 'Invalid credentials' });
   }
 
   function doSaveData() {
+    addLog('Sending saveData (simulates offline workout saved by ftms_integration)...');
     send({ action: 'saveData', data: buildPayload() });
+    addLog('Waiting for saveAck from app...');
   }
 
   function doUploadWorkout() {
-    if (!currentToken) { addLog('  [no token — do login first]'); return; }
+    if (!currentToken) { addLog('ERROR: no token — do login first'); return; }
     lastWorkoutTag = workoutTag();
+    addLog('Sending uploadWorkout — tag=' + lastWorkoutTag + ' token=' + currentToken.slice(0,16) + '...');
     send({ action: 'uploadWorkout', token: currentToken, workout: lastWorkoutTag, data: buildPayload() });
+    addLog('Waiting for uploadAck from app...');
   }
 
   function doUploadAck() {
-    if (!lastWorkoutTag) { addLog('  [no workout tag — do uploadWorkout first]'); return; }
+    if (!lastWorkoutTag) { addLog('ERROR: no workout tag — do uploadWorkout first'); return; }
+    addLog('Sending uploadAck — tag=' + lastWorkoutTag + ' (simulates AI2 clearing TinyDB)');
     send({ action: 'uploadAck', workout: lastWorkoutTag });
   }
 
