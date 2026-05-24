@@ -16,7 +16,7 @@
     <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
     <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
     <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
-    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;">DEBUG</button>
+    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
   </div>
 
   <!-- ── LOGIN ─────────────────────────────────────────── -->
@@ -72,6 +72,8 @@
     var lastWebViewString = '';
     var bleConnected = false;
     var inDebugMode = false;
+    var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
+    if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
 
 
 
@@ -155,6 +157,7 @@
         case 'ftmsData':       onFtmsData(msg);       break;
         case 'saveAck':        onSaveAck();           break;
         case 'uploadWorkout':  onUploadWorkout(msg);  break;
+        case 'tagCleared':     onTagCleared(msg);     break;
         case 'goHome':         showHome();            break;
         default: console.warn('Unknown action:', msg.action);
       }
@@ -349,6 +352,10 @@
 
     function onSaveAck() {
       showHome();
+    }
+
+    function onTagCleared(msg) {
+      console.log('[upload] tag cleared by AI2:', msg.workout);
     }
 
     function onUploadWorkout(msg) {

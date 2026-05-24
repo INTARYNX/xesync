@@ -16,6 +16,7 @@
 <button onclick="doSaveData()">1. saveData (offline)</button>
 <button onclick="doUploadWorkout()">2. uploadWorkout</button>
 <button onclick="doUploadAck()">3. uploadAck</button>
+<button onclick="doTagCleared()">4. tagCleared (AI2 cleared TinyDB tag)</button>
 <br><br>
 
 <b>LOG</b> <button onclick="log.value=''">clear</button><br>
@@ -120,6 +121,12 @@
     if (!lastWorkoutTag) { addLog('ERROR: no workout tag — do uploadWorkout first'); return; }
     addLog('Sending uploadAck — tag=' + lastWorkoutTag + ' (simulates AI2 clearing TinyDB)');
     send({ action: 'uploadAck', workout: lastWorkoutTag });
+  }
+
+  function doTagCleared() {
+    if (!lastWorkoutTag) { addLog('ERROR: no workout tag — do uploadWorkout first'); return; }
+    addLog('Sending tagCleared — tag=' + lastWorkoutTag + ' (AI2 confirmed TinyDB tag cleared)');
+    send({ action: 'tagCleared', workout: lastWorkoutTag });
   }
 
   function buildPayload() {
