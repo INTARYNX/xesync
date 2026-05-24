@@ -48,8 +48,6 @@
     pointer-events: none;
   }
 
-  /* Hidden span forces the browser to actually load the logo font
-     and keep it in active use, so canvas can render it. */
   .font-preload {
     position: absolute;
     visibility: hidden;
@@ -188,9 +186,9 @@
   .phone-frame::before {
     content: '';
     position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 50%;
+    left: 14px;
+    transform: translateY(-50%);
     width: 12px;
     height: 12px;
     background: #050505;
@@ -220,7 +218,7 @@
   @media (max-width: 600px) {
     .phone-mockup { max-width: 100%; margin-top: 40px; }
     .phone-frame { border-width: 8px; border-radius: 24px; }
-    .phone-frame::before { width: 10px; height: 10px; top: 10px; }
+    .phone-frame::before { width: 10px; height: 10px; left: 10px; }
   }
 
   /* ── GRID ──────────────────────────────────────────────────────── */
@@ -426,7 +424,6 @@
 </head>
 <body>
 
-<!-- Forces the logo font into active CSS so it's actually fetched -->
 <span class="font-preload" aria-hidden="true">XEsync</span>
 
 <canvas id="bg" aria-hidden="true"></canvas>
@@ -618,7 +615,6 @@
 </main>
 
 <script>
-  // ── Background logo wave animation ────────────────────────────
   const LOGO_FONT_SPEC = '700 120px "Courier Prime", "Courier New", Courier, monospace';
   const LOGO_FONT_FAMILY = '"Courier Prime"';
 
@@ -702,24 +698,18 @@
     draw();
   }
 
-  // Wait for the logo font to actually load before rasterizing.
-  // document.fonts.load() returns a promise that resolves once the
-  // specified font face is downloaded and registered with the engine.
   if (document.fonts && document.fonts.load) {
     document.fonts.load(LOGO_FONT_SPEC, 'XEsync')
       .then(() => document.fonts.ready)
       .then(() => {
-        // Final guard: rebuild if the font wasn't actually applied
         if (!document.fonts.check(LOGO_FONT_SPEC)) {
-          // give it one more frame in case it's mid-registration
           setTimeout(start, 100);
         } else {
           start();
         }
       })
-      .catch(() => start()); // start with fallback if something fails
+      .catch(() => start());
   } else {
-    // Older browsers: just wait a beat and hope
     window.addEventListener('load', () => setTimeout(start, 300));
   }
 </script>
