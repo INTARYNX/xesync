@@ -2,138 +2,50 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XeSync Test Console</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: monospace;
-      font-size: 12px;
-      background: #0a0a0a;
-      color: #ccc;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    #topbar {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      background: #111;
-      border-bottom: 1px solid #222;
-      flex-shrink: 0;
-      flex-wrap: wrap;
-    }
-    .sep { width: 1px; height: 20px; background: #333; margin: 0 2px; }
-    .lbl { color: #444; font-size: 10px; white-space: nowrap; }
-    button {
-      font-family: monospace;
-      font-size: 11px;
-      padding: 4px 10px;
-      background: #1a1a1a;
-      color: #aaa;
-      border: 1px solid #333;
-      border-radius: 2px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    button:hover  { background: #222; }
-    button:active { background: #2a2a2a; }
-    button.g { color: #4CAF50; border-color: #4CAF50; }
-    button.r { color: #f44336; border-color: #f44336; }
-    button.b { color: #64b5f6; border-color: #64b5f6; }
-    button.y { color: #ffb300; border-color: #ffb300; }
-    button.d { color: #555;    border-color: #2a2a2a; }
-    #body {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      padding: 6px;
-    }
-    .panel {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      gap: 4px;
-    }
-    .plbl { font-size: 10px; color: #444; letter-spacing: 0.1em; }
-    textarea {
-      font-family: monospace;
-      font-size: 11px;
-      background: #111;
-      color: #bbb;
-      border: 1px solid #222;
-      padding: 6px;
-      resize: none;
-      flex: 1;
-      min-height: 0;
-      outline: none;
-    }
-    #status {
-      padding: 3px 10px;
-      font-size: 10px;
-      color: #555;
-      background: #0d0d0d;
-      border-top: 1px solid #1a1a1a;
-      flex-shrink: 0;
-    }
-  </style>
+  <title>XeSync Test</title>
 </head>
 <body>
 
-<div id="topbar">
-  <span class="lbl">AUTH</span>
-  <button class="g" onclick="fetchToken(function(t){send({action:'autoLogin',token:t});})">autoLogin</button>
-  <button class="g" onclick="fetchToken(function(t){send({action:'loginResult',success:true,token:t,username:'demo'});})">loginResult OK</button>
-  <button class="r" onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
+<b>AUTH</b><br>
+<button onclick="doAutoLogin()">autoLogin</button>
+<button onclick="doLoginOk()">loginResult OK</button>
+<button onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
+<button onclick="send({action:'goHome'})">goHome</button>
+<button onclick="send({action:'saveAck'})">saveAck</button>
+<br><br>
 
-  <div class="sep"></div>
-  <span class="lbl">SCAN</span>
-  <button class="b" onclick="send({action:'scanResult',devices:[{id:'D6:07:FD:51:EE:34 XEBEX-AR2-60980'},{id:'AA:BB:CC:DD:EE:01 XEBEX-AR2-60981'}]})">scanResult</button>
+<b>OFFLINE SAVE CYCLE</b><br>
+<button onclick="doSaveData()">saveData (offline)</button>
+<button onclick="doUploadWorkout()">uploadWorkout</button>
+<button onclick="doUploadAck()">uploadAck</button>
+<br><br>
 
-  <div class="sep"></div>
-  <span class="lbl">CONNECT</span>
-  <button class="g" onclick="send({action:'connectResult',success:true})">connectResult OK</button>
-  <button class="r" onclick="send({action:'connectResult',success:false,error:'Device not found'})">connectResult FAIL</button>
-
-  <div class="sep"></div>
-  <span class="lbl">BLE</span>
-  <button class="r" onclick="send({action:'disconnected'})">disconnected</button>
-  <button class="g" onclick="send({action:'reconnected'})">reconnected</button>
-
-  <div class="sep"></div>
-  <span class="lbl">SAVE</span>
-  <button class="y" onclick="sendSave()">saveData</button>
-  <button class="g" onclick="send({action:'saveAck'})">saveAck</button>
-  <button class="y" onclick="sendUpload()">uploadWorkout</button>
-  <button class="g" onclick="sendUploadAck()">uploadAck</button>
-
-  <div class="sep"></div>
-  <span class="lbl">NAV</span>
-  <button onclick="send({action:'goHome'})">goHome</button>
-
-  <div class="sep"></div>
-  <button class="d" onclick="document.getElementById('log').value=''">clear</button>
-</div>
-
-<div id="body">
-  <div class="panel">
-    <div class="plbl">LOG</div>
-    <textarea id="log" readonly></textarea>
-  </div>
-</div>
-
-<div id="status">ready</div>
+<b>LOG</b> <button onclick="log.value=''">clear</button><br>
+<textarea id="log" rows="30" cols="100" readonly></textarea>
 
 <script>
-  var currentToken = '';
   var API = 'https://xesync.enlistia.com/api';
+  var currentToken = '';
+  var lastWorkoutTag = '';
+
+  function send(obj) {
+    var json = JSON.stringify(obj);
+    if (window.AppInventor && AppInventor.setWebViewString) AppInventor.setWebViewString(json);
+    addLog('→ ' + json);
+  }
+
+  function handleAppResponse(val) {
+    addLog('← ' + val);
+    try {
+      var msg = JSON.parse(val);
+      if (msg.token) { currentToken = msg.token; addLog('  [token saved]'); }
+      if (msg.workout) { lastWorkoutTag = msg.workout; addLog('  [workout tag: ' + msg.workout + ']'); }
+    } catch(e) {}
+  }
+  window.handleAppResponse = handleAppResponse;
 
   function fetchToken(cb) {
-    setStatus('logging in...');
+    addLog('  [fetching token for demo...]');
     fetch(API + '/rpc/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,56 +56,45 @@
       var row = Array.isArray(arr) ? arr[0] : arr;
       if (row && row.status === 'success') {
         currentToken = row.token;
-        setStatus('token: ' + row.token.slice(0, 16) + '...');
+        addLog('  [token: ' + row.token.slice(0,16) + '...]');
         cb(row.token);
       } else {
-        setStatus('login failed: ' + (row && row.error));
+        addLog('  [login failed: ' + (row && row.error) + ']');
       }
     })
-    .catch(function(e) { setStatus('error: ' + e.message); });
+    .catch(function(e) { addLog('  [error: ' + e.message + ']'); });
   }
 
-  function send(obj) {
-    var json = JSON.stringify(obj);
-    if (window.AppInventor && AppInventor.setWebViewString) {
-      AppInventor.setWebViewString(json);
-    }
-    addLog('→ ' + json);
-    setStatus('sent: ' + obj.action);
+  function doAutoLogin() {
+    fetchToken(function(t) { send({ action: 'autoLogin', token: t }); });
   }
 
-  function handleAppResponse(val) {
-    addLog('← ' + val);
-    try {
-      var msg = JSON.parse(val);
-      if (msg.token) currentToken = msg.token;
-      setStatus('received: ' + (msg.action || '?'));
-    } catch(e) {
-      setStatus('received (raw): ' + String(val).slice(0, 60));
-    }
-  }
-  window.handleAppResponse = handleAppResponse;
-
-  function sendSave() {
-    send({ action: 'saveData', data: buildSimPayload() });
+  function doLoginOk() {
+    fetchToken(function(t) { send({ action: 'loginResult', success: true, token: t, username: 'demo' }); });
   }
 
-  function sendUpload() {
-    if (!currentToken) { setStatus('no token — do login first'); return; }
-    send({ action: 'uploadWorkout', token: currentToken, workout: workoutTag(), data: buildSimPayload() });
+  function doSaveData() {
+    send({ action: 'saveData', data: buildPayload() });
   }
 
-  function sendUploadAck() {
-    send({ action: 'uploadAck', workout: workoutTag() });
+  function doUploadWorkout() {
+    if (!currentToken) { addLog('  [no token — do login first]'); return; }
+    lastWorkoutTag = workoutTag();
+    send({ action: 'uploadWorkout', token: currentToken, workout: lastWorkoutTag, data: buildPayload() });
   }
 
-  function buildSimPayload() {
+  function doUploadAck() {
+    if (!lastWorkoutTag) { addLog('  [no workout tag — do uploadWorkout first]'); return; }
+    send({ action: 'uploadAck', workout: lastWorkoutTag });
+  }
+
+  function buildPayload() {
     var DURATION = 1820, DISTANCE = 5012, STROKES = 412, CALORIES = 287;
     var BASE = { pace:108, watts:145, spm:24.5, hr:142 };
     var samples = [], dist = 0, strokes = 0;
     for (var t = 0; t < DURATION; t++) {
       var prog = t / DURATION;
-      var n = function(seed) { return Math.sin(t * 0.31 + seed * 127.1) * 0.5 + 0.5; };
+      var n = function(s) { return Math.sin(t * 0.31 + s * 127.1) * 0.5 + 0.5; };
       var spm   = clamp(BASE.spm   + Math.sin(prog*Math.PI*4)*3  + n(1)*2  - 1,  14, 36);
       var watts = clamp(BASE.watts + Math.sin(prog*Math.PI*6)*20 + n(2)*15 - 7,  60, 300);
       var hr    = clamp(BASE.hr    + Math.sin(prog*Math.PI*2)*15 + n(3)*8  - 4 + prog*10, 100, 185);
@@ -227,10 +128,6 @@
     var el = document.getElementById('log');
     el.value += txt + '\n';
     el.scrollTop = el.scrollHeight;
-  }
-
-  function setStatus(txt) {
-    document.getElementById('status').textContent = txt;
   }
 </script>
 </body>
