@@ -115,6 +115,11 @@
     }
 
     function doExit() {
+      var onLogin = document.getElementById('screen-login').classList.contains('active');
+      if (onLogin) {
+        sendToApp('exit', {});
+        return;
+      }
       appToken = null;
       appUsername = null;
       bleConnected = false;
