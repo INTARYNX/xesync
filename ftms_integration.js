@@ -8,7 +8,9 @@
  * Phases:
  *   IDLE   — no rowing yet, waiting for first stroke
  *   ACTIVE — rowing in progress
- *   DONE   — rower stopped for >5s with a real session → save dialog shown
+ *   PAUSED — rower stopped for >5s. Clock is frozen, pause-aware dialog
+ *            is shown. Resuming (spm>0) returns to ACTIVE without losing
+ *            the session. Save/Exit ends the session.
  */
 
 (function () {
@@ -17,8 +19,7 @@
   // ─────────────────────────────────────────────────────────────────────
   // Config
   // ─────────────────────────────────────────────────────────────────────
-  var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is "DONE"
-  var MIN_SAVE_SECONDS = 5;      // minimum session length to show save dialog
+  var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is PAUSED
   var INACTIVITY_TICK  = 500;    // how often to check for inactivity (ms)
   var INITIAL_PACE     = 150;    // s/500m when we have no real pace yet
   var PACE_EMA_ALPHA   = 0.3;    // new-sample weight in exponential smoothing
@@ -36,20 +37,22 @@
 
   function resetSession() {
     session = {
-      startedAt:     null,
-      frozenSeconds: null,    // set in goDone() to lock the clock
+      startedAt:        null,
+      // Pause-aware clock: total ms spent in PAUSED state
+      totalPausedMs:    0,
+      pausedAt:         null,
       // Session-level accumulators (added to current rower reading)
-      distOffset:    0,
-      strokeOffset:  0,
-      calOffset:     0,
+      distOffset:       0,
+      strokeOffset:     0,
+      calOffset:        0,
       // Last raw values from the rower (used to detect resets)
-      rawDist:       0,
-      rawStrokes:    0,
-      rawCals:       0,
+      rawDist:          0,
+      rawStrokes:       0,
+      rawCals:          0,
       // Smoothed pace
-      paceSeconds:   INITIAL_PACE,
+      paceSeconds:      INITIAL_PACE,
       // Sampled-per-packet log used to build the save payload
-      samples:       []
+      samples:          []
     };
   }
 
@@ -91,10 +94,15 @@
   function totalDistance() { return session.distOffset   + session.rawDist; }
   function totalStrokes()  { return session.strokeOffset + session.rawStrokes; }
   function totalCals()     { return session.calOffset    + session.rawCals; }
+
+  // Pause-aware elapsed time: total wall time since start, minus any
+  // accumulated paused intervals, minus the currently-running pause if any.
   function sessionSeconds() {
-    if (!session) return 0;
-    if (session.frozenSeconds != null) return session.frozenSeconds;
-    return session.startedAt ? (Date.now() - session.startedAt) / 1000 : 0;
+    if (!session || !session.startedAt) return 0;
+    var now = Date.now();
+    var pausedMs = session.totalPausedMs;
+    if (session.pausedAt != null) pausedMs += (now - session.pausedAt);
+    return (now - session.startedAt - pausedMs) / 1000;
   }
 
   // Update smoothed pace based on real distance/time deltas between packets.
@@ -174,7 +182,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Status banner (replaces full-screen popup)
+  // Status banner
   // ─────────────────────────────────────────────────────────────────────
   function ensureBanner() {
     var el = document.getElementById('ftmsBanner');
@@ -195,13 +203,14 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Save dialog
+  // Pause dialog — SAVE or EXIT SESSION. Rowing again dismisses it.
   // ─────────────────────────────────────────────────────────────────────
-  function ensureSaveDialog() {
-    if (document.getElementById('saveDialog')) return;
+  function ensurePauseDialog() {
+    if (document.getElementById('pauseDialog')) return;
     var html = ''
-      + '<div id="saveDialog" class="ftms-overlay">'
-      +   '<div class="ftms-overlay-title">WORKOUT COMPLETE</div>'
+      + '<div id="pauseDialog" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">PAUSED</div>'
+      +   '<div class="ftms-overlay-subtitle">row again to continue</div>'
       +   '<div class="ftms-summary-grid">'
       +     tile('summaryTime',     'TIME',     '00:00')
       +     tile('summaryDistance', 'DISTANCE', '0m')
@@ -209,8 +218,8 @@
       +     tile('summaryCalories', 'CALORIES', '0')
       +   '</div>'
       +   '<div class="ftms-actions">'
-      +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE DATA</button>'
-      +     '<button class="ftms-btn secondary" onclick="restartWorkout()">START OVER</button>'
+      +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE</button>'
+      +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
       +   '</div>'
       + '</div>';
     function tile(id, label, val) {
@@ -221,16 +230,16 @@
     }
     document.body.insertAdjacentHTML('beforeend', html);
   }
-  function showSaveDialog() {
-    ensureSaveDialog();
+  function showPauseDialog() {
+    ensurePauseDialog();
     setText('summaryTime',     fmtTime(sessionSeconds()));
     setText('summaryDistance', totalDistance() + 'm');
     setText('summaryStrokes',  totalStrokes());
     setText('summaryCalories', totalCals());
-    document.getElementById('saveDialog').classList.add('visible');
+    document.getElementById('pauseDialog').classList.add('visible');
   }
-  function hideSaveDialog() {
-    var el = document.getElementById('saveDialog');
+  function hidePauseDialog() {
+    var el = document.getElementById('pauseDialog');
     if (el) el.classList.remove('visible');
   }
 
@@ -272,27 +281,36 @@
   // ─────────────────────────────────────────────────────────────────────
   function goActive() {
     if (phase === 'ACTIVE') return;
+    if (phase === 'PAUSED') {
+      // Resume — accumulate the just-ended pause and clear marker.
+      if (session.pausedAt != null) {
+        session.totalPausedMs += (Date.now() - session.pausedAt);
+        session.pausedAt = null;
+      }
+      hidePauseDialog();
+      hideBanner();
+      phase = 'ACTIVE';
+      lastActiveAt = Date.now();
+      if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
+      return;
+    }
+    // IDLE → ACTIVE: brand new session
     resetSession();
     session.startedAt = Date.now();
     lastActiveAt = Date.now();
     phase = 'ACTIVE';
     hideBanner();
-    hideSaveDialog();
-    if (DEBUG) console.log('[FTMS] phase → ACTIVE');
+    hidePauseDialog();
+    if (DEBUG) console.log('[FTMS] phase IDLE → ACTIVE');
   }
 
-  function goDone() {
+  function goPaused() {
     if (phase !== 'ACTIVE') return;
-    session.frozenSeconds = (Date.now() - session.startedAt) / 1000 - INACTIVITY_MS / 1000;
-    if (session.frozenSeconds < 0) session.frozenSeconds = 0;
-    phase = 'DONE';
-    hideBanner();
+    session.pausedAt = Date.now();
+    phase = 'PAUSED';
     if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
-    if (session.frozenSeconds >= MIN_SAVE_SECONDS) {
-      showSaveDialog();
-    } else {
-      goIdle();
-    }
+    showPauseDialog();
+    if (DEBUG) console.log('[FTMS] phase ACTIVE → PAUSED');
   }
 
   function goIdle() {
@@ -300,10 +318,7 @@
     resetSession();
     lastPacket = null;
     renderIdle();
-    hideSaveDialog();
-    // Only show "READY TO ROW" if we are actually on the rowing screen.
-    // After a successful save, app.html shows the home iframe — no banner
-    // should sit on top of it.
+    hidePauseDialog();
     var rowingScreen = document.getElementById('screen-rowing');
     if (rowingScreen && rowingScreen.classList.contains('active')) {
       showBanner('READY TO ROW !');
@@ -318,29 +333,28 @@
   // ─────────────────────────────────────────────────────────────────────
   function tickInactivity() {
     if (phase !== 'ACTIVE') return;
-    if (Date.now() - lastActiveAt > INACTIVITY_MS) goDone();
+    if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
   }
 
   // ─────────────────────────────────────────────────────────────────────
   // Public API
   // ─────────────────────────────────────────────────────────────────────
   function ingestData(csv) {
-    // App.html passes us either the raw CSV or a "#data=..." hash. Strip prefix.
     if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
       csv = decodeURIComponent(csv.slice(6));
     }
     var p = parsePacket(csv);
     if (!p) return;
 
-    // While the save dialog is open the user owns the decision (SAVE or
-    // START OVER). Ignore packets so a stray stroke can't wipe an unsaved
-    // session by transitioning DONE → ACTIVE behind their back.
-    if (phase === 'DONE') return;
-
     var prev = lastPacket;
     lastPacket = p;
 
+    // IDLE: first stroke kicks off a fresh session.
     if (phase === 'IDLE') {
+      if (p.spm > 0) goActive(); else return;
+    }
+    // PAUSED: any stroke resumes the same session.
+    else if (phase === 'PAUSED') {
       if (p.spm > 0) goActive(); else return;
     }
 
@@ -349,20 +363,20 @@
     updatePace(prev, p);
     if (p.spm > 0) {
       lastActiveAt = Date.now();
-      recordSample(p);          // only sample while actually rowing
+      recordSample(p);
     }
     render();
   }
 
   function initFtmsTracking() {
-    ensureSaveDialog();
+    ensurePauseDialog();
     if (inactivityTimerId) clearInterval(inactivityTimerId);
     inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
     goIdle();
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Save / restart
+  // Save / exit
   // ─────────────────────────────────────────────────────────────────────
   function avg(arr, key) {
     if (!arr.length) return 0;
@@ -406,7 +420,7 @@
   }
 
   function saveWorkout() {
-    hideSaveDialog();
+    hidePauseDialog();
     var payload = buildPayload();
     var token = typeof appToken !== 'undefined' ? appToken : null;
 
@@ -480,7 +494,6 @@
         setTimeout(function () { hideBanner(); goHome(); }, 4000);
         return;
       }
-      // PostgREST returns an array; unwrap.
       var row = Array.isArray(json) ? json[0] : json;
       if (row && row.status === 'success') {
         showBanner('SAVED ✓');
@@ -496,8 +509,10 @@
     });
   }
 
-  function restartWorkout() {
+  function exitSession() {
+    hidePauseDialog();
     goIdle();
+    if (typeof showHome === 'function') showHome();
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -506,7 +521,7 @@
   window.initFtmsTracking   = initFtmsTracking;
   window.ingestData         = ingestData;
   window.saveWorkout        = saveWorkout;
-  window.restartWorkout     = restartWorkout;
+  window.exitSession        = exitSession;
   window.offlineChoiceRow   = offlineChoiceRow;
   window.offlineChoiceLogin = offlineChoiceLogin;
 })();
