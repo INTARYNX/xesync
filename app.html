@@ -147,14 +147,15 @@
       }
 
       switch (msg.action) {
-        case 'autoLogin':     doAutoLogin(msg);     break;
-        case 'scanResult':    onScanResult(msg);    break;
-        case 'connectResult': onConnectResult(msg); break;
-        case 'disconnected':  onDisconnected();     break;
-        case 'reconnected':   onReconnected();      break;
-        case 'ftmsData':      onFtmsData(msg);      break;
-        case 'saveAck':       onSaveAck();          break;
-        case 'goHome':        showHome();           break;
+        case 'autoLogin':      doAutoLogin(msg);      break;
+        case 'scanResult':     onScanResult(msg);     break;
+        case 'connectResult':  onConnectResult(msg);  break;
+        case 'disconnected':   onDisconnected();      break;
+        case 'reconnected':    onReconnected();       break;
+        case 'ftmsData':       onFtmsData(msg);       break;
+        case 'saveAck':        onSaveAck();           break;
+        case 'uploadWorkout':  onUploadWorkout(msg);  break;
+        case 'goHome':         showHome();            break;
         default: console.warn('Unknown action:', msg.action);
       }
     }
@@ -348,6 +349,22 @@
 
     function onSaveAck() {
       showHome();
+    }
+
+    function onUploadWorkout(msg) {
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token, workout: msg.workout, data: msg.data })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var row = Array.isArray(arr) ? arr[0] : arr;
+        if (row && row.status === 'success') {
+          sendToApp('uploadAck', { workout: msg.workout });
+        }
+      })
+      .catch(function() {});
     }
 
     function doGiveUp() {

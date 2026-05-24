@@ -422,7 +422,7 @@
       var msg = JSON.stringify({
         action:  'saveData',
         workout: tag,
-        data:    JSON.stringify(payload)
+        data:    payload
       });
       var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
         ? AppInventor

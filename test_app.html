@@ -16,22 +16,18 @@
       flex-direction: column;
       overflow: hidden;
     }
-
-    /* ── TOP BAR ── */
     #topbar {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       padding: 6px 10px;
       background: #111;
       border-bottom: 1px solid #222;
       flex-shrink: 0;
       flex-wrap: wrap;
     }
-    #topbar .sep { width: 1px; height: 20px; background: #333; margin: 0 2px; }
-    #topbar .section-label { color: #444; font-size: 10px; white-space: nowrap; }
-
-    /* ── BUTTONS ── */
+    .sep { width: 1px; height: 20px; background: #333; margin: 0 2px; }
+    .lbl { color: #444; font-size: 10px; white-space: nowrap; }
     button {
       font-family: monospace;
       font-size: 11px;
@@ -45,34 +41,25 @@
     }
     button:hover  { background: #222; }
     button:active { background: #2a2a2a; }
-    button.green  { color: #4CAF50; border-color: #4CAF50; }
-    button.red    { color: #f44336; border-color: #f44336; }
-    button.blue   { color: #64b5f6; border-color: #64b5f6; }
-    button.yellow { color: #ffb300; border-color: #ffb300; }
-    button.dim    { color: #555;    border-color: #333; }
-
-    /* ── BODY ── */
+    button.g { color: #4CAF50; border-color: #4CAF50; }
+    button.r { color: #f44336; border-color: #f44336; }
+    button.b { color: #64b5f6; border-color: #64b5f6; }
+    button.y { color: #ffb300; border-color: #ffb300; }
+    button.d { color: #555;    border-color: #2a2a2a; }
     #body {
       display: flex;
       flex: 1;
       min-height: 0;
-      gap: 6px;
       padding: 6px;
     }
-
-    /* ── PANELS ── */
     .panel {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      flex: 1;
       min-height: 0;
+      gap: 4px;
     }
-    .panel-label {
-      font-size: 10px;
-      color: #444;
-      letter-spacing: 0.1em;
-      flex-shrink: 0;
-    }
+    .plbl { font-size: 10px; color: #444; letter-spacing: 0.1em; }
     textarea {
       font-family: monospace;
       font-size: 11px;
@@ -85,88 +72,63 @@
       min-height: 0;
       outline: none;
     }
-    textarea:focus { border-color: #333; }
-
-    #panel-log  { flex: 1; min-width: 0; }
-    #panel-ftms { flex: 0 0 280px; }
-
-    /* ── FTMS SIM ── */
-    #sim-bar {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-      flex-shrink: 0;
-    }
-    #sim-indicator {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #333;
-      flex-shrink: 0;
-    }
-    #sim-indicator.active { background: #4CAF50; }
-
-    /* ── STATUS STRIP ── */
     #status {
-      flex-shrink: 0;
       padding: 3px 10px;
       font-size: 10px;
       color: #555;
       background: #0d0d0d;
       border-top: 1px solid #1a1a1a;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      flex-shrink: 0;
     }
   </style>
 </head>
 <body>
 
-<!-- ── TOP BAR ── -->
 <div id="topbar">
-
-  <span class="section-label">AUTH</span>
-  <button class="green" onclick="fetchToken(function(t){send({action:'autoLogin',token:t});})">autoLogin</button>
-  <button class="green" onclick="fetchToken(function(t){send({action:'loginResult',success:true,token:t,username:'demo'});})">loginResult OK</button>
-  <button class="red"   onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
-
-  <div class="sep"></div>
-  <span class="section-label">SCAN</span>
-  <button class="blue" onclick="send({action:'scanResult',devices:[{id:'D6:07:FD:51:EE:34 XEBEX-AR2-60980'},{id:'AA:BB:CC:DD:EE:01 XEBEX-AR2-60981'}]})">scanResult</button>
+  <span class="lbl">AUTH</span>
+  <button class="g" onclick="fetchToken(function(t){send({action:'autoLogin',token:t});})">autoLogin</button>
+  <button class="g" onclick="fetchToken(function(t){send({action:'loginResult',success:true,token:t,username:'demo'});})">loginResult OK</button>
+  <button class="r" onclick="send({action:'loginResult',success:false,error:'Invalid credentials'})">loginResult FAIL</button>
 
   <div class="sep"></div>
-  <span class="section-label">CONNECT</span>
-  <button class="green" onclick="send({action:'connectResult',success:true})">connectResult OK</button>
-  <button class="red"   onclick="send({action:'connectResult',success:false,error:'Device not found'})">connectResult FAIL</button>
-
-  <span class="section-label">SAVE</span>
-  <button class="yellow" onclick="sendSave()">saveData (sim)</button>
-  <button class="green"  onclick="send({action:'saveAck'})">saveAck</button>
+  <span class="lbl">SCAN</span>
+  <button class="b" onclick="send({action:'scanResult',devices:[{id:'D6:07:FD:51:EE:34 XEBEX-AR2-60980'},{id:'AA:BB:CC:DD:EE:01 XEBEX-AR2-60981'}]})">scanResult</button>
 
   <div class="sep"></div>
-  <span class="section-label">NAV</span>
+  <span class="lbl">CONNECT</span>
+  <button class="g" onclick="send({action:'connectResult',success:true})">connectResult OK</button>
+  <button class="r" onclick="send({action:'connectResult',success:false,error:'Device not found'})">connectResult FAIL</button>
+
+  <div class="sep"></div>
+  <span class="lbl">BLE</span>
+  <button class="r" onclick="send({action:'disconnected'})">disconnected</button>
+  <button class="g" onclick="send({action:'reconnected'})">reconnected</button>
+
+  <div class="sep"></div>
+  <span class="lbl">SAVE</span>
+  <button class="y" onclick="sendSave()">saveData</button>
+  <button class="g" onclick="send({action:'saveAck'})">saveAck</button>
+  <button class="y" onclick="sendUpload()">uploadWorkout</button>
+  <button class="g" onclick="sendUploadAck()">uploadAck</button>
+
+  <div class="sep"></div>
+  <span class="lbl">NAV</span>
   <button onclick="send({action:'goHome'})">goHome</button>
 
   <div class="sep"></div>
-  <button class="dim" onclick="clearLog()">clear log</button>
+  <button class="d" onclick="document.getElementById('log').value=''">clear</button>
 </div>
 
-<!-- ── BODY ── -->
 <div id="body">
-
-    <!-- LOG PANEL -->
-  <div class="panel" id="panel-log">
-    <div class="panel-label">MESSAGE LOG</div>
+  <div class="panel">
+    <div class="plbl">LOG</div>
     <textarea id="log" readonly></textarea>
   </div>
-
 </div>
 
-<!-- STATUS -->
 <div id="status">ready</div>
 
 <script>
-  // ── STATE ──────────────────────────────────────────────────────────────
   var currentToken = '';
   var API = 'https://xesync.enlistia.com/api';
 
@@ -188,12 +150,11 @@
         setStatus('login failed: ' + (row && row.error));
       }
     })
-    .catch(function(e) { setStatus('login error: ' + e.message); });
+    .catch(function(e) { setStatus('error: ' + e.message); });
   }
-  // ── BRIDGE ────────────────────────────────────────────────────────────
+
   function send(obj) {
     var json = JSON.stringify(obj);
-    if (obj.token) currentToken = obj.token;
     if (window.AppInventor && AppInventor.setWebViewString) {
       AppInventor.setWebViewString(json);
     }
@@ -201,98 +162,31 @@
     setStatus('sent: ' + obj.action);
   }
 
-  // Called by the app via RunJavaScript("handleAppResponse(...)")
   function handleAppResponse(val) {
     addLog('← ' + val);
-    setStatus('received: ' + (tryParse(val) || {}).action || val.slice(0, 60));
     try {
       var msg = JSON.parse(val);
-      if (msg.token) { currentToken = msg.token; }
-    } catch(e) {}
+      if (msg.token) currentToken = msg.token;
+      setStatus('received: ' + (msg.action || '?'));
+    } catch(e) {
+      setStatus('received (raw): ' + String(val).slice(0, 60));
+    }
   }
   window.handleAppResponse = handleAppResponse;
 
-  function tryParse(s) { try { return JSON.parse(s); } catch(e) { return null; } }
-
-  // ── FTMS PACKETS ──────────────────────────────────────────────────────
-  // Xebex encoding: u16 = b[hi]*255 + b[lo]
-  function makePacket(spm, strokes, dist, pace, watts, cals, hr, elapsed) {
-    var b = new Array(20).fill(0);
-    b[2] = Math.round(spm * 2);
-    b[3] = strokes % 255; b[4] = Math.floor(strokes / 255);
-    b[5] = dist    % 255; b[6] = Math.floor(dist    / 255);
-    b[8] = pace    % 255; b[9] = Math.floor(pace    / 255);
-    b[10]= watts   % 255; b[11]= Math.floor(watts   / 255);
-    b[12]= cals    % 255; b[13]= Math.floor(cals    / 255);
-    b[16]= hr;
-    b[18]= elapsed % 255; b[19]= Math.floor(elapsed / 255);
-    return b.join(', ');
+  function sendSave() {
+    send({ action: 'saveData', data: buildSimPayload() });
   }
 
-  var PRESETS = {
-    easy:     { spm:18, pace:150, watts:80,  hr:118 },
-    moderate: { spm:24, pace:110, watts:145, hr:142 },
-    hard:     { spm:30, pace:88,  watts:220, hr:168 }
-  };
-
-  var simPreset = null;
-  var simDist = 0, simStrokes = 0, simCals = 0;
-
-  function simStart(preset) {
-    simStop();
-    simPreset = PRESETS[preset];
-    simT = 0; simDist = 0; simStrokes = 0; simCals = 0;
-    document.getElementById('sim-indicator').classList.add('active');
-    simTimer = setInterval(simTick, 1000);
-    simTick();
+  function sendUpload() {
+    if (!currentToken) { setStatus('no token — do login first'); return; }
+    send({ action: 'uploadWorkout', token: currentToken, workout: workoutTag(), data: buildSimPayload() });
   }
 
-  function simStop() {
-    if (simTimer) { clearInterval(simTimer); simTimer = null; }
-    document.getElementById('sim-indicator').classList.remove('active');
-    // Send one idle packet
-    var csv = makePacket(0, simStrokes, simDist, 0, 0, simCals, 255, simT);
-    send({ action: 'ftmsData', data: csv });
+  function sendUploadAck() {
+    send({ action: 'uploadAck', workout: workoutTag() });
   }
 
-  function simTick() {
-    var p = simPreset;
-    var noise = function(a) { return 1 + (Math.sin(simT * a) * 0.06); };
-    var spm    = Math.round(p.spm   * noise(0.31)  * 10) / 10;
-    var watts  = Math.round(p.watts * noise(0.19));
-    var hr     = Math.round(p.hr    * noise(0.07));
-    var pace   = Math.round(p.pace  * (2 - noise(0.19)));  // inverse of watts
-    var dDist  = 500 / pace;          // meters this second
-    var dCals  = watts * 3.6 / 3600; // rough kcal/s
-    simDist    += dDist;
-    simStrokes += spm / 60;
-    simCals    += dCals;
-    simT++;
-
-    var csv = makePacket(
-      spm,
-      Math.round(simStrokes),
-      Math.round(simDist),
-      pace,
-      watts,
-      Math.round(simCals),
-      hr,
-      simT
-    );
-    send({ action: 'ftmsData', data: csv });
-    addFtmsLog(
-      'spm=' + spm.toFixed(1) +
-      ' dist=' + Math.round(simDist) + 'm' +
-      ' strk=' + Math.round(simStrokes) +
-      ' watt=' + watts + 'W' +
-      ' pace=' + fmtTime(pace) +
-      ' cal='  + Math.round(simCals) +
-      ' hr='   + hr +
-      ' t='    + fmtTime(simT)
-    );
-  }
-
-  // ── SAVE PAYLOAD ──────────────────────────────────────────────────────
   function buildSimPayload() {
     var DURATION = 1820, DISTANCE = 5012, STROKES = 412, CALORIES = 287;
     var BASE = { pace:108, watts:145, spm:24.5, hr:142 };
@@ -300,51 +194,28 @@
     for (var t = 0; t < DURATION; t++) {
       var prog = t / DURATION;
       var n = function(seed) { return Math.sin(t * 0.31 + seed * 127.1) * 0.5 + 0.5; };
-      var spm   = clamp(BASE.spm   + Math.sin(prog * Math.PI * 4) * 3  + n(1)*2  - 1,  14, 36);
-      var watts = clamp(BASE.watts + Math.sin(prog * Math.PI * 6) * 20 + n(2)*15 - 7,  60, 300);
-      var hr    = clamp(BASE.hr    + Math.sin(prog * Math.PI * 2) * 15 + n(3)*8  - 4 + prog*10, 100, 185);
-      var pace  = clamp(BASE.pace  - Math.sin(prog * Math.PI * 4) * 10 + n(4)*6  - 3,  85, 180);
+      var spm   = clamp(BASE.spm   + Math.sin(prog*Math.PI*4)*3  + n(1)*2  - 1,  14, 36);
+      var watts = clamp(BASE.watts + Math.sin(prog*Math.PI*6)*20 + n(2)*15 - 7,  60, 300);
+      var hr    = clamp(BASE.hr    + Math.sin(prog*Math.PI*2)*15 + n(3)*8  - 4 + prog*10, 100, 185);
+      var pace  = clamp(BASE.pace  - Math.sin(prog*Math.PI*4)*10 + n(4)*6  - 3,  85, 180);
       dist    += DISTANCE / DURATION;
       strokes += STROKES  / DURATION;
-      samples.push([
-        t,
-        Math.round(dist),
-        Math.round(strokes),
-        Math.round(spm * 10) / 10,
-        Math.round(watts),
-        Math.round(hr),
-        Math.round(pace)
-      ]);
+      samples.push([t, Math.round(dist), Math.round(strokes),
+        Math.round(spm*10)/10, Math.round(watts), Math.round(hr), Math.round(pace)]);
     }
     function avgCol(i) { return samples.reduce(function(s,r){return s+r[i];},0)/samples.length; }
     return {
       version: 1,
       summary: {
-        duration: DURATION, distance: DISTANCE,
-        strokes: STROKES,   calories: CALORIES,
-        avgSpm:   Math.round(avgCol(3)*10)/10,
-        avgPace:  Math.round(avgCol(6)),
-        avgWatts: Math.round(avgCol(4)),
-        avgHr:    Math.round(avgCol(5))
+        duration: DURATION, distance: DISTANCE, strokes: STROKES, calories: CALORIES,
+        avgSpm: Math.round(avgCol(3)*10)/10, avgPace: Math.round(avgCol(6)),
+        avgWatts: Math.round(avgCol(4)), avgHr: Math.round(avgCol(5))
       },
       samples: samples
     };
   }
 
-  function sendSave() {
-    var tag = workoutTag();
-    var payload = buildSimPayload();
-    send({ action: 'saveData', workout: tag, data: JSON.stringify(payload) });
-  }
-
-  // ── UTILS ─────────────────────────────────────────────────────────────
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-  function fmtTime(s) {
-    s = Math.round(s);
-    var m = Math.floor(s/60), r = s%60;
-    return (m<10?'0':'')+m+':'+(r<10?'0':'')+r;
-  }
 
   function workoutTag() {
     var d = new Date(), p = function(n){return n<10?'0'+n:''+n;};
@@ -356,17 +227,6 @@
     var el = document.getElementById('log');
     el.value += txt + '\n';
     el.scrollTop = el.scrollHeight;
-  }
-
-  function addFtmsLog(txt) {
-    var el = document.getElementById('ftms-log');
-    el.value += txt + '\n';
-    el.scrollTop = el.scrollHeight;
-  }
-
-  function clearLog() {
-    document.getElementById('log').value = '';
-    document.getElementById('ftms-log').value = '';
   }
 
   function setStatus(txt) {
