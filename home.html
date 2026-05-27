@@ -16,12 +16,12 @@
     (function () {
       var statusEl = document.getElementById('status');
       var dashEl   = document.getElementById('dashboard');
-      var hToken   = sessionStorage.getItem('xesync_token');
+      var inIframe = window.parent && window.parent !== window;
+      var hToken   = inIframe ? null : localStorage.getItem('xesync_token');
 
       window.addEventListener('message', function (e) {
         if (e.data && e.data.type === 'token' && e.data.token) {
           hToken = e.data.token;
-          sessionStorage.setItem('xesync_token', hToken);
           load();
         }
       });
@@ -84,18 +84,22 @@
       }
 
       function notifyTokenExpired() {
-        try {
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'tokenExpired' }, '*');
-          }
-        } catch (e) {}
-        sessionStorage.removeItem('xesync_token');
         hToken = null;
+        if (inIframe) {
+          try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
+        } else {
+          localStorage.removeItem('xesync_token');
+          window.location.href = 'login.html';
+        }
       }
 
       function load() {
         if (!hToken) {
-          setStatus('Waiting for session...');
+          if (inIframe) {
+            setStatus('Waiting for session...');
+          } else {
+            window.location.href = 'login.html';
+          }
           return;
         }
 

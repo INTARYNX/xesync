@@ -200,7 +200,7 @@
             .then(function(arr) {
                 var data = Array.isArray(arr) ? arr[0] : arr;
                 if (data && data.status === 'success' && data.token) {
-                    sessionStorage.setItem('xesync_token', data.token);
+                    localStorage.setItem('xesync_token', data.token);
                     window.location.href = 'home.html';
                 } else {
                     btn.disabled = false;
