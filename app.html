@@ -175,6 +175,13 @@
       if (e.data && e.data.type === 'shaderReady') {
         document.getElementById('loading-overlay').classList.remove('visible');
       }
+      if (e.data && e.data.type === 'tokenExpired') {
+        appToken = null;
+        appUsername = null;
+        document.getElementById('tbar-user').textContent = '';
+        setLoginStatus('Session expired. Please log in again.');
+        show('screen-login');
+      }
     });
 
     // ── LOGIN ─────────────────────────────────────────────
@@ -286,9 +293,11 @@
 
     // ── HOME ──────────────────────────────────────────────
     function showHome() {
-      var url = XESYNC_CONFIG.apexHomeUrl +
-                '?token=' + encodeURIComponent(appToken);
-      document.getElementById('home-frame').src = url;
+      var iframe = document.getElementById('home-frame');
+      iframe.onload = function() {
+        iframe.contentWindow.postMessage({ type: 'token', token: appToken }, '*');
+      };
+      iframe.src = XESYNC_CONFIG.apexHomeUrl;
       show('screen-home');
     }
 

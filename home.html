@@ -16,11 +16,15 @@
     (function () {
       var statusEl = document.getElementById('status');
       var dashEl   = document.getElementById('dashboard');
+      var hToken   = sessionStorage.getItem('xesync_token');
 
-      function getQueryParam(name) {
-        var m = window.location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
-        return m ? decodeURIComponent(m[1]) : null;
-      }
+      window.addEventListener('message', function (e) {
+        if (e.data && e.data.type === 'token' && e.data.token) {
+          hToken = e.data.token;
+          sessionStorage.setItem('xesync_token', hToken);
+          load();
+        }
+      });
 
       function setStatus(text) {
         statusEl.textContent = text;
@@ -79,17 +83,28 @@
           + escHtml(value) + '</span></div>';
       }
 
+      function notifyTokenExpired() {
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'tokenExpired' }, '*');
+          }
+        } catch (e) {}
+        sessionStorage.removeItem('xesync_token');
+        hToken = null;
+      }
+
       function load() {
-        var token = getQueryParam('token');
-        if (!token) {
-          setStatus('No token provided.');
+        if (!hToken) {
+          setStatus('Waiting for session...');
           return;
         }
+
+        setStatus('Loading…');
 
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: token })
+          body: JSON.stringify({ token: hToken })
         })
         .then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -104,7 +119,13 @@
           dashEl.innerHTML = rows.map(renderCard).join('');
         })
         .catch(function (err) {
-          setStatus('Failed to load workouts: ' + err.message);
+          var msg = err.message || '';
+          if (/401|403|invalid|expired/i.test(msg)) {
+            notifyTokenExpired();
+            setStatus('Session expired. Please log in again.');
+          } else {
+            setStatus('Failed to load workouts: ' + msg);
+          }
         });
       }
 
