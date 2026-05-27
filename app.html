@@ -294,10 +294,15 @@
     // ── HOME ──────────────────────────────────────────────
     function showHome() {
       var iframe = document.getElementById('home-frame');
-      iframe.onload = function() {
+      var sendToken = function() {
         iframe.contentWindow.postMessage({ type: 'token', token: appToken }, '*');
       };
-      iframe.src = XESYNC_CONFIG.apexHomeUrl;
+      if (iframe.src && iframe.src !== 'about:blank' && iframe.src.indexOf(XESYNC_CONFIG.apexHomeUrl) === 0) {
+        sendToken();
+      } else {
+        iframe.onload = sendToken;
+        iframe.src = XESYNC_CONFIG.apexHomeUrl;
+      }
       show('screen-home');
     }
 
