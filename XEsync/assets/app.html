@@ -1,0 +1,2762 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>XeSync</title>
+  <style>
+@font-face {
+  font-family: "DotGothic16";
+  src: url("DotGothic16-Regular.ttf") format("truetype");
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "DotGothic16", monospace;
+  background: #000;
+  color: #fff;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.screen {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  min-height: 0;
+}
+.screen.active { display: flex; }
+
+h1 {
+  font-size: 1.4em;
+  letter-spacing: 0.15em;
+  margin-bottom: 32px;
+}
+
+input {
+  background: #111;
+  border: 1px solid #333;
+  color: #fff;
+  font-family: inherit;
+  font-size: 1em;
+  padding: 12px 16px;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 10px;
+  border-radius: 2px;
+  outline: none;
+}
+input:focus { border-color: #555; }
+
+.btn {
+  background: #111;
+  color: #fff;
+  border: 1px solid #333;
+  font-family: inherit;
+  font-size: 1em;
+  padding: 12px 24px;
+  cursor: pointer;
+  border-radius: 2px;
+  width: 100%;
+  max-width: 320px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.btn + .btn { margin-top: 10px; }
+.btn:active { background: #1a1a1a; }
+.btn.primary { border-color: #4CAF50; color: #4CAF50; }
+.btn.danger  { border-color: #f44336; color: #f44336; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+.status-msg {
+  font-size: 0.85em;
+  color: #f44336;
+  margin-top: 14px;
+  min-height: 1.2em;
+  text-align: center;
+}
+
+/* Scan */
+#scan-idle, #scan-active { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; flex: 1; }
+#scan-active { display: none; }
+
+#pulse-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid #4a8;
+  position: relative;
+  margin: 30px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#pulse-ring::before, #pulse-ring::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid #4a8;
+  animation: pulse 2s ease-out infinite;
+}
+#pulse-ring::before { width: 150px; height: 150px; animation-delay: 0s; }
+#pulse-ring::after  { width: 190px; height: 190px; animation-delay: 0.6s; }
+@keyframes pulse {
+  0%   { opacity: 0.6; transform: scale(0.85); }
+  100% { opacity: 0;   transform: scale(1.1); }
+}
+#scan-label { font-size: 0.9em; color: #4a8; letter-spacing: 0.15em; margin-top: 50px; margin-bottom: 24px; }
+
+#device-list {
+  width: 100%;
+  flex: 1;
+  overflow-y: auto;
+}
+.device-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 8px;
+  border-bottom: 1px solid #1a1a1a;
+  cursor: pointer;
+  font-size: 1em;
+  -webkit-tap-highlight-color: transparent;
+}
+.device-item:active { background: #0d0d0d; }
+.device-rssi { font-size: 0.8em; color: #555; }
+.empty-msg { color: #444; padding: 24px 0; text-align: center; font-size: 0.9em; }
+
+/* Full-screen iframes */
+#screen-home, #screen-rowing { padding: 0; }
+#home-frame { width: 100%; height: 100%; border: none; display: block; }
+#screen-rowing { align-items: stretch; justify-content: flex-start; }
+#screen-rowing #main-container { height: 100%; }
+
+/* Overlays sur l'écran rowing */
+.rowing-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: #000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  z-index: 20;
+}
+.rowing-overlay.visible { display: flex; }
+
+/* Top bar */
+#topbar {
+  display: none;
+  background: #0a0a0a;
+  border-bottom: 1px solid #1a1a1a;
+  height: 56px;
+  flex-shrink: 0;
+  align-items: stretch;
+}
+#topbar.visible { display: flex; }
+.tbar-btn {
+  background: none;
+  color: #666;
+  border: none;
+  font-family: inherit;
+  font-size: 0.95em;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  padding: 0 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.tbar-btn:active { background: #111; color: #fff; }
+.tbar-btn.danger { color: #744; }
+.tbar-btn.danger:active { color: #f44; background: #110000; }
+.tbar-btn.accent { color: #4a8; }
+.tbar-btn.accent:active { color: #4CAF50; background: #001100; }
+#tbar-user { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8em; color: #333; }
+
+/* Status screens */
+.big-label {
+  font-size: 1.2em;
+  letter-spacing: 0.12em;
+  margin-bottom: 28px;
+}
+
+/* Status banner (FTMS state messages) */
+#ftmsBanner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "DotGothic16", monospace;
+  font-size: 1.6em;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  color: #fff;
+  text-align: center;
+  padding: 24px 36px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid #333;
+  border-radius: 4px;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#ftmsBanner.visible { opacity: 1; }
+
+/* Save dialog + offline choice — shared overlay style */
+.ftms-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 150;
+  font-family: "DotGothic16", monospace;
+  overflow-y: auto;
+  padding: 12px;
+}
+.ftms-overlay.visible { display: flex !important; }
+
+.ftms-overlay-title {
+  font-size: 1.4em;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  color: #fff;
+  margin-bottom: 24px;
+}
+.ftms-overlay-subtitle {
+  font-size: 0.9em;
+  color: #666;
+  letter-spacing: 0.1em;
+  margin-top: -16px;
+  margin-bottom: 24px;
+}
+
+/* Summary grid (save dialog) */
+.ftms-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #1a1a1a;
+  border: 1px solid #1a1a1a;
+  margin-bottom: 24px;
+  width: 90%;
+  max-width: 360px;
+}
+.ftms-summary-tile {
+  background: #000;
+  padding: 12px;
+  text-align: center;
+}
+.ftms-summary-label {
+  font-size: 0.75em;
+  color: #555;
+  letter-spacing: 0.1em;
+}
+.ftms-summary-value {
+  font-size: 1.4em;
+  color: #fff;
+  margin-top: 4px;
+}
+
+/* Buttons inside overlays */
+.ftms-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 90%;
+  max-width: 360px;
+}
+.ftms-btn {
+  background: #000;
+  color: #fff;
+  border: 1px solid #333;
+  padding: 14px;
+  font-size: 1em;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  font-family: "DotGothic16", monospace;
+  -webkit-tap-highlight-color: transparent;
+}
+.ftms-btn.primary  { color: #4CAF50; border-color: #4CAF50; }
+.ftms-btn.secondary { color: #555;   border-color: #222; }
+
+/* Landscape with short viewport — compact everything */
+@media (max-height: 500px) {
+  .ftms-overlay {
+    justify-content: flex-start;
+    padding: 8px;
+  }
+  .ftms-overlay-title {
+    font-size: 1em;
+    margin-bottom: 10px;
+  }
+  .ftms-overlay-subtitle {
+    font-size: 0.75em;
+    margin-top: -6px;
+    margin-bottom: 10px;
+  }
+  .ftms-summary-grid {
+    grid-template-columns: repeat(4, 1fr);
+    margin-bottom: 10px;
+    max-width: 600px;
+  }
+  .ftms-summary-tile {
+    padding: 6px 8px;
+  }
+  .ftms-summary-label {
+    font-size: 0.65em;
+  }
+  .ftms-summary-value {
+    font-size: 1em;
+    margin-top: 2px;
+  }
+  .ftms-actions {
+    flex-direction: row;
+    max-width: 600px;
+    gap: 8px;
+  }
+  .ftms-btn {
+    padding: 10px;
+    font-size: 0.85em;
+    flex: 1;
+  }
+}
+</style>
+  <script>
+// XeSync configuration
+var XESYNC_CONFIG = {
+  // Base URL for the PostgREST API.
+  // Nginx proxies /api/ → http://127.0.0.1:3000 (PostgREST).
+  // RPC endpoints under /api/rpc/{login,validate_token,save_workout,log_rawdata}.
+  apiBaseUrl: 'https://xesync.enlistia.com/api',
+
+  // Full URL of the home page (loaded in iframe after login).
+  // Replace with whatever you want to show after login, or set to '' to skip.
+  apexHomeUrl: 'https://xesync.enlistia.com/home.html',
+
+  // Send every FTMS packet to /rpc/log_rawdata for debugging.
+  // Leave false in prod — at ~2 req/sec per user it adds a lot of noise.
+  logRawData: false
+};
+</script>
+<style>
+@font-face {
+  font-family: "DotGothic16";
+  src: url("DotGothic16-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+* {
+  font-family: "DotGothic16", sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#main-container {
+  height: 100%;
+}
+
+.flex-container {
+  display: flex;
+  height: 100%;
+}
+
+.flex-item {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.red-column {
+  background-color: #000;
+}
+
+.black-column {
+  background-color: #000;
+}
+
+.auto-width {
+  flex: 0 0 15%;
+}
+
+.full-height {
+  height: 100%;
+}
+
+.zone {
+  flex: 1;
+}
+
+.zone:nth-child(1) { background-color: #222; }
+.zone:nth-child(2) { background-color: #333; }
+.zone:nth-child(3) { background-color: #444; }
+.zone:nth-child(4) { background-color: #555; }
+
+#wrapper {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  overflow: hidden;
+}
+
+#glCanvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#gl-loading {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: opacity 0.4s ease;
+}
+
+#gl-loading.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Console */
+table.console {
+  width: 100%;
+  background-color: transparent;
+  border-collapse: collapse;
+  border-width: 2px;
+  border-color: #eee;
+  border-style: solid;
+  height: 100%;
+}
+
+table.console th {
+  border-width: 2px;
+  border-color: black;
+  border-style: solid;
+  padding: 3px;
+  color: #fff;
+  font-weight: bold;
+}
+
+table.console td {
+  border-width: 2px;
+  border-color: black;
+  color: white;
+  border-style: solid;
+  text-align: center;
+  font-size: 30px;
+  line-height: 50px;
+  box-shadow: inset 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+table.console thead {
+  background-color: black;
+}
+
+</style>
+<style>
+
+/* Save Dialog Styles */
+#saveDialog {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10000;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  font-family: "Press Start 2P", monospace; /* pixel font */
+  color: #0ff; /* neon cyan text */
+}
+
+.dialog-container {
+  background: #111; /* dark gray background */
+  padding: 20px;
+  border-radius: 0; /* sharp corners */
+  width: 100%;
+  max-width: 600px;
+  text-align: center;
+  border: 3px solid #0ff; /* neon border */
+}
+
+.dialog-title {
+  font-size: 24px;
+  margin: 0 0 10px;
+  color: #0ff;
+  font-weight: bold;
+}
+
+.dialog-subtitle {
+  font-size: 14px;
+  color: #0ff;
+  margin-bottom: 15px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2,1fr);
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.metric-box {
+  background: #222;
+  padding: 10px;
+  border-radius: 0; /* sharp corners */
+  border: 2px solid #0ff;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: #0ff;
+  margin-bottom: 5px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff0; /* yellow numbers for contrast */
+}
+
+.save-button {
+  background: #000;
+  color: #0ff;
+  border: 3px solid #0ff;
+  padding: 10px 30px;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.save-button:hover {
+  background: #0ff;
+  color: #000;
+}
+
+.save-button:active {
+  background: #00f;
+  color: #fff;
+}
+
+</style>
+</head>
+<body>
+
+  <!-- ── TOP BAR ──────────────────────────────────────── -->
+  <div id="topbar" class="visible">
+    <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
+    <span id="tbar-user"></span>
+    <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
+    <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
+    <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
+    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
+  </div>
+
+  <!-- ── LOGIN ─────────────────────────────────────────── -->
+  <div id="screen-login" class="screen active">
+    <h1>XESYNC</h1>
+    <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="password" placeholder="password">
+    <button class="btn primary" onclick="doLogin()">LOGIN</button>
+    <div class="status-msg" id="login-status"></div>
+  </div>
+
+  <!-- ── HOME ─────────────────────────────────────────── -->
+  <div id="screen-home" class="screen">
+    <iframe id="home-frame" src="about:blank"></iframe>
+  </div>
+
+  <!-- ── SCAN ──────────────────────────────────────────── -->
+  <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
+
+    <div id="scan-idle">
+      <button class="btn primary" onclick="doScan()" style="font-size:1.6em;padding:20px 40px;letter-spacing:0.2em;max-width:none;">SCAN</button>
+    </div>
+
+    <div id="scan-active">
+      <div id="pulse-ring"></div>
+      <div id="scan-label">SCANNING...</div>
+      <div id="device-list"></div>
+    </div>
+
+  </div>
+
+  <!-- ── CONNECTING ────────────────────────────────────── -->
+  <div id="screen-connecting" class="screen">
+    <div class="big-label" id="connecting-label">CONNECTING...</div>
+  </div>
+
+  <!-- ── ROWING ─────────────────────────────────────────── -->
+  <div id="screen-rowing" class="screen" style="position:relative;">
+    <div id="main-container">
+    <div class="flex-container">
+      <div class="flex-item red-column auto-width">
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Pulse</th></tr></thead>
+            <tbody><tr><td><span id="heartrate">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Meters</th></tr></thead>
+            <tbody><tr><td><span id="distance">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Watts</th></tr></thead>
+            <tbody><tr><td><span id="watts">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Time/500m</th></tr></thead>
+            <tbody><tr><td><span id="pace">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex-item black-column full-height">
+        <div id="wrapper">
+          <canvas id="glCanvas"></canvas>
+          <div id="gl-loading"></div>
+        </div>
+      </div>
+
+      <div class="flex-item red-column auto-width">
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>SPM</th></tr></thead>
+            <tbody><tr><td><span id="spm">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Cals</th></tr></thead>
+            <tbody><tr><td><span id="cals">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Strokes</th></tr></thead>
+            <tbody><tr><td><span id="strokes">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="zone">
+          <table class="console">
+            <thead><tr><th>Time</th></tr></thead>
+            <tbody><tr><td><span id="elapsedtime">&nbsp;</span></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script id="vs" type="x-shader/x-vertex">
+    attribute vec2 a_pos;
+    varying vec2 v_uv;
+    void main() {
+      v_uv = a_pos * 0.5 + 0.5;
+      gl_Position = vec4(a_pos, 0.0, 1.0);
+    }
+  </script>
+
+  <script id="fs" type="x-shader/x-fragment">
+    precision highp float;
+    varying vec2 v_uv;
+    uniform float u_time;
+    uniform float u_speed;
+    uniform float u_flow;
+    uniform float u_phase;
+    uniform float u_spm;
+    uniform float u_scale;
+    uniform float u_aspect;
+
+    float hash(vec2 p){
+      p = fract(p * vec2(123.34, 456.21));
+      p += dot(p, p + 45.32);
+      return fract(p.x * p.y);
+    }
+    float noise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      vec2 u = f*f*f*(f*(f*6.0-15.0)+10.0);
+      return mix(mix(hash(i),           hash(i+vec2(1,0)), u.x),
+                 mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
+    }
+    float fbm(vec2 p){
+      float v = 0.0, a = 0.5;
+      for(int i=0;i<6;i++){ v += a*noise(p); p = p*2.03 + 17.0; a *= 0.5; }
+      return v;
+    }
+    float sdEllipse(vec2 p, vec2 r){
+      float k = length(p / r);
+      return (k - 1.0) * min(r.x, r.y);
+    }
+    float sdSegment(vec2 p, vec2 a, vec2 b){
+      vec2 pa = p - a, ba = b - a;
+      float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+      return length(pa - ba * h);
+    }
+
+    void main(){
+      float u = v_uv.x;
+      float y = v_uv.y;
+      float horizon = 0.5;
+      float flow = u_flow;
+      vec2 P = vec2(u, y);
+      float aspect = u_aspect;
+      P = vec2((P.x - 0.5) * aspect + 0.5, P.y);
+
+      vec3 col;
+
+      // ============ BACKGROUND ============
+      if (y > horizon) {
+        float sy = (y - horizon) / (1.0 - horizon);
+
+        float dayCycle = fract(u_time / 120.0);
+
+        vec3 skyTopDawn = vec3(0.62, 0.40, 0.62);
+        vec3 skyMidDawn = vec3(1.00, 0.60, 0.45);
+        vec3 skyBotDawn = vec3(1.00, 0.78, 0.50);
+
+        vec3 skyTopDay = vec3(0.38, 0.58, 0.88);
+        vec3 skyMidDay = vec3(0.78, 0.85, 0.92);
+        vec3 skyBotDay = vec3(0.98, 0.88, 0.75);
+
+        vec3 skyTopDusk = vec3(0.50, 0.22, 0.50);
+        vec3 skyMidDusk = vec3(1.00, 0.38, 0.28);
+        vec3 skyBotDusk = vec3(1.00, 0.65, 0.32);
+
+        vec3 skyTopNight = vec3(0.08, 0.06, 0.22);
+        vec3 skyMidNight = vec3(0.18, 0.10, 0.30);
+        vec3 skyBotNight = vec3(0.30, 0.18, 0.38);
+
+        vec3 skyTop, skyMid, skyBottom;
+        if (dayCycle < 0.25) {
+          float t = dayCycle / 0.25;
+          skyTop    = mix(skyTopDawn, skyTopDay, t);
+          skyMid    = mix(skyMidDawn, skyMidDay, t);
+          skyBottom = mix(skyBotDawn, skyBotDay, t);
+        } else if (dayCycle < 0.5) {
+          float t = (dayCycle - 0.25) / 0.25;
+          skyTop    = mix(skyTopDay, skyTopDusk, t);
+          skyMid    = mix(skyMidDay, skyMidDusk, t);
+          skyBottom = mix(skyBotDay, skyBotDusk, t);
+        } else if (dayCycle < 0.75) {
+          float t = (dayCycle - 0.5) / 0.25;
+          skyTop    = mix(skyTopDusk, skyTopNight, t);
+          skyMid    = mix(skyMidDusk, skyMidNight, t);
+          skyBottom = mix(skyBotDusk, skyBotNight, t);
+        } else {
+          float t = (dayCycle - 0.75) / 0.25;
+          skyTop    = mix(skyTopNight, skyTopDawn, t);
+          skyMid    = mix(skyMidNight, skyMidDawn, t);
+          skyBottom = mix(skyBotNight, skyBotDawn, t);
+        }
+
+        vec3 sky = mix(skyBottom, skyMid, smoothstep(0.0, 0.45, sy));
+        sky = mix(sky, skyTop, smoothstep(0.45, 1.0, sy));
+        col = sky;
+
+        float sunHeight = sin(dayCycle * 6.2831853 - 1.57);
+        bool isDay = sunHeight > -0.3;
+        float sunY = horizon + 0.05 + max(sunHeight, -0.3) * 0.40;
+        float sunX = 0.30 + dayCycle * 0.6;
+        sunX = mod(sunX, 1.0);
+        vec2 sunPos = vec2(sunX, sunY);
+        float sunD = distance(P, sunPos);
+        vec3 sunCol;
+        float sunIntensity;
+        if (isDay) {
+          float warmth = 1.0 - abs(sunHeight - 0.5) * 0.8;
+          sunCol = mix(vec3(1.0, 0.65, 0.40), vec3(1.0, 0.95, 0.82), 1.0 - warmth);
+          sunIntensity = 1.0;
+        } else {
+          sunCol = vec3(0.85, 0.88, 0.95);
+          sunIntensity = 0.7;
+        }
+        float sunDisk = smoothstep(0.075, 0.060, sunD);
+        float sunGlow = smoothstep(0.40, 0.0, sunD) * 0.40 * sunIntensity;
+        col += sunCol * sunGlow * 0.8;
+        col = mix(col, sunCol, sunDisk * sunIntensity);
+
+        float nightFactor = smoothstep(0.55, 0.75, dayCycle) *
+                           (1.0 - smoothstep(0.95, 1.0, dayCycle));
+        if (nightFactor > 0.0) {
+          float starN = noise(vec2(u * 200.0, sy * 200.0));
+          float stars = smoothstep(0.93, 0.99, starN) * smoothstep(0.0, 0.6, sy);
+          col += vec3(1.0, 1.0, 0.95) * stars * nightFactor * 0.8;
+        }
+
+        float cloudScroll = flow * 0.25;
+        float cloudN = fbm(vec2((u - cloudScroll) * 2.5, sy * 3.0 + 5.0));
+        float cloudMask = smoothstep(0.50, 0.78, cloudN) * smoothstep(0.0, 0.5, sy);
+        vec3 cloudColor = mix(vec3(1.0, 0.88, 0.78), vec3(0.30, 0.32, 0.45),
+                             smoothstep(0.55, 0.75, dayCycle) * (1.0 - smoothstep(0.95, 1.0, dayCycle)));
+        col = mix(col, cloudColor, cloudMask * 0.55);
+
+        float darknessFactor = smoothstep(0.55, 0.75, dayCycle) *
+                              (1.0 - smoothstep(0.95, 1.0, dayCycle));
+        #define LAYER(BASE, AMP, FREQ, PHASE, TOPR, TOPG, TOPB, BOTR, BOTG, BOTB, SPD) \
+        { \
+          float baseY = horizon + BASE; \
+          float scrolled = u - flow * SPD; \
+          float n = noise(vec2(scrolled * 8.0, baseY * 5.0)) * 0.5 - 0.25; \
+          float wave = sin(scrolled * FREQ + PHASE) * AMP + n * AMP; \
+          float lineY = baseY + wave; \
+          if (y < lineY) { \
+            float t = clamp((lineY - y) / (lineY - horizon + 0.001), 0.0, 1.0); \
+            vec3 topC = vec3(TOPR, TOPG, TOPB); \
+            vec3 botC = vec3(BOTR, BOTG, BOTB); \
+            vec3 layerCol = mix(topC, botC, t); \
+            layerCol = mix(layerCol, layerCol * vec3(0.25, 0.25, 0.40), darknessFactor); \
+            col = mix(col, layerCol, 1.0); \
+          } \
+        }
+        LAYER(0.18, 0.020, 18.0, 0.0,  0.78, 0.55, 0.65,  0.62, 0.42, 0.55,  0.10)
+        LAYER(0.15, 0.018, 22.0, 1.5,  0.70, 0.46, 0.58,  0.55, 0.36, 0.50,  0.14)
+        LAYER(0.12, 0.016, 26.0, 3.0,  0.62, 0.38, 0.52,  0.48, 0.30, 0.46,  0.18)
+        LAYER(0.09, 0.014, 28.0, 0.5,  0.54, 0.32, 0.48,  0.42, 0.26, 0.42,  0.22)
+        LAYER(0.07, 0.012, 32.0, 2.5,  0.46, 0.28, 0.44,  0.36, 0.22, 0.38,  0.26)
+        LAYER(0.05, 0.010, 36.0, 1.0,  0.38, 0.24, 0.40,  0.30, 0.20, 0.34,  0.30)
+        LAYER(0.03, 0.008, 40.0, 4.0,  0.30, 0.20, 0.34,  0.24, 0.18, 0.30,  0.34)
+        LAYER(0.01, 0.007, 44.0, 2.0,  0.22, 0.18, 0.30,  0.18, 0.16, 0.26,  0.40)
+      } else {
+        float yw = y / horizon;
+        float depth = 1.0 - yw;
+        float yScale = mix(2.5, 12.0, smoothstep(0.0, 1.0, yw));
+        vec2 q = vec2((u - flow) * 4.0, yw * yScale);
+        float n1 = fbm(q);
+        float n2 = fbm(q * 2.1 + vec2(flow * 1.3, 0.0));
+        float waves = n1 * 0.6 + n2 * 0.4;
+        float dayCycleW = fract(u_time / 120.0);
+        float darknessW = smoothstep(0.55, 0.75, dayCycleW) *
+                         (1.0 - smoothstep(0.95, 1.0, dayCycleW));
+        vec3 farColDay = vec3(0.92, 0.65, 0.58);
+        vec3 midColDay = vec3(0.55, 0.40, 0.55);
+        vec3 nearColDay = vec3(0.22, 0.18, 0.36);
+        vec3 farColNight = vec3(0.18, 0.20, 0.38);
+        vec3 midColNight = vec3(0.10, 0.12, 0.25);
+        vec3 nearColNight = vec3(0.04, 0.05, 0.14);
+        vec3 farCol  = mix(farColDay,  farColNight, darknessW);
+        vec3 midCol  = mix(midColDay,  midColNight, darknessW);
+        vec3 nearCol = mix(nearColDay, nearColNight, darknessW);
+        vec3 base = mix(nearCol, midCol, smoothstep(0.0, 0.6, yw));
+        base = mix(base, farCol, smoothstep(0.7, 1.0, yw));
+        float crest = pow(waves, mix(1.5, 3.5, depth));
+        col = base + vec3(0.30, 0.22, 0.18) * crest * mix(0.3, 1.0, depth) * (1.0 - darknessW * 0.6);
+        float sparkleN = noise(vec2((u - flow * 4.0) * 140.0, yw * 110.0 + u_time * 2.0));
+        float sparkle = smoothstep(0.92, 0.99, sparkleN) * mix(0.0, 1.0, depth);
+        vec3 sparkleCol = mix(vec3(1.0, 0.85, 0.65), vec3(0.85, 0.90, 1.0), darknessW);
+        col += sparkleCol * sparkle * 0.7;
+        float band = exp(-pow((yw - 0.50) * 4.0, 2.0));
+        vec3 reflectCol = mix(vec3(1.0, 0.75, 0.55), vec3(0.6, 0.65, 0.85), darknessW);
+        col += reflectCol * band * crest * 0.50;
+        float haze = smoothstep(0.75, 1.0, yw);
+        vec3 hazeCol = mix(vec3(0.95, 0.78, 0.70), vec3(0.20, 0.22, 0.36), darknessW);
+        col = mix(col, hazeCol, haze * 0.6);
+
+        // ===== Reflet du soleil/lune dans l'eau =====
+        float dayCycleS = fract(u_time / 120.0);
+        float sunHeightS = sin(dayCycleS * 6.2831853 - 1.57);
+        bool isDayS = sunHeightS > -0.3;
+        float sunYS = horizon + 0.05 + max(sunHeightS, -0.3) * 0.40;
+        float sunXS = mod(0.30 + dayCycleS * 0.6, 1.0);
+        float visibilityFactor = smoothstep(horizon + 0.12, horizon + 0.22, sunYS);
+        if (visibilityFactor > 0.01) {
+          float distFromSunX = abs(P.x - sunXS);
+          float reflectWidth = mix(0.015, 0.12, 1.0 - yw);
+          float reflectShape = smoothstep(reflectWidth, reflectWidth * 0.2, distFromSunX);
+          float reflectFade = smoothstep(0.0, 0.8, yw);
+          float reflectRipple = smoothstep(0.3, 0.7, waves);
+          vec3 reflectSunCol;
+          float reflectIntensity;
+          if (isDayS) {
+            float warmth = 1.0 - abs(sunHeightS - 0.5) * 0.8;
+            reflectSunCol = mix(vec3(1.0, 0.55, 0.30), vec3(1.0, 0.92, 0.78), 1.0 - warmth);
+            reflectIntensity = 0.7;
+          } else {
+            reflectSunCol = vec3(0.85, 0.88, 0.95);
+            reflectIntensity = 0.4;
+          }
+          float sunReflect = reflectShape * reflectFade * reflectRipple * reflectIntensity * visibilityFactor;
+          col = mix(col, reflectSunCol, sunReflect);
+        }
+      }
+
+      // ============ ROWER ANIMATION ============
+      float strokesPerSec = u_spm / 60.0;
+      float phase = u_phase;
+      float fIdx = phase * 8.0;
+      int i0 = int(floor(fIdx));
+      int i1 = int(mod(float(i0 + 1), 8.0));
+      float t = fract(fIdx);
+
+      vec2 KF[56];
+      KF[0]  = vec2(0.00, 0.00); KF[1]  = vec2(0.10, 0.55); KF[2]  = vec2(0.55, 0.45);
+      KF[3]  = vec2(0.40, 1.30); KF[4]  = vec2(-0.30, 1.10); KF[5] = vec2(-0.95, 0.95);
+      KF[6]  = vec2(0.45, 1.55);
+      KF[7]  = vec2(0.00, 0.00); KF[8]  = vec2(0.30, 0.50); KF[9]  = vec2(0.75, 0.40);
+      KF[10] = vec2(0.60, 1.25); KF[11] = vec2(-0.10, 1.05); KF[12]= vec2(-0.85, 0.90);
+      KF[13] = vec2(0.65, 1.50);
+      KF[14] = vec2(0.00, 0.00); KF[15] = vec2(0.55, 0.30); KF[16] = vec2(1.10, 0.35);
+      KF[17] = vec2(1.05, 1.20); KF[18] = vec2(0.40, 1.05); KF[19] = vec2(-0.30, 0.95);
+      KF[20] = vec2(1.10, 1.50);
+      KF[21] = vec2(0.00, 0.00); KF[22] = vec2(0.65, 0.15); KF[23] = vec2(1.30, 0.30);
+      KF[24] = vec2(1.55, 1.10); KF[25] = vec2(1.55, 0.80); KF[26] = vec2(1.20, 0.85);
+      KF[27] = vec2(1.65, 1.40);
+      KF[28] = vec2(0.00, 0.00); KF[29] = vec2(0.65, 0.15); KF[30] = vec2(1.30, 0.30);
+      KF[31] = vec2(1.45, 1.15); KF[32] = vec2(1.20, 0.85); KF[33] = vec2(0.50, 1.10);
+      KF[34] = vec2(1.55, 1.45);
+      KF[35] = vec2(0.00, 0.00); KF[36] = vec2(0.55, 0.20); KF[37] = vec2(1.20, 0.30);
+      KF[38] = vec2(1.05, 1.20); KF[39] = vec2(0.55, 1.15); KF[40] = vec2(-0.10, 1.20);
+      KF[41] = vec2(1.10, 1.50);
+      KF[42] = vec2(0.00, 0.00); KF[43] = vec2(0.30, 0.40); KF[44] = vec2(0.90, 0.35);
+      KF[45] = vec2(0.70, 1.25); KF[46] = vec2(0.10, 1.15); KF[47] = vec2(-0.55, 1.10);
+      KF[48] = vec2(0.75, 1.50);
+      KF[49] = vec2(0.00, 0.00); KF[50] = vec2(0.10, 0.55); KF[51] = vec2(0.55, 0.45);
+      KF[52] = vec2(0.40, 1.30); KF[53] = vec2(-0.30, 1.10); KF[54]= vec2(-0.95, 0.95);
+      KF[55] = vec2(0.45, 1.55);
+
+      vec2 pts[7];
+      for (int p = 0; p < 7; p++) {
+        vec2 a = vec2(0.0);
+        vec2 b = vec2(0.0);
+        for (int k = 0; k < 8; k++) {
+          for (int q = 0; q < 7; q++) {
+            if (q == p) {
+              if (k == i0) a = KF[k * 7 + q];
+              if (k == i1) b = KF[k * 7 + q];
+            }
+          }
+        }
+        pts[p] = mix(a, b, t);
+      }
+
+      float scale = 0.075 * u_scale;
+      vec2 origin   = vec2(0.5 - 0.02 * u_scale, horizon * 0.5);
+      vec2 foot     = origin + vec2(pts[0].x, pts[0].y) * scale;
+      vec2 knee     = origin + vec2(pts[1].x, pts[1].y) * scale;
+      vec2 hip      = origin + vec2(pts[2].x, pts[2].y) * scale;
+      vec2 shoulder = origin + vec2(pts[3].x, pts[3].y) * scale;
+      vec2 elbow    = origin + vec2(pts[4].x, pts[4].y) * scale;
+      vec2 hand     = origin + vec2(pts[5].x, pts[5].y) * scale;
+      vec2 head     = origin + vec2(pts[6].x, pts[6].y) * scale + vec2(0.0, 0.018 * u_scale);
+      vec2 oarlock  = origin + vec2(-0.4, 0.7) * scale;
+
+      vec2 oarDir = normalize(oarlock - hand);
+      float handToLock = length(oarlock - hand);
+      float pCycle = pow(phase, 0.7);
+      float bladeCycle = 0.5 + 0.5 * cos(pCycle * 2.0 * 3.14159265);
+      float bladeArm = mix(0.24, 0.32, bladeCycle) * u_scale;
+      vec2 bladeTip = hand + oarDir * (handToLock + bladeArm);
+
+      float oarWL = (origin.y + 0.025 * u_scale) - 0.085 * u_scale;
+      float clampStrength = 1.0;
+      if (phase < 0.5) clampStrength = 0.0;
+      else if (phase >= 0.875) clampStrength = 1.0 - (phase - 0.875) / 0.125;
+      if (clampStrength > 0.0 && bladeTip.y < oarWL + 0.005) {
+        float targetY = oarWL + 0.005;
+        if (abs(oarDir.y) > 0.0001) {
+          float tLine = (targetY - hand.y) / oarDir.y;
+          vec2 clampedTip = hand + oarDir * tLine;
+          bladeTip = mix(bladeTip, clampedTip, clampStrength);
+        }
+      }
+
+      vec2 boatCenter = vec2(0.5, origin.y + 0.012 * u_scale);
+
+      // ============ REFLET DU RAMEUR ============
+      if (y < boatCenter.y) {
+        float reflectCompress = 0.75;
+        float reflectY = boatCenter.y + (boatCenter.y - y) / reflectCompress;
+        vec2 reflectP = vec2(P.x, reflectY);
+        float reflectDist = boatCenter.y - y;
+        float reflectAtten = smoothstep(0.18 * u_scale, 0.0, reflectDist);
+        if (reflectAtten > 0.0) {
+          float ripple = sin(reflectDist * 80.0 + u_time * 1.5) * 0.003 * u_scale;
+          reflectP.x += ripple;
+          float refMask = 0.0;
+          float refS;
+          refS = sdSegment(reflectP, hip, knee);
+          refMask = max(refMask, smoothstep(0.012 * u_scale, 0.010 * u_scale, refS));
+          refS = sdSegment(reflectP, knee, foot);
+          refMask = max(refMask, smoothstep(0.010 * u_scale, 0.008 * u_scale, refS));
+          refS = sdSegment(reflectP, hip, shoulder);
+          refMask = max(refMask, smoothstep(0.017 * u_scale, 0.015 * u_scale, refS));
+          refS = sdSegment(reflectP, shoulder, elbow);
+          refMask = max(refMask, smoothstep(0.011 * u_scale, 0.009 * u_scale, refS));
+          refS = sdSegment(reflectP, elbow, hand);
+          refMask = max(refMask, smoothstep(0.010 * u_scale, 0.008 * u_scale, refS));
+          refS = distance(reflectP, head);
+          refMask = max(refMask, smoothstep(0.020 * u_scale, 0.017 * u_scale, refS));
+          vec2 neckTopR = head + vec2(0.0, -0.018 * u_scale);
+          refS = sdSegment(reflectP, shoulder, neckTopR);
+          refMask = max(refMask, smoothstep(0.008 * u_scale, 0.006 * u_scale, refS));
+          float capRadius = 0.020 * u_scale;
+          float capRefDist = distance(reflectP, head);
+          float capRefMask = smoothstep(capRadius, capRadius - 0.001, capRefDist) *
+                            step(head.y, reflectP.y);
+          refMask = max(refMask, capRefMask);
+          vec2 capFaceDirR = vec2(sign(hand.x - shoulder.x), 0.0);
+          vec2 visorCenterR = head + capFaceDirR * 0.014 * u_scale + vec2(0.0, 0.002 * u_scale);
+          float visorR = sdEllipse(reflectP - visorCenterR, vec2(0.012, 0.003) * u_scale);
+          float visorRefMask = smoothstep(0.001, -0.001, visorR);
+          refMask = max(refMask, visorRefMask);
+          vec2 oarVecR = bladeTip - hand;
+          float oarLenR = length(oarVecR);
+          vec2 oarTR = oarVecR / oarLenR;
+          vec2 oarNR = vec2(-oarTR.y, oarTR.x);
+          float bladeStartR = oarLenR * 0.85;
+          float shaftHalfR = 0.003 * u_scale;
+          float oarWaterlineR = boatCenter.y - 0.085 * u_scale;
+          vec2 dPR2 = reflectP - hand;
+          float sAlongR = dot(dPR2, oarTR);
+          float sPerpR  = dot(dPR2, oarNR);
+          if (sAlongR > 0.0 && sAlongR < bladeStartR) {
+            vec2 oarPtWorld = hand + oarTR * sAlongR;
+            if (oarPtWorld.y > oarWaterlineR) {
+              float dR = abs(sPerpR) - shaftHalfR;
+              float shaftRefMask = smoothstep(0.001, -0.001, dR);
+              refMask = max(refMask, shaftRefMask);
+            }
+          }
+          vec2 oarlockBR = boatCenter + vec2(-0.040, 0.005) * u_scale;
+          vec2 handBR = hand + vec2(0.0, 0.005 * u_scale);
+          vec2 oarBVecR = oarlockBR - handBR;
+          float oarBLenR = length(oarBVecR);
+          vec2 oarBTR = oarBVecR / oarBLenR;
+          vec2 oarBNR = vec2(-oarBTR.y, oarBTR.x);
+          float oarBHalfR = 0.003 * u_scale;
+          vec2 dPRB = reflectP - handBR;
+          float oarBAlongR = dot(dPRB, oarBTR);
+          float oarBPerpR  = dot(dPRB, oarBNR);
+          if (oarBAlongR > 0.0 && oarBAlongR < oarBLenR) {
+            float dRB = abs(oarBPerpR) - oarBHalfR;
+            float oarBRefMask = smoothstep(0.001, -0.001, dRB);
+            refMask = max(refMask, oarBRefMask);
+          }
+          vec2 hpR = reflectP - boatCenter;
+          float hullR = sdEllipse(hpR, vec2(0.55, 0.012) * u_scale);
+          float hullRefMask = smoothstep(0.002, -0.002, hullR);
+          vec3 reflectCol = vec3(0.20, 0.18, 0.25);
+          col = mix(col, reflectCol, refMask * reflectAtten * 0.35);
+          col = mix(col, vec3(0.18, 0.30, 0.20), hullRefMask * reflectAtten * 0.40);
+        }
+      }
+
+      float speedFactor = clamp(u_speed, 0.0, 1.0);
+      vec2 stern = boatCenter + vec2(-0.55 * u_scale, 0.0);
+      float wakeLength = mix(0.20, 0.80, speedFactor) * u_scale;
+      float wakeT = clamp((stern.x - P.x) / wakeLength, 0.0, 1.0);
+      float wakeMaxW = mix(0.015, 0.060, speedFactor);
+      float wakeHalfW = mix(0.006, wakeMaxW, wakeT) * u_scale;
+      float wakeDist = abs(y - stern.y);
+      float wakeShape = smoothstep(wakeHalfW, wakeHalfW * 0.3, wakeDist);
+      float wakeLong = step(P.x, stern.x) * (1.0 - wakeT * 0.5);
+      float bandPos = wakeDist / max(wakeHalfW, 0.0001);
+      float wakeBand = exp(-pow((bandPos - 0.85) * 8.0, 2.0));
+      float wakeNoise = fbm(vec2((u - flow * 0.3) * 30.0, y * 80.0 + u_time * 0.5));
+      float wakeFoam = wakeShape * wakeLong * (0.4 + 0.6 * wakeNoise);
+      float wakeEdges = wakeBand * wakeShape * wakeLong * 0.6;
+      float wakeIntensity = mix(0.6, 1.0, speedFactor);
+      col = mix(col, vec3(0.95, 0.97, 1.0), wakeFoam * 0.7 * wakeIntensity);
+      col = mix(col, vec3(1.0, 1.0, 1.0), wakeEdges * 0.9 * wakeIntensity);
+
+      for (int fi = 0; fi < 3; fi++) {
+        float ffi = float(fi);
+        float period = 6.0 + ffi * 1.3;
+        float jumpT = mod(u_time + ffi * 2.7, period);
+        float jumpDur = 0.8;
+        if (jumpT < jumpDur) {
+          float t = jumpT / jumpDur;
+          float cycleId = floor((u_time + ffi * 2.7) / period);
+          float fx = hash(vec2(cycleId, ffi * 11.0));
+          float fyOff = hash(vec2(cycleId * 1.7, ffi * 13.0));
+          float fishX = 0.05 + fx * 0.9;
+          float fishBaseY = 0.10 + fyOff * 0.30;
+          float arc = 4.0 * t * (1.0 - t);
+          float fishY = fishBaseY + arc * 0.06;
+          float bodyRot = mix(-0.6, 0.6, t);
+          vec2 fishPos = vec2(fishX, fishY);
+          vec2 dF = P - fishPos;
+          float cF = cos(bodyRot), sF = sin(bodyRot);
+          vec2 dFLocal = vec2(cF * dF.x + sF * dF.y, -sF * dF.x + cF * dF.y);
+          float bodyD = sdEllipse(dFLocal, vec2(0.012, 0.004));
+          float bodyMask = smoothstep(0.001, -0.001, bodyD);
+          vec3 fishCol = vec3(0.55, 0.62, 0.70);
+          col = mix(col, fishCol, bodyMask);
+          float bellyMask = bodyMask * smoothstep(0.0, -0.003, dFLocal.y);
+          col = mix(col, vec3(0.85, 0.88, 0.90), bellyMask * 0.6);
+          vec2 tailPos = vec2(-0.012, 0.0);
+          float tailD = max(abs(dFLocal.x - tailPos.x) - 0.005,
+                           abs(dFLocal.y) - 0.004 * (1.0 - clamp((tailPos.x - dFLocal.x) / 0.005, 0.0, 1.0)));
+          float tailMask = smoothstep(0.001, -0.001, tailD);
+          col = mix(col, fishCol * 0.85, tailMask);
+          vec2 eyePos = vec2(0.008, -0.001);
+          float eyeMask = smoothstep(0.0015, 0.0005, distance(dFLocal, eyePos));
+          col = mix(col, vec3(0.05, 0.05, 0.05), eyeMask);
+          if (t < 0.15 || t > 0.85) {
+            float splashT = t < 0.15 ? t / 0.15 : (1.0 - t) / 0.15;
+            float splashY = fishBaseY;
+            float dSplash = distance(P, vec2(fishX, splashY));
+            float splashFade = smoothstep(0.025, 0.0, dSplash) *
+                              step(splashY - 0.01, y) *
+                              splashT;
+            col = mix(col, vec3(1.0, 1.0, 1.0), splashFade * 0.5);
+          }
+        }
+      }
+
+      vec2 oarlockB = boatCenter + vec2(-0.040, 0.005) * u_scale;
+      vec2 handB = hand + vec2(0.0, 0.005 * u_scale);
+      vec2 oarBVec = oarlockB - handB;
+      float oarBLen = length(oarBVec);
+      vec2 oarBT = oarBVec / oarBLen;
+      vec2 oarBN = vec2(-oarBT.y, oarBT.x);
+      float oarBAlong = dot(P - handB, oarBT);
+      float oarBPerp  = dot(P - handB, oarBN);
+      float oarBHalfW = 0.003 * u_scale;
+      if (oarBAlong > 0.0 && oarBAlong < oarBLen) {
+        float dB = abs(oarBPerp) - oarBHalfW;
+        float oarBMask = smoothstep(0.001, -0.001, dB);
+        col = mix(col, vec3(0.55, 0.55, 0.55), oarBMask);
+        col = mix(col, vec3(0.55, 0.55, 0.55) * 0.75,
+                  oarBMask * smoothstep(0.0, oarBHalfW, oarBPerp));
+      }
+
+      vec2 hp = P - boatCenter;
+      float hullShape = sdEllipse(hp, vec2(0.55, 0.012) * u_scale);
+      float hullMask = smoothstep(0.002, -0.002, hullShape);
+      float hullShade = smoothstep(-0.012 * u_scale, 0.012 * u_scale, hp.y);
+      vec3 hullCol = mix(vec3(0.75, 0.92, 0.70),
+                         vec3(0.30, 0.50, 0.30), hullShade);
+      float waterline = smoothstep(0.003, 0.0, abs(hp.y - 0.004 * u_scale));
+      hullCol = mix(hullCol, vec3(0.15, 0.10, 0.08), waterline * 0.5);
+      col = mix(col, hullCol, hullMask);
+      float deckRim = smoothstep(0.0015, 0.0, abs(hullShape + 0.002)) *
+                      smoothstep(0.002, -0.008 * u_scale, hp.y);
+      col = mix(col, vec3(1.0, 0.97, 0.88), deckRim * 0.7);
+
+      float refl = smoothstep(0.020 * u_scale, 0.0, boatCenter.y - y) *
+                   step(y, boatCenter.y) * step(y, horizon) *
+                   smoothstep(0.55 * u_scale, 0.15 * u_scale, abs(P.x - boatCenter.x));
+      col *= 1.0 - refl * 0.15;
+
+      vec2 riggerBase = boatCenter + vec2(-0.025, 0.012) * u_scale;
+      float riggerSeg = sdSegment(P, riggerBase, oarlock);
+      float riggerMask = smoothstep(0.002, 0.001, riggerSeg);
+      col = mix(col, vec3(0.4, 0.4, 0.45), riggerMask);
+
+      float lockMask = smoothstep(0.005, 0.003, distance(P, oarlock));
+      col = mix(col, vec3(0.2, 0.2, 0.25), lockMask);
+
+      float deckLine = boatCenter.y + 0.002;
+      vec3 skinCol = vec3(0.92, 0.75, 0.62);
+      vec3 shortsCol = vec3(0.15, 0.15, 0.18);
+      vec3 shirtCol = vec3(0.85, 0.20, 0.15);
+
+      float thighD = sdSegment(P, hip, knee);
+      float thighMask = smoothstep(0.012 * u_scale, 0.010 * u_scale, thighD);
+      col = mix(col, shortsCol, thighMask * step(deckLine, y));
+
+      float shinD = sdSegment(P, knee, foot);
+      float shinMask = smoothstep(0.010 * u_scale, 0.008 * u_scale, shinD);
+      col = mix(col, skinCol, shinMask * step(deckLine, y));
+      vec2 shinDir = normalize(foot - knee);
+      vec2 shinNrm = vec2(-shinDir.y, shinDir.x);
+      float shinSide = dot(P - (knee + foot) * 0.5, shinNrm);
+      col = mix(col, skinCol * 0.78,
+                shinMask * step(deckLine, y) * smoothstep(0.0, 0.008 * u_scale, shinSide));
+
+      vec2 torsoMid = (hip + shoulder) * 0.5;
+      vec2 torsoDir = normalize(shoulder - hip);
+      vec2 torsoNrm = vec2(-torsoDir.y, torsoDir.x);
+      float torsoLen = length(shoulder - hip);
+      float backSign = sign(dot(torsoNrm, vec2(1.0, 0.0)));
+      float torsoAlong = dot(P - hip, torsoDir);
+      float torsoTAlong = clamp(torsoAlong / torsoLen, 0.0, 1.0);
+      float torsoSideRaw = dot(P - torsoMid, torsoNrm);
+      float curveOffset = 0.005 * u_scale * sin(torsoTAlong * 3.14159) * (0.6 + 0.4 * (1.0 - torsoTAlong)) * backSign;
+      float torsoSide = torsoSideRaw - curveOffset;
+      float torsoHalfW = mix(0.014, 0.017, smoothstep(0.0, 1.0, torsoTAlong)) * u_scale;
+      float distToAxis = abs(torsoSide);
+      float endCap = min(distance(P, hip), distance(P, shoulder));
+      float torsoMask;
+      if (torsoAlong < 0.0)        torsoMask = smoothstep(torsoHalfW + 0.002, torsoHalfW - 0.001, endCap);
+      else if (torsoAlong > torsoLen) torsoMask = smoothstep(torsoHalfW + 0.002, torsoHalfW - 0.001, endCap);
+      else                          torsoMask = smoothstep(torsoHalfW + 0.002, torsoHalfW - 0.001, distToAxis);
+
+      float shirtBottomT = 0.05;
+      float shirtMask = torsoMask * smoothstep(shirtBottomT - 0.04, shirtBottomT + 0.02, torsoTAlong);
+      float shirtRevealMask = torsoMask * (1.0 - smoothstep(shirtBottomT - 0.04, shirtBottomT + 0.02, torsoTAlong));
+
+      col = mix(col, shortsCol, shirtRevealMask * step(deckLine, y));
+      col = mix(col, shortsCol * 0.6,
+                shirtRevealMask * step(deckLine, y) * smoothstep(0.0, 0.012 * u_scale, torsoSide));
+
+      col = mix(col, shirtCol, shirtMask * step(deckLine, y));
+      col = mix(col, shirtCol * 0.7,
+                shirtMask * step(deckLine, y) * smoothstep(0.0, 0.015 * u_scale, torsoSide));
+      col = mix(col, shirtCol * 1.3,
+                shirtMask * step(deckLine, y) * smoothstep(0.0, -0.012 * u_scale, torsoSide));
+
+      float stripeFreq = 1.0 / (0.005 * u_scale);
+      float stripe = step(0.5, fract(torsoSide * stripeFreq));
+      col = mix(col, shirtCol * 0.55,
+                shirtMask * step(deckLine, y) * stripe * 0.6);
+
+      float stripeOffset = 0.004 * u_scale;
+      float stripeWidth = 0.0012 * u_scale;
+      float ws1 = smoothstep(stripeWidth, stripeWidth - 0.0006, abs(torsoSide - stripeOffset));
+      float ws2 = smoothstep(stripeWidth, stripeWidth - 0.0006, abs(torsoSide + stripeOffset));
+      col = mix(col, vec3(1.0, 1.0, 1.0),
+                shirtMask * step(deckLine, y) * max(ws1, ws2));
+
+      float upperArmD = sdSegment(P, shoulder, elbow);
+      float upperArmMask = smoothstep(0.011 * u_scale, 0.009 * u_scale, upperArmD);
+      col = mix(col, skinCol, upperArmMask);
+      vec2 uaDir = normalize(elbow - shoulder);
+      vec2 uaNrm = vec2(-uaDir.y, uaDir.x);
+      float uaSide = dot(P - (shoulder + elbow) * 0.5, uaNrm);
+      col = mix(col, skinCol * 0.78,
+                upperArmMask * smoothstep(0.0, 0.009 * u_scale, uaSide));
+
+      float uaAlong = dot(P - shoulder, uaDir);
+      float upperArmLen = length(elbow - shoulder);
+      float sleeveLen = upperArmLen * 0.40;
+      float sleeveMaskUA = upperArmMask
+                          * step(0.0, uaAlong)
+                          * smoothstep(sleeveLen + 0.002, sleeveLen - 0.002, uaAlong);
+      float sleeveD = sdSegment(P, shoulder, shoulder + uaDir * sleeveLen);
+      float sleeveBody = smoothstep(0.014 * u_scale, 0.012 * u_scale, sleeveD);
+      col = mix(col, shirtCol, sleeveBody * sleeveMaskUA);
+      col = mix(col, shirtCol * 0.7,
+                sleeveBody * sleeveMaskUA * smoothstep(0.0, 0.012 * u_scale, uaSide));
+      float sleeveCapD = distance(P, shoulder);
+      float sleeveCap = smoothstep(0.014 * u_scale, 0.012 * u_scale, sleeveCapD);
+      col = mix(col, shirtCol, sleeveCap * upperArmMask);
+      col = mix(col, shirtCol * 0.7,
+                sleeveCap * upperArmMask * smoothstep(0.0, 0.012 * u_scale, uaSide));
+
+      float sStripeOff = 0.0030 * u_scale;
+      float sStripeW = 0.0010 * u_scale;
+      float sBand = sleeveLen - 0.003 * u_scale;
+      float ss1 = smoothstep(sStripeW, sStripeW - 0.0005, abs(uaAlong - (sBand - sStripeOff)));
+      float ss2 = smoothstep(sStripeW, sStripeW - 0.0005, abs(uaAlong - (sBand + sStripeOff)));
+      col = mix(col, vec3(1.0, 1.0, 1.0),
+                (sleeveBody + sleeveCap) * upperArmMask * max(ss1, ss2));
+
+      float forearmD = sdSegment(P, elbow, hand);
+      float forearmLen = length(hand - elbow);
+      vec2 faDir = normalize(hand - elbow);
+      vec2 faNrm = vec2(-faDir.y, faDir.x);
+      float faAlong = dot(P - elbow, faDir);
+      float faAlongN = clamp(faAlong / forearmLen, 0.0, 1.0);
+      float faRadius = mix(0.010, 0.006, faAlongN) * u_scale;
+      float forearmMask = smoothstep(faRadius, faRadius - 0.002 * u_scale, forearmD);
+      col = mix(col, skinCol, forearmMask);
+      float faSide = dot(P - (elbow + hand) * 0.5, faNrm);
+      col = mix(col, skinCol * 0.78,
+                forearmMask * smoothstep(0.0, 0.008 * u_scale, faSide));
+
+      float wristR = 0.008 * u_scale;
+      float handFill = smoothstep(wristR, wristR - 0.001, distance(P, hand));
+      col = mix(col, skinCol, handFill);
+      float handSide = dot(P - hand, faNrm);
+      col = mix(col, skinCol * 0.78, handFill * smoothstep(0.0, 0.006 * u_scale, handSide));
+
+      vec2 neckBase = shoulder;
+      vec2 neckTop = head + vec2(0.0, -0.018 * u_scale);
+      float neckD = sdSegment(P, neckBase, neckTop);
+      float neckMask = smoothstep(0.008 * u_scale, 0.006 * u_scale, neckD);
+      neckMask *= (1.0 - shirtMask) * (1.0 - shirtRevealMask);
+      col = mix(col, skinCol, neckMask);
+      vec2 neckDir = normalize(neckTop - neckBase);
+      vec2 neckNrm = vec2(-neckDir.y, neckDir.x);
+      float neckBackSign = sign(dot(neckNrm, vec2(1.0, 0.0)));
+      float neckSide = dot(P - (neckBase + neckTop) * 0.5, neckNrm) * neckBackSign;
+      col = mix(col, skinCol * 0.72,
+                neckMask * smoothstep(0.0, 0.006 * u_scale, neckSide));
+
+      float headR = 0.018 * u_scale;
+      float headDist = distance(P, head);
+      float headFill = smoothstep(headR, headR - 0.001, headDist);
+      col = mix(col, skinCol, headFill);
+      vec2 faceDirRaw = normalize(hand - shoulder);
+      vec2 faceDir = faceDirRaw;
+      vec2 backOfHead = -faceDir;
+      float hairSide = dot(P - head, backOfHead);
+      float hairMask = headFill * smoothstep(-0.003 * u_scale, 0.005 * u_scale, hairSide);
+      col = mix(col, vec3(0.20, 0.12, 0.08), hairMask);
+      float chinShade = headFill * smoothstep(0.005 * u_scale, 0.015 * u_scale, head.y - P.y);
+      col = mix(col, skinCol * 0.75, chinShade * 0.5);
+      vec2 foreheadPos = head + faceDir * 0.008 * u_scale;
+      float foreheadHi = headFill * smoothstep(0.005 * u_scale, 0.0, distance(P, foreheadPos));
+      col = mix(col, vec3(1.0, 0.95, 0.88), foreheadHi * 0.4);
+
+      float oarWaterline = boatCenter.y - 0.085 * u_scale;
+      bool aboveOarWater = y > oarWaterline;
+
+      vec2 oarA = hand;
+      vec2 oarBpt = bladeTip;
+      if ((oarA.y - oarWaterline) * (oarBpt.y - oarWaterline) < 0.0) {
+        float tCross = (oarWaterline - oarA.y) / (oarBpt.y - oarA.y);
+        vec2 crossPt = mix(oarA, oarBpt, tCross);
+        float bladeBelow = step(bladeTip.y, oarWaterline);
+
+        if (bladeBelow > 0.5 && phase < 0.5) {
+          float driveT = phase / 0.5;
+          float trailLen = mix(0.10, 0.60, speedFactor) * u_scale;
+          float trailAlong = P.x - crossPt.x;
+          float trailPerp = abs(y - crossPt.y);
+          if (trailAlong > 0.0 && trailAlong < trailLen && y < oarWaterline + 0.002) {
+            float tt = trailAlong / trailLen;
+            float trailHalfW = mix(0.003, mix(0.012, 0.035, speedFactor), tt) * u_scale;
+            float trailNoise = fbm(vec2(u * 80.0 - u_time * 2.0, y * 100.0));
+            float sharpness = mix(0.2, 0.8, tt);
+            float trailShape = smoothstep(trailHalfW, trailHalfW * sharpness, trailPerp);
+            float trailFade = (1.0 - tt);
+            float diffusion = mix(1.0, 0.5, tt);
+            float trail = trailShape * trailFade * diffusion *
+                         (0.4 + 0.6 * trailNoise);
+            col = mix(col, vec3(1.0, 1.0, 1.0), trail * 0.95 * driveT);
+            float bubbles = noise(vec2(u * 250.0 - u_time * 3.0, y * 280.0));
+            float bubblesMask = smoothstep(0.78, 0.95, bubbles) *
+                               trailShape * (1.0 - tt) * (1.0 - tt);
+            col = mix(col, vec3(1.0, 1.0, 1.0), bubblesMask * 0.8 * driveT);
+          }
+        }
+
+        float dCross = distance(P, crossPt);
+        float splashRadius = 0.025 * u_scale;
+        float splashAbove = smoothstep(splashRadius, 0.0, dCross) * step(oarWaterline, y);
+        float verticalFade = smoothstep(0.030 * u_scale, 0.0, y - oarWaterline);
+        col = mix(col, vec3(1.0), splashAbove * verticalFade * 0.7 * bladeBelow);
+        float ring = exp(-pow((y - oarWaterline) * 200.0, 2.0)) *
+                     smoothstep(0.020 * u_scale, 0.0, abs(crossPt.x - P.x));
+        col = mix(col, vec3(1.0), ring * 0.6 * bladeBelow);
+        float drops = noise(vec2(u * 200.0, y * 200.0 + u_time * 8.0));
+        float dropsMask = smoothstep(0.75, 0.95, drops) *
+                         smoothstep(splashRadius * 1.5, 0.0, dCross) *
+                         step(oarWaterline, y);
+        col = mix(col, vec3(1.0), dropsMask * bladeBelow);
+      }
+
+      vec2 oarVec = bladeTip - hand;
+      float oarLen = length(oarVec);
+      vec2 oarT = oarVec / oarLen;
+      vec2 oarN = vec2(-oarT.y, oarT.x);
+      vec2 dP = P - hand;
+      float sAlong = dot(dP, oarT);
+      float sPerp  = dot(dP, oarN);
+      float lockS = dot(oarlock - hand, oarT);
+      float shaftHalfW = 0.003 * u_scale;
+      float bladeStartS = oarLen * 0.85;
+      bool inShaft = sAlong > 0.0 && sAlong < bladeStartS;
+
+      if (inShaft && aboveOarWater) {
+        float d = abs(sPerp) - shaftHalfW;
+        float shaftMask = smoothstep(0.001, -0.001, d);
+        vec3 shaftCol = vec3(0.95, 0.95, 0.95);
+        col = mix(col, shaftCol, shaftMask);
+        col = mix(col, shaftCol * 0.75,
+                  shaftMask * smoothstep(0.0, shaftHalfW, sPerp));
+      }
+
+      if (sAlong > lockS - 0.010 * u_scale && sAlong < lockS + 0.006 * u_scale && aboveOarWater) {
+        float sleeveW = 0.0040 * u_scale;
+        float d = abs(sPerp) - sleeveW;
+        float slM = smoothstep(0.001, -0.001, d);
+        col = mix(col, vec3(0.08, 0.08, 0.10), slM);
+      }
+
+      if (sAlong > bladeStartS && sAlong < oarLen + 0.003 && aboveOarWater) {
+        float bt = (sAlong - bladeStartS) / (oarLen - bladeStartS);
+        float widthCurve = bt < 0.3 ? bt / 0.3 : 1.0;
+        float bladeW = mix(0.0044, 0.022, widthCurve) * u_scale;
+        float topEdge    =  bladeW * 0.5;
+        float bottomEdge = -bladeW * 0.5;
+        if (sPerp < topEdge && sPerp > bottomEdge) {
+          float edgeT = min(topEdge - sPerp, sPerp - bottomEdge);
+          float bladeMask = smoothstep(0.0, 0.002, edgeT);
+          vec3 bladeMain = vec3(0.85, 0.18, 0.12);
+          float face = (sPerp - bottomEdge) / (topEdge - bottomEdge);
+          bladeMain *= mix(0.85, 1.1, face);
+          col = mix(col, bladeMain, bladeMask);
+        }
+      }
+
+      float capHeadR = 0.018 * u_scale;
+      vec2 capFaceDir = vec2(sign(hand.x - shoulder.x), 0.0);
+      float capDist = distance(P, head);
+      float capR = capHeadR + 0.002 * u_scale;
+      float capMask = smoothstep(capR, capR - 0.001, capDist) * step(head.y, P.y);
+      col = mix(col, vec3(0.10, 0.25, 0.55), capMask);
+      vec2 visorCenter = head + capFaceDir * 0.014 * u_scale + vec2(0.0, 0.002 * u_scale);
+      float visor = sdEllipse(P - visorCenter, vec2(0.012, 0.003) * u_scale);
+      float visorMask = smoothstep(0.001, -0.001, visor);
+      col = mix(col, vec3(0.05, 0.15, 0.40), visorMask);
+
+      float weatherCycle = u_time / 60.0;
+      float rainPhase = fract(weatherCycle / 3.0);
+      float rainIntensity = 0.0;
+      if (rainPhase > 0.6 && rainPhase < 0.95) {
+        float rt = (rainPhase - 0.6) / 0.35;
+        rainIntensity = sin(rt * 3.14159265);
+      }
+
+      if (rainIntensity > 0.01) {
+        for (int ri = 0; ri < 3; ri++) {
+          float rfi = float(ri);
+          float rainScroll = u_time * (8.0 + rfi * 4.0);
+          float rainDensity = mix(40.0, 80.0, rfi * 0.5);
+          vec2 rainUV = vec2(u + y * 0.15, y);
+          rainUV.x = rainUV.x * rainDensity + rfi * 17.0;
+          rainUV.y = rainUV.y * (rainDensity * 0.4) + rainScroll;
+          float cellX = floor(rainUV.x);
+          float cellY = floor(rainUV.y);
+          float h = hash(vec2(cellX, cellY));
+          vec2 localR = fract(rainUV) - vec2(0.5, 0.5);
+          float dropD = max(abs(localR.x) - 0.05, abs(localR.y) - 0.30);
+          float dropMask = smoothstep(0.02, 0.0, dropD) *
+                          step(0.7, h) *
+                          rainIntensity *
+                          mix(0.4, 1.0, rfi / 2.0);
+          col = mix(col, vec3(0.85, 0.88, 0.95), dropMask * 0.4);
+        }
+        col = mix(col, vec3(0.55, 0.58, 0.65), rainIntensity * 0.12);
+      }
+
+      float dayCycleR = fract(u_time / 120.0);
+      float sunHeightR = sin(dayCycleR * 6.2831853 - 1.57);
+      float dayBrightness = smoothstep(-0.1, 0.4, sunHeightR);
+      float rainbowFactor = rainIntensity * dayBrightness;
+
+      if (rainbowFactor > 0.05 && y > horizon) {
+        float sunXR = mod(0.30 + dayCycleR * 0.6, 1.0);
+        vec2 rainbowCenter = vec2(1.0 - sunXR, horizon - 0.15);
+        float rainbowR = 0.45;
+        float rainbowD = distance(P, rainbowCenter);
+        float rainbowBand = abs(rainbowD - rainbowR);
+        float rainbowWidth = 0.04;
+        if (rainbowBand < rainbowWidth) {
+          float bandT = (rainbowD - rainbowR + rainbowWidth) / (2.0 * rainbowWidth);
+          vec3 rainbowCol;
+          if (bandT < 0.16)      rainbowCol = vec3(0.55, 0.20, 0.70);
+          else if (bandT < 0.33) rainbowCol = vec3(0.30, 0.30, 0.85);
+          else if (bandT < 0.50) rainbowCol = vec3(0.30, 0.75, 0.85);
+          else if (bandT < 0.66) rainbowCol = vec3(0.40, 0.85, 0.40);
+          else if (bandT < 0.83) rainbowCol = vec3(0.95, 0.85, 0.35);
+          else                    rainbowCol = vec3(0.95, 0.45, 0.35);
+          float bandFade = smoothstep(rainbowWidth, rainbowWidth * 0.4, rainbowBand);
+          col = mix(col, rainbowCol, bandFade * rainbowFactor * 0.55);
+        }
+      }
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  </script>
+
+  <script>
+var RowingAnimation = (function() {
+    var gl = null;
+    var uniforms = {};
+    var t0 = 0;
+    var lastT = 0;
+    var flow = 0;
+    var animPhase = 0;
+    var currentSpeed = 0;
+    var currentSpm = 0;
+    var spriteScale = 0.6;
+    var rafId = null;
+    var loadingEl = null;
+    var shaderReadySent = false;
+
+    // ftms_integration passes speed = (500/paceSeconds) * 0.8
+    // Fast rowing (90s/500m) ≈ 4.4, normal (120s) ≈ 3.3, slow (180s) ≈ 2.2
+    var SPEED_NORMALIZE = 5.0;
+
+    function compile(type, src) {
+        var sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            console.error('Shader compile error:', gl.getShaderInfoLog(sh));
+        }
+        return sh;
+    }
+
+    function resize() {
+        var canvas = gl.canvas;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var w = Math.floor(canvas.clientWidth * dpr);
+        var h = Math.floor(canvas.clientHeight * dpr);
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+        }
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    function frame() {
+        resize();
+        var now = performance.now() / 1000;
+        var dt = now - lastT;
+        lastT = now;
+
+        flow -= dt * currentSpeed * 0.26;
+        animPhase = (animPhase + dt * currentSpm / 60.0) % 1.0;
+
+        var renderPhase = animPhase < 1.0 / 3.0
+            ? animPhase * 1.5
+            : 0.5 + (animPhase - 1.0 / 3.0) * 0.75;
+
+        gl.uniform1f(uniforms.uTime,   now - t0);
+        gl.uniform1f(uniforms.uSpeed,  currentSpeed);
+        gl.uniform1f(uniforms.uFlow,   flow);
+        gl.uniform1f(uniforms.uPhase,  renderPhase);
+        gl.uniform1f(uniforms.uSpm,    currentSpm);
+        gl.uniform1f(uniforms.uScale,  spriteScale);
+        gl.uniform1f(uniforms.uAspect, gl.canvas.clientWidth / gl.canvas.clientHeight);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        if (!shaderReadySent) {
+            shaderReadySent = true;
+            window.parent.postMessage({ type: 'shaderReady' }, '*');
+        }
+
+        if (loadingEl) {
+            var el = loadingEl;
+            loadingEl = null;
+            el.classList.add('fade-out');
+            el.addEventListener('transitionend', function() {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, { once: true });
+        }
+
+        rafId = requestAnimationFrame(frame);
+    }
+
+    function initRowing() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+
+        var canvas = document.getElementById('glCanvas');
+        gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) {
+            document.getElementById('wrapper').innerHTML =
+                '<p style="color:#fff;padding:20px">WebGL not supported</p>';
+            return;
+        }
+
+        var prog = gl.createProgram();
+        gl.attachShader(prog, compile(gl.VERTEX_SHADER,
+            document.getElementById('vs').textContent));
+        gl.attachShader(prog, compile(gl.FRAGMENT_SHADER,
+            document.getElementById('fs').textContent));
+        gl.linkProgram(prog);
+        gl.useProgram(prog);
+
+        var buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1,-1,  1,-1,  -1, 1,
+            -1, 1,  1,-1,   1, 1
+        ]), gl.STATIC_DRAW);
+
+        var aPos = gl.getAttribLocation(prog, 'a_pos');
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        uniforms = {
+            uTime:   gl.getUniformLocation(prog, 'u_time'),
+            uSpeed:  gl.getUniformLocation(prog, 'u_speed'),
+            uFlow:   gl.getUniformLocation(prog, 'u_flow'),
+            uPhase:  gl.getUniformLocation(prog, 'u_phase'),
+            uSpm:    gl.getUniformLocation(prog, 'u_spm'),
+            uScale:  gl.getUniformLocation(prog, 'u_scale'),
+            uAspect: gl.getUniformLocation(prog, 'u_aspect')
+        };
+
+        t0 = performance.now() / 1000;
+        lastT = t0;
+        flow = 0;
+        animPhase = 0;
+        shaderReadySent = false;
+        loadingEl = document.getElementById('gl-loading');
+
+        window.addEventListener('resize', resize);
+        resize();
+        frame();
+    }
+
+    return {
+        setConsoleValues: function(distance, watts, elapsedtime, pace, spm, heartrate, cals, _delay, strokes) {
+            document.getElementById('distance').textContent = distance;
+            document.getElementById('watts').textContent = watts;
+            document.getElementById('elapsedtime').textContent = elapsedtime;
+            document.getElementById('pace').textContent = pace;
+            document.getElementById('spm').textContent = spm;
+            document.getElementById('heartrate').textContent = heartrate;
+            document.getElementById('cals').textContent = cals;
+            document.getElementById('strokes').textContent = strokes;
+        },
+        setConsoleSpeedAndSpm: function(speed, spm) {
+            currentSpeed = Math.min(speed / SPEED_NORMALIZE, 1.0);
+            currentSpm = spm;
+        },
+        initRowing: initRowing,
+        stopAllAnimations: function() {
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+        }
+    };
+})();
+
+var initRowing = RowingAnimation.initRowing;
+var setConsoleValues = RowingAnimation.setConsoleValues;
+var setConsoleSpeedAndSpm = RowingAnimation.setConsoleSpeedAndSpm;
+
+</script>
+  <script>
+/**
+ * FTMS Integration — session tracking + display sync
+ *
+ * Public API (called from app.html):
+ *   initFtmsTracking()  — call when entering rowing screen
+ *   ingestData(csv)     — call for each FTMS packet (20 comma-separated bytes)
+ *
+ * Phases:
+ *   IDLE   — no rowing yet, waiting for first stroke
+ *   ACTIVE — rowing in progress
+ *   PAUSED — rower stopped for >5s. Clock is frozen, pause-aware dialog
+ *            is shown. Resuming (spm>0) returns to ACTIVE without losing
+ *            the session. Save/Exit ends the session.
+ */
+
+(function () {
+  'use strict';
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Config
+  // ─────────────────────────────────────────────────────────────────────
+  var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is PAUSED
+  var INACTIVITY_TICK  = 500;    // how often to check for inactivity (ms)
+  var INITIAL_PACE     = 150;    // s/500m when we have no real pace yet
+  var PACE_EMA_ALPHA   = 0.3;    // new-sample weight in exponential smoothing
+  var DEBUG            = false;
+
+  // ─────────────────────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────────────────────
+  var phase = 'IDLE';
+
+  var session = null;            // see resetSession()
+  var lastPacket = null;         // most recent parsed FTMS packet
+  var lastActiveAt = 0;          // ms timestamp of last spm>0 packet
+  var inactivityTimerId = null;
+
+  function resetSession() {
+    session = {
+      startedAt:        null,
+      // Pause-aware clock: total ms spent in PAUSED state
+      totalPausedMs:    0,
+      pausedAt:         null,
+      // Session-level accumulators (added to current rower reading)
+      distOffset:       0,
+      strokeOffset:     0,
+      calOffset:        0,
+      // Last raw values from the rower (used to detect resets)
+      rawDist:          0,
+      rawStrokes:       0,
+      rawCals:          0,
+      // Smoothed pace
+      paceSeconds:      INITIAL_PACE,
+      // Sampled-per-packet log used to build the save payload
+      samples:          []
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Parsing — Xebex FTMS: 20 bytes, big = byte[hi]*255 + byte[lo]
+  // ─────────────────────────────────────────────────────────────────────
+  function parsePacket(csv) {
+    if (!csv) return null;
+    var b = csv.split(',').map(function (s) { return parseInt(s, 10); });
+    if (b.length < 20 || b.some(isNaN)) return null;
+    var u16 = function (hi, lo) { return b[hi] * 255 + b[lo]; };
+    return {
+      t:         Date.now(),
+      spm:       b[2] * 0.5,
+      strokes:   u16(4, 3),
+      distance:  u16(6, 5),
+      pace:      u16(9, 8),   // raw pace from rower, s/500m
+      watts:     u16(11, 10),
+      cals:      u16(13, 12),
+      hr:        b[16],
+      elapsed:   u16(19, 18)
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Session math
+  // ─────────────────────────────────────────────────────────────────────
+  // Detect a rower reset (any monotonic counter dropped) and roll its
+  // previous peak into the session offset, so totals keep climbing.
+  function applyResetIfNeeded(p) {
+    if (p.distance < session.rawDist)    session.distOffset   += session.rawDist;
+    if (p.strokes  < session.rawStrokes) session.strokeOffset += session.rawStrokes;
+    if (p.cals     < session.rawCals)    session.calOffset    += session.rawCals;
+    session.rawDist    = p.distance;
+    session.rawStrokes = p.strokes;
+    session.rawCals    = p.cals;
+  }
+
+  function totalDistance() { return session.distOffset   + session.rawDist; }
+  function totalStrokes()  { return session.strokeOffset + session.rawStrokes; }
+  function totalCals()     { return session.calOffset    + session.rawCals; }
+
+  // Pause-aware elapsed time: total wall time since start, minus any
+  // accumulated paused intervals, minus the currently-running pause if any.
+  function sessionSeconds() {
+    if (!session || !session.startedAt) return 0;
+    var now = Date.now();
+    var pausedMs = session.totalPausedMs;
+    if (session.pausedAt != null) pausedMs += (now - session.pausedAt);
+    return (now - session.startedAt - pausedMs) / 1000;
+  }
+
+  // Update smoothed pace based on real distance/time deltas between packets.
+  function updatePace(prev, curr) {
+    if (!prev) return; // need two points
+    var dDist = (totalDistance()) - (session.distOffset + prev.distance);
+    var dTime = (curr.t - prev.t) / 1000;
+    if (dDist <= 0 || dTime < 0.1) return; // no movement
+    var instant = (dTime / dDist) * 500;
+    if (!isFinite(instant) || instant <= 0) return;
+    session.paceSeconds = session.paceSeconds * (1 - PACE_EMA_ALPHA) + instant * PACE_EMA_ALPHA;
+  }
+
+  // Sample one entry per second of session time (the rower may emit packets
+  // faster than that; we downsample to keep the save payload bounded — a 1h
+  // session caps at ~3600 samples instead of growing unbounded).
+  function recordSample(p) {
+    var now = sessionSeconds();
+    var last = session.samples.length ? session.samples[session.samples.length - 1] : null;
+    if (last && now - last.time < 1.0) return;
+    session.samples.push({
+      time:     now,
+      distance: totalDistance(),
+      strokes:  totalStrokes(),
+      spm:      p.spm,
+      watts:    p.watts,
+      hr:       p.hr,
+      pace:     session.paceSeconds
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Display
+  // ─────────────────────────────────────────────────────────────────────
+  function fmtTime(s) {
+    s = Math.max(0, Math.round(s));
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function paceToAnimSpeed(paceSec) {
+    if (!paceSec || paceSec <= 0) return 0;
+    return (500 / paceSec) * 0.8; // ~4.4 fast, ~2.2 slow
+  }
+
+  function render() {
+    if (!lastPacket) return;
+    setText('heartrate',   lastPacket.hr === 255 ? '-' : lastPacket.hr);
+    setText('distance',    totalDistance());
+    setText('watts',       Math.round(lastPacket.watts));
+    setText('pace',        fmtTime(session.paceSeconds));
+    setText('spm',         Math.round(lastPacket.spm));
+    setText('cals',        totalCals());
+    setText('strokes',     totalStrokes());
+    setText('elapsedtime', fmtTime(sessionSeconds()));
+    if (typeof setConsoleSpeedAndSpm === 'function') {
+      setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds), lastPacket.spm);
+    }
+  }
+
+  function renderIdle() {
+    setText('heartrate', '-');
+    setText('distance',  '0');
+    setText('watts',     '0');
+    setText('pace',      '--:--');
+    setText('spm',       '0.0');
+    setText('cals',      '0');
+    setText('strokes',   '0');
+    setText('elapsedtime', '00:00');
+    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Status banner
+  // ─────────────────────────────────────────────────────────────────────
+  function ensureBanner() {
+    var el = document.getElementById('ftmsBanner');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'ftmsBanner';
+    document.body.appendChild(el);
+    return el;
+  }
+  function showBanner(text) {
+    var el = ensureBanner();
+    el.textContent = text;
+    el.classList.add('visible');
+  }
+  function hideBanner() {
+    var el = document.getElementById('ftmsBanner');
+    if (el) el.classList.remove('visible');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Pause dialog — SAVE or EXIT SESSION. Rowing again dismisses it.
+  // ─────────────────────────────────────────────────────────────────────
+  function ensurePauseDialog() {
+    if (document.getElementById('pauseDialog')) return;
+    var html = ''
+      + '<div id="pauseDialog" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">PAUSED</div>'
+      +   '<div class="ftms-overlay-subtitle">row again to continue</div>'
+      +   '<div class="ftms-summary-grid">'
+      +     tile('summaryTime',     'TIME',     '00:00')
+      +     tile('summaryDistance', 'DISTANCE', '0m')
+      +     tile('summaryStrokes',  'STROKES',  '0')
+      +     tile('summaryCalories', 'CALORIES', '0')
+      +   '</div>'
+      +   '<div class="ftms-actions">'
+      +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE</button>'
+      +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
+      +   '</div>'
+      + '</div>';
+    function tile(id, label, val) {
+      return '<div class="ftms-summary-tile">'
+        + '<div class="ftms-summary-label">' + label + '</div>'
+        + '<div id="' + id + '" class="ftms-summary-value">' + val + '</div>'
+        + '</div>';
+    }
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+  function showPauseDialog() {
+    ensurePauseDialog();
+    setText('summaryTime',     fmtTime(sessionSeconds()));
+    setText('summaryDistance', totalDistance() + 'm');
+    setText('summaryStrokes',  totalStrokes());
+    setText('summaryCalories', totalCals());
+    document.getElementById('pauseDialog').classList.add('visible');
+  }
+  function hidePauseDialog() {
+    var el = document.getElementById('pauseDialog');
+    if (el) el.classList.remove('visible');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Offline choice screen (shown after an offline save)
+  // ─────────────────────────────────────────────────────────────────────
+  function ensureOfflineChoice() {
+    if (document.getElementById('offlineChoice')) return;
+    var html = ''
+      + '<div id="offlineChoice" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">WORKOUT SAVED</div>'
+      +   '<div class="ftms-overlay-subtitle">stored offline</div>'
+      +   '<div class="ftms-actions">'
+      +     '<button class="ftms-btn primary" onclick="offlineChoiceRow()">ROW AGAIN</button>'
+      +     '<button class="ftms-btn"         onclick="offlineChoiceLogin()">GO TO LOGIN</button>'
+      +   '</div>'
+      + '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+  function showOfflineChoice() {
+    ensureOfflineChoice();
+    document.getElementById('offlineChoice').classList.add('visible');
+  }
+  function hideOfflineChoice() {
+    var el = document.getElementById('offlineChoice');
+    if (el) el.classList.remove('visible');
+  }
+  function offlineChoiceRow() {
+    hideOfflineChoice();
+    goIdle();
+  }
+  function offlineChoiceLogin() {
+    hideOfflineChoice();
+    if (typeof doExit === 'function') doExit();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Phase transitions
+  // ─────────────────────────────────────────────────────────────────────
+  function goActive() {
+    if (phase === 'ACTIVE') return;
+    if (phase === 'PAUSED') {
+      // Resume — accumulate the just-ended pause and clear marker.
+      if (session.pausedAt != null) {
+        session.totalPausedMs += (Date.now() - session.pausedAt);
+        session.pausedAt = null;
+      }
+      hidePauseDialog();
+      hideBanner();
+      phase = 'ACTIVE';
+      lastActiveAt = Date.now();
+      if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
+      return;
+    }
+    // IDLE → ACTIVE: brand new session
+    resetSession();
+    session.startedAt = Date.now();
+    lastActiveAt = Date.now();
+    phase = 'ACTIVE';
+    hideBanner();
+    hidePauseDialog();
+    if (DEBUG) console.log('[FTMS] phase IDLE → ACTIVE');
+  }
+
+  function goPaused() {
+    if (phase !== 'ACTIVE') return;
+    session.pausedAt = Date.now();
+    phase = 'PAUSED';
+    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
+    showPauseDialog();
+    if (DEBUG) console.log('[FTMS] phase ACTIVE → PAUSED');
+  }
+
+  function goIdle() {
+    phase = 'IDLE';
+    resetSession();
+    lastPacket = null;
+    renderIdle();
+    hidePauseDialog();
+    var rowingScreen = document.getElementById('screen-rowing');
+    if (rowingScreen && rowingScreen.classList.contains('active')) {
+      showBanner('READY TO ROW !');
+    } else {
+      hideBanner();
+    }
+    if (DEBUG) console.log('[FTMS] phase → IDLE');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Inactivity watchdog — runs while ACTIVE
+  // ─────────────────────────────────────────────────────────────────────
+  function tickInactivity() {
+    if (phase !== 'ACTIVE') return;
+    if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Public API
+  // ─────────────────────────────────────────────────────────────────────
+  function ingestData(csv) {
+    if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
+      csv = decodeURIComponent(csv.slice(6));
+    }
+    var p = parsePacket(csv);
+    if (!p) return;
+
+    var prev = lastPacket;
+    lastPacket = p;
+
+    // IDLE: first stroke kicks off a fresh session.
+    if (phase === 'IDLE') {
+      if (p.spm > 0) goActive(); else return;
+    }
+    // PAUSED: any stroke resumes the same session.
+    else if (phase === 'PAUSED') {
+      if (p.spm > 0) goActive(); else return;
+    }
+
+    // ACTIVE: apply reset detection, update pace, sample, render.
+    applyResetIfNeeded(p);
+    updatePace(prev, p);
+    if (p.spm > 0) {
+      lastActiveAt = Date.now();
+      recordSample(p);
+    }
+    render();
+  }
+
+  function initFtmsTracking() {
+    ensurePauseDialog();
+    if (inactivityTimerId) clearInterval(inactivityTimerId);
+    inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
+    goIdle();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Save / exit
+  // ─────────────────────────────────────────────────────────────────────
+  function avg(arr, key) {
+    if (!arr.length) return 0;
+    var s = 0;
+    for (var i = 0; i < arr.length; i++) s += arr[i][key];
+    return s / arr.length;
+  }
+
+  function buildPayload() {
+    var s = session.samples;
+    return {
+      version: 1,
+      summary: {
+        duration: Math.round(sessionSeconds()),
+        distance: totalDistance(),
+        strokes:  totalStrokes(),
+        calories: totalCals(),
+        avgSpm:   Math.round(avg(s, 'spm')   * 10) / 10,
+        avgPace:  Math.round(avg(s, 'pace')),
+        avgWatts: Math.round(avg(s, 'watts')),
+        avgHr:    Math.round(avg(s, 'hr'))
+      },
+      samples: s.map(function (x) {
+        return [
+          Math.round(x.time * 10) / 10,
+          Math.round(x.distance),
+          x.strokes,
+          Math.round(x.spm * 10) / 10,
+          Math.round(x.watts),
+          Math.round(x.hr),
+          Math.round(x.pace)
+        ];
+      })
+    };
+  }
+
+  function workoutTag() {
+    var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return 'workout_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+      + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  function saveWorkout() {
+    hidePauseDialog();
+    var payload = buildPayload();
+    var token = typeof appToken !== 'undefined' ? appToken : null;
+
+    var goHome = function () {
+      if (typeof showHome === 'function') showHome();
+      goIdle();
+    };
+
+    showBanner('SAVING...');
+
+    if (!token) {
+      var tag = workoutTag();
+      var msg = JSON.stringify({
+        action:  'saveData',
+        workout: tag,
+        data:    payload
+      });
+      var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
+        ? AppInventor
+        : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
+          ? window.AppInventor
+          : null;
+      if (ai) {
+        showBanner('SENT TO APP');
+        ai.setWebViewString(msg);
+        setTimeout(function () {
+          hideBanner();
+          phase = 'IDLE';
+          showOfflineChoice();
+        }, 1500);
+      } else {
+        showBanner('NO APP BRIDGE (browser mode)');
+        setTimeout(function () {
+          hideBanner();
+          phase = 'IDLE';
+          showOfflineChoice();
+        }, 2000);
+      }
+      return;
+    }
+
+    var tag = workoutTag();
+    var body = JSON.stringify({ token: token, workout: tag, data: payload });
+
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('timeout')); }, 10000);
+    });
+
+    Promise.race([
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+      }).then(function (r) {
+        return r.text().then(function (txt) {
+          return { ok: r.ok, status: r.status, txt: txt };
+        });
+      }),
+      timeout
+    ])
+    .then(function (resp) {
+      if (!resp.ok) {
+        showBanner('HTTP ' + resp.status + ': ' + (resp.txt || '').slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+        return;
+      }
+      var json;
+      try { json = JSON.parse(resp.txt); }
+      catch (e) {
+        showBanner('BAD JSON: ' + (resp.txt || '').slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+        return;
+      }
+      var row = Array.isArray(json) ? json[0] : json;
+      if (row && row.status === 'success') {
+        showBanner('SAVED ✓');
+        setTimeout(function () { hideBanner(); goHome(); }, 1000);
+      } else {
+        showBanner('SAVE FAIL: ' + ((row && (row.error || row.status)) || resp.txt).toString().slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+      }
+    })
+    .catch(function (err) {
+      showBanner('NET ERROR: ' + err.message);
+      setTimeout(function () { hideBanner(); goHome(); }, 4000);
+    });
+  }
+
+  function exitSession() {
+    hidePauseDialog();
+    goIdle();
+    if (typeof showHome === 'function') showHome();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Exports
+  // ─────────────────────────────────────────────────────────────────────
+  window.initFtmsTracking   = initFtmsTracking;
+  window.ingestData         = ingestData;
+  window.saveWorkout        = saveWorkout;
+  window.exitSession        = exitSession;
+  window.offlineChoiceRow   = offlineChoiceRow;
+  window.offlineChoiceLogin = offlineChoiceLogin;
+})();
+</script>
+    <div id="loading-overlay" class="rowing-overlay visible">
+      <div class="big-label">LOADING...</div>
+    </div>
+    <div id="reconnect-overlay" class="rowing-overlay" style="background:rgba(0,0,0,0.85);">
+      <div class="big-label">RECONNECTING...</div>
+      <button class="btn danger" onclick="doGiveUp()">STOP</button>
+    </div>
+  </div>
+
+
+  <script>
+    var appToken = null;
+    var appUsername = null;
+    var lastWebViewString = '';
+    var bleConnected = false;
+    var inDebugMode = false;
+    var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
+    document.addEventListener('DOMContentLoaded', function() {
+      if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+    });
+
+
+
+    // ── SCREENS ───────────────────────────────────────────
+    var SCREENS_NO_BAR = { 'screen-rowing': true };
+
+    function show(id) {
+      document.querySelectorAll('.screen').forEach(function(s) {
+        s.classList.remove('active');
+      });
+      document.getElementById(id).classList.add('active');
+
+      var bar = document.getElementById('topbar');
+      if (SCREENS_NO_BAR[id]) {
+        bar.classList.remove('visible');
+      } else {
+        bar.classList.add('visible');
+        var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
+        document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
+        document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
+        // ROW AGAIN + DISCONNECT only on home, when BLE is connected
+        var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
+        document.getElementById('tbar-disconnect-btn').style.display = showRowerCtrls;
+      }
+    }
+
+    function debugMode() {
+      bleConnected = true;
+      inDebugMode = true;
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      DebugSim.reset();
+      DebugSim.start();
+    }
+
+    function doExit() {
+      var onLogin = document.getElementById('screen-login').classList.contains('active');
+      if (onLogin) {
+        sendToApp('exit', {});
+        return;
+      }
+      appToken = null;
+      appUsername = null;
+      bleConnected = false;
+      inDebugMode = false;
+      DebugSim.stop();
+      document.getElementById('tbar-user').textContent = '';
+      document.getElementById('password').value = '';
+      show('screen-login');
+    }
+
+    // ── APP INVENTOR BRIDGE ───────────────────────────────
+    function sendToApp(action, data) {
+      var payload = JSON.stringify(Object.assign({ action: action }, data));
+      var ai = window.AppInventor || (typeof AppInventor !== 'undefined' ? AppInventor : null);
+      if (ai && ai.setWebViewString) {
+        ai.setWebViewString(payload);
+      } else {
+        console.log('[→ App]', payload);
+      }
+    }
+
+    // App Inventor calls: WebViewer.RunJavaScript("handleAppResponse(JSON.stringify({...}))")
+    function handleAppResponse(json) {
+      if (!json) return;
+      lastWebViewString = json;
+      var msg;
+      try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch(e) {
+        // Not JSON — treat as raw FTMS bytes if it looks like numbers
+        if (typeof json === 'string' && /^\s*\d/.test(json)) {
+          ingestData(json.trim());
+        }
+        return;
+      }
+
+      switch (msg.action) {
+        case 'autoLogin':      doAutoLogin(msg);      break;
+        case 'scanResult':     onScanResult(msg);     break;
+        case 'connectResult':  onConnectResult(msg);  break;
+        case 'disconnected':   onDisconnected();      break;
+        case 'reconnected':    onReconnected();       break;
+        case 'ftmsData':       onFtmsData(msg);       break;
+        case 'saveAck':        onSaveAck();           break;
+        case 'uploadWorkout':  onUploadWorkout(msg);  break;
+        case 'tagCleared':     onTagCleared(msg);     break;
+        case 'goHome':         showHome();            break;
+        default: console.warn('Unknown action:', msg.action);
+      }
+    }
+    window.handleAppResponse = handleAppResponse;
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'shaderReady') {
+        document.getElementById('loading-overlay').classList.remove('visible');
+      }
+    });
+
+    // ── LOGIN ─────────────────────────────────────────────
+    function doAutoLogin(msg) {
+      if (!msg.token) return;
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success') {
+          appToken = msg.token;
+          appUsername = data.username;
+          document.getElementById('tbar-user').textContent = data.username;
+          showHome();
+        } else {
+          setLoginStatus('Session expired. Please log in again.');
+          show('screen-login');
+        }
+      })
+      .catch(function() {
+        goOffline();
+      });
+    }
+
+    function doLogin() {
+      var u = document.getElementById('username').value.trim();
+      var p = document.getElementById('password').value;
+      if (!u || !p) { setLoginStatus('Username and password required'); return; }
+      setLoginStatus('');
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+      fetchLogin(u, p);
+    }
+
+    function fetchLogin(u, p) {
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success' && data.token) {
+          appToken = data.token;
+          appUsername = u;
+          document.getElementById('tbar-user').textContent = u;
+          sendToApp('loginResult', { success: true, token: data.token, username: u });
+          showHome();
+        } else {
+          var err = (data && data.error) || 'Login failed';
+          setLoginStatus(err);
+          sendToApp('loginResult', { success: false, error: err });
+        }
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        console.error(e);
+        goOffline();
+      });
+    }
+
+    function setLoginStatus(msg) {
+      document.getElementById('login-status').textContent = msg;
+    }
+
+    function goScanWithoutLogin() {
+      document.getElementById('scan-idle').style.display = 'flex';
+      document.getElementById('scan-active').style.display = 'none';
+      show('screen-scan');
+    }
+
+    function startScan() {
+      show('screen-scan');
+      doScan();
+    }
+
+    function goOffline() {
+      sendToApp('loginResult', { success: false, offline: true });
+      show('screen-scan');
+      showOfflineBanner();
+    }
+
+    function showOfflineBanner() {
+      var existing = document.getElementById('offline-banner');
+      if (existing) return;
+      var banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1000;color:#886;' +
+        'font-size:11px;padding:6px 12px;text-align:center;border-top:1px solid #332200;z-index:50;';
+      banner.textContent = 'OFFLINE — workouts will be uploaded on next login';
+      document.body.appendChild(banner);
+    }
+
+    // ── HOME ──────────────────────────────────────────────
+    function showHome() {
+      var url = XESYNC_CONFIG.apexHomeUrl +
+                '?token=' + encodeURIComponent(appToken);
+      document.getElementById('home-frame').src = url;
+      show('screen-home');
+    }
+
+    // ── SCAN ──────────────────────────────────────────────
+    function doScan() {
+      document.getElementById('device-list').innerHTML = '';
+      document.getElementById('pulse-ring').style.display = '';
+      document.getElementById('scan-label').textContent = 'SCANNING...';
+      document.getElementById('scan-idle').style.display = 'none';
+      document.getElementById('scan-active').style.display = 'flex';
+      sendToApp('scan', {});
+    }
+
+    function onScanResult(msg) {
+      document.getElementById('pulse-ring').style.display = 'none';
+      document.getElementById('scan-label').textContent = 'SELECT ROWER';
+      var list = document.getElementById('device-list');
+      list.innerHTML = '';
+      var seen = {};
+      var devices = (msg.devices || []).reduce(function(acc, d) {
+        var parts = (d.id || '').trim().split(/\s+/);
+        var mac = parts[0];
+        if (!seen[mac]) { seen[mac] = true; acc.push({ id: mac, name: parts.slice(1).join(' ') || mac }); }
+        return acc;
+      }, []);
+      if (devices.length === 0) {
+        list.innerHTML = '<div class="empty-msg">No rower found</div>';
+        return;
+      }
+      devices.forEach(function(d) {
+        var item = document.createElement('div');
+        item.className = 'device-item';
+        item.innerHTML = '<span>' + escHtml(d.name) + '</span>' +
+                         '<span class="device-rssi">' + escHtml(d.id) + '</span>';
+        item.onclick = function() { doConnect(d); };
+        list.appendChild(item);
+      });
+    }
+
+    // ── CONNECT ───────────────────────────────────────────
+    function doConnect(device) {
+      document.getElementById('connecting-label').textContent = 'CONNECTING...';
+      show('screen-connecting');
+      sendToApp('connect', { deviceId: device.id, deviceName: device.name });
+    }
+
+    function onConnectResult(msg) {
+      if (msg.success) {
+        bleConnected = true;
+        document.getElementById('loading-overlay').classList.add('visible');
+        show('screen-rowing');
+        initRowing();
+        initFtmsTracking();
+      } else {
+        document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
+        setTimeout(function() { show('screen-scan'); }, 2000);
+      }
+    }
+
+    function onDisconnected() {
+      document.getElementById('reconnect-overlay').classList.add('visible');
+      sendToApp('reconnect', {});
+    }
+
+    function onReconnected() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+    }
+
+    function onSaveAck() {
+      showHome();
+    }
+
+    function onTagCleared(msg) {
+      console.log('[upload] tag cleared by AI2:', msg.workout);
+    }
+
+    function onUploadWorkout(msg) {
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token, workout: msg.workout, data: msg.data })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var row = Array.isArray(arr) ? arr[0] : arr;
+        if (row && row.status === 'success') {
+          sendToApp('uploadAck', { workout: msg.workout });
+        }
+      })
+      .catch(function() {});
+    }
+
+    function doGiveUp() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+      sendToApp('disconnect', {});
+      bleConnected = false;
+      goScanWithoutLogin();
+    }
+
+    function resumeRowing() {
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      // In debug mode, restart the simulator from t=0 for a fresh session.
+      if (inDebugMode) {
+        DebugSim.reset();
+        DebugSim.start();
+      }
+    }
+
+    function disconnectRower() {
+      if (inDebugMode) {
+        DebugSim.stop();
+        inDebugMode = false;
+      } else {
+        sendToApp('disconnect', {});
+      }
+      bleConnected = false;
+      // Refresh the top bar so the buttons hide
+      show('screen-home');
+    }
+
+    function onFtmsData(msg) {
+      console.log('[FTMS]', msg.data);
+      ingestData(msg.data);
+      if (XESYNC_CONFIG.logRawData) sendRawData(msg.data);
+    }
+
+    function sendRawData(data) {
+      var d = new Date();
+      var p = function(n, w) { return String(n).padStart(w || 2, '0'); };
+      var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
+                    p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
+                    p(d.getMilliseconds(), 3);
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/log_rawdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr, data: data })
+      })
+      .then(function(r) { return r.text().then(function(t) { console.log('[FTMS raw]', r.status, t); }); })
+      .catch(function(e) { console.warn('[FTMS raw] fetch error:', e.message); });
+    }
+
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash.indexOf('#data=') === 0) {
+        ingestData(null);
+      }
+    });
+
+    // ── UTILS ─────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+  </script>
+  <script>
+/**
+ * Realistic FTMS session generator for DEBUG mode.
+ *
+ * Produces a 30-second workout with a smooth effort curve:
+ *   0–5s   warm-up   (SPM 14 → 24, watts 40 → 130)
+ *   5–25s  steady    (SPM 24–28, watts 130–180, slight variation)
+ *   25–30s cool-down (SPM 24 → 0, watts 130 → 0)
+ *   30s+   idle      (spm=0) so the inactivity watchdog ends the session
+ *
+ * Cumulative counters (distance, strokes, cals, elapsed time) grow monotonically
+ * and reset to 0 when the simulator is reset.
+ *
+ * Packets are emitted every 500 ms through handleAppResponse(),
+ * exactly like real BLE traffic from App Inventor.
+ */
+var DebugSim = (function () {
+  'use strict';
+
+  var SESSION_SECONDS = 30;
+  var WARMUP_END      = 5;
+  var EFFORT_END      = 25;
+  var TICK_MS         = 500;
+  var TAIL_IDLE_MS    = 8000;   // emit spm=0 for this long after session end
+
+  var timerId = null;
+  var startMs = 0;
+  var lastEmit = null;
+
+  // Cumulative state — grows over the session
+  var distance = 0;     // meters
+  var strokes = 0;
+  var cals = 0;
+  var lastStrokeT = -1;
+
+  // Smooth interpolation helpers
+  function smoothstep(t) { return t * t * (3 - 2 * t); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  /**
+   * Returns the rower's state at time t (seconds since session start).
+   *   spm   : strokes per minute (0 when idle / cooled down)
+   *   watts : instantaneous power
+   *   paceS : pace in seconds per 500m (0 when idle)
+   *   speed : meters per second (for distance integration)
+   */
+  function profile(t) {
+    if (t < 0) return { spm: 0, watts: 0, paceS: 0, speed: 0 };
+
+    if (t < WARMUP_END) {
+      var w = smoothstep(t / WARMUP_END);
+      var spm = lerp(14, 24, w);
+      var watts = lerp(40, 130, w);
+      var speed = lerp(1.2, 3.0, w);
+      return { spm: spm, watts: watts, paceS: 500 / speed, speed: speed };
+    }
+
+    if (t < EFFORT_END) {
+      // Steady effort with mild sinusoidal variation
+      var phase = (t - WARMUP_END) / (EFFORT_END - WARMUP_END);
+      var wobble = Math.sin(phase * Math.PI * 4) * 0.5 + Math.sin(phase * Math.PI * 7) * 0.3;
+      var spm = 26 + wobble;
+      var watts = 160 + wobble * 20;
+      var speed = 3.3 + wobble * 0.15;
+      return { spm: spm, watts: watts, paceS: 500 / speed, speed: speed };
+    }
+
+    if (t < SESSION_SECONDS) {
+      var c = smoothstep((t - EFFORT_END) / (SESSION_SECONDS - EFFORT_END));
+      var spm = lerp(24, 0, c);
+      var watts = lerp(130, 0, c);
+      var speed = lerp(3.0, 0.3, c);
+      return { spm: spm, watts: watts, paceS: speed > 0 ? 500 / speed : 0, speed: speed };
+    }
+
+    return { spm: 0, watts: 0, paceS: 0, speed: 0 };
+  }
+
+  /**
+   * Encode a 20-byte FTMS packet using Xebex's high*255 + low convention.
+   * Field layout (1-indexed bytes, matches ftms_integration.js parsePacket):
+   *   byte 3              : SPM * 2          (so half-integer SPM works)
+   *   bytes 4–5  (lo,hi)  : strokes
+   *   bytes 6–7  (lo,hi)  : distance (m)
+   *   bytes 9–10 (lo,hi)  : pace (s/500m)
+   *   bytes 11–12 (lo,hi) : watts
+   *   bytes 13–14 (lo,hi) : calories
+   *   byte 17             : heart rate (255 = no sensor)
+   *   bytes 19–20 (lo,hi) : elapsed time (s)
+   */
+  function encode(p, elapsedS) {
+    var b = new Array(20);
+    for (var i = 0; i < 20; i++) b[i] = 0;
+
+    var u16 = function (val, hiIdx, loIdx) {
+      val = Math.max(0, Math.round(val));
+      b[hiIdx - 1] = Math.floor(val / 255);
+      b[loIdx - 1] = val % 255;
+    };
+
+    b[0] = 44;
+    b[1] = 11;
+    b[2] = Math.max(0, Math.round(p.spm * 2));   // SPM * 2 (matches parser's *0.5)
+    u16(strokes,            5, 4);
+    u16(distance,           7, 6);
+    u16(Math.round(p.paceS), 10, 9);
+    u16(Math.round(p.watts), 12, 11);
+    u16(cals,              14, 13);
+    b[16] = 255;                                 // HR: no sensor
+    u16(Math.round(elapsedS), 20, 19);
+
+    return b.join(', ');
+  }
+
+  function tick() {
+    var now = Date.now();
+    var t = (now - startMs) / 1000;
+    var p = profile(t);
+
+    // Integrate distance over time using actual elapsed (handles tick jitter)
+    if (lastEmit !== null) {
+      var dt = (now - lastEmit) / 1000;
+      var prev = profile((lastEmit - startMs) / 1000);
+      distance += ((prev.speed + p.speed) / 2) * dt;
+    }
+    lastEmit = now;
+
+    // Strokes: count one each time t crosses an integer multiple of (60/spm)
+    if (p.spm > 0) {
+      var strokeInterval = 60 / p.spm;
+      while (lastStrokeT + strokeInterval <= t) {
+        lastStrokeT += strokeInterval;
+        strokes++;
+      }
+    }
+
+    // Calories: rough estimate — 1 cal per 10 watt-seconds
+    cals += (p.watts * (TICK_MS / 1000)) / 1000;
+
+    var packet = encode(p, t);
+    if (typeof handleAppResponse === 'function') {
+      handleAppResponse(JSON.stringify({ action: 'ftmsData', data: packet }));
+    }
+
+    // Auto-stop after the tail idle period (so the watchdog has time to fire)
+    if (t > SESSION_SECONDS + (TAIL_IDLE_MS / 1000)) {
+      stop();
+    }
+  }
+
+  function start() {
+    if (timerId) return;
+    startMs = Date.now();
+    lastEmit = null;
+    lastStrokeT = 0;
+    timerId = setInterval(tick, TICK_MS);
+  }
+
+  function stop() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function reset() {
+    stop();
+    distance = 0;
+    strokes = 0;
+    cals = 0;
+    lastStrokeT = -1;
+    lastEmit = null;
+  }
+
+  function isActive() { return timerId !== null; }
+
+  return {
+    start:    start,
+    stop:     stop,
+    reset:    reset,
+    isActive: isActive
+  };
+})();
+</script>
+</body>
+</html>

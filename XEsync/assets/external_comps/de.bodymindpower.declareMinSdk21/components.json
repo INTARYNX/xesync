@@ -1,0 +1,24 @@
+[{
+ "categoryString": "EXTENSION",
+ "dateBuilt": "2022-05-19T03:59:24+0000",
+ "nonVisible": "true",
+ "iconName": "https://bodymindpower.de/temp/BMP_icon.png",
+ "methods": [],
+ "blockProperties": [{
+  "rw": "read-only",
+  "deprecated": "false",
+  "name": "SdkVersion",
+  "description": "Get the API Level of the device.",
+  "type": "number"
+ }],
+ "helpUrl": "",
+ "type": "de.bodymindpower.declareMinSdk21.declareMinSdk21",
+ "androidMinSdk": 21,
+ "version": "1",
+ "external": "true",
+ "showOnPalette": "true",
+ "name": "declareMinSdk21",
+ "helpString": "Declare minSdkVersion=21 in the Manifest. <br>Get the API level.",
+ "properties": [],
+ "events": []
+}]
