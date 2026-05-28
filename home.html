@@ -10,12 +10,14 @@
 <body class="rowing-dashboard">
 
   <div id="status" class="status-msg">Loading…</div>
+  <div id="summary"></div>
   <div id="dashboard" class="dashboard-container"></div>
 
   <script>
     (function () {
-      var statusEl = document.getElementById('status');
-      var dashEl   = document.getElementById('dashboard');
+      var statusEl  = document.getElementById('status');
+      var summaryEl = document.getElementById('summary');
+      var dashEl    = document.getElementById('dashboard');
       var inIframe = window.parent && window.parent !== window;
       var hToken   = inIframe ? null : localStorage.getItem('xesync_token');
 
@@ -93,6 +95,51 @@
         }
       }
 
+      function renderSummary(rows) {
+        var now = new Date();
+        var startOfWeek = new Date(now);
+        startOfWeek.setHours(0,0,0,0);
+        var day = (startOfWeek.getDay() + 6) % 7; // Monday=0
+        startOfWeek.setDate(startOfWeek.getDate() - day);
+
+        var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        var startOfYear  = new Date(now.getFullYear(), 0, 1);
+
+        var buckets = {
+          week:  { dist: 0, dur: 0, count: 0 },
+          month: { dist: 0, dur: 0, count: 0 },
+          year:  { dist: 0, dur: 0, count: 0 }
+        };
+
+        rows.forEach(function (w) {
+          var d = new Date(w.workout_date);
+          var dist = w.distance_m || 0;
+          var dur  = w.duration_sec || 0;
+          if (d >= startOfWeek)  { buckets.week.dist  += dist; buckets.week.dur  += dur; buckets.week.count++;  }
+          if (d >= startOfMonth) { buckets.month.dist += dist; buckets.month.dur += dur; buckets.month.count++; }
+          if (d >= startOfYear)  { buckets.year.dist  += dist; buckets.year.dur  += dur; buckets.year.count++;  }
+        });
+
+        function block(label, b) {
+          return ''
+            + '<div class="summary-block">'
+            +   '<div class="summary-label">' + label + '</div>'
+            +   '<div class="summary-stats">'
+            +     '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
+            +     '<span>' + fmtDuration(b.dur) + '</span>'
+            +     '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
+            +   '</div>'
+            + '</div>';
+        }
+
+        summaryEl.innerHTML = ''
+          + '<div class="summary-container">'
+          +   block('This week',  buckets.week)
+          +   block('This month', buckets.month)
+          +   block('This year',  buckets.year)
+          + '</div>';
+      }
+
       function load() {
         if (!hToken) {
           if (inIframe) {
@@ -120,6 +167,7 @@
             return;
           }
           setStatus('');
+          renderSummary(rows);
           dashEl.innerHTML = rows.map(renderCard).join('');
         })
         .catch(function (err) {
