@@ -132,7 +132,16 @@
             + '</div>';
         }
 
+        function encouragement(week) {
+          if (week.count === 0) return 'Ready when you are.';
+          if (week.count === 1) return 'Nice start to the week.';
+          if (week.count <= 3)  return 'Good progress.';
+          if (week.count <= 5)  return 'Strong week.';
+          return 'Excellent consistency.';
+        }
+
         summaryEl.innerHTML = ''
+          + '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
           + '<div class="summary-container">'
           +   block('This week',  buckets.week)
           +   block('This month', buckets.month)

@@ -22,6 +22,14 @@ body.rowing-dashboard {
   padding: 2rem 0;
 }
 
+.summary-message {
+  text-align: center;
+  font-size: 1em;
+  letter-spacing: 0.15em;
+  color: #4a8;
+  margin-bottom: 1rem;
+}
+
 .summary-container {
   display: flex;
   flex-wrap: wrap;
