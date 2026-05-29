@@ -125,7 +125,7 @@
           var w = Array.isArray(arr) ? arr[0] : arr;
           if (!w) { title.textContent = 'Workout not found'; return; }
           title.textContent = fmtDate(w.workout_date);
-          renderCharts(body, w.samples || []);
+          renderCharts(body, w);
         })
         .catch(function (e) { title.textContent = 'Error: ' + e.message; });
       };
@@ -136,48 +136,113 @@
       };
 
       // Samples tuples: [time, distance, spm, watts, hr, pace]
-      function renderCharts(container, samples) {
+      function renderCharts(container, w) {
+        var samples = w.samples || [];
+        var summaryHtml = ''
+          + '<div class="modal-summary">'
+          +   tile('Distance',   (w.distance_m || 0) + ' m', true)
+          +   tile('Time',       fmtDuration(w.duration_sec))
+          +   tile('Pace',       fmtPace(w.avg_pace_sec), true)
+          +   tile('Watts',      w.avg_watts || 0)
+          +   tile('SPM',        w.avg_spm || 0)
+          +   tile('Heart Rate', w.avg_hr || 0)
+          +   tile('Strokes',    w.total_strokes || 0)
+          +   tile('Calories',   w.calories || 0)
+          + '</div>';
+
         if (!samples.length) {
-          container.innerHTML = '<div class="status-msg">No sample data.</div>';
+          container.innerHTML = summaryHtml + '<div class="status-msg">No sample data.</div>';
           return;
         }
+
         var charts = [
-          { title: 'Pace (s/500m)',  idx: 5, color: '#4a8',  invert: true  },
-          { title: 'Watts',          idx: 3, color: '#fa3',  invert: false },
-          { title: 'SPM',            idx: 2, color: '#6cf',  invert: false },
-          { title: 'Heart Rate',     idx: 4, color: '#f55',  invert: false },
-          { title: 'Distance (m)',   idx: 1, color: '#aaa',  invert: false }
+          { title: 'Pace',       idx: 5, color: '#4a8', avg: w.avg_pace_sec, fmt: fmtPace, unit: '/500m' },
+          { title: 'Watts',      idx: 3, color: '#fa3', avg: w.avg_watts,    fmt: function(v){ return Math.round(v); }, unit: 'W' },
+          { title: 'SPM',        idx: 2, color: '#6cf', avg: w.avg_spm,      fmt: function(v){ return (+v).toFixed(1); }, unit: '' },
+          { title: 'Heart Rate', idx: 4, color: '#f55', avg: w.avg_hr,       fmt: function(v){ return Math.round(v); }, unit: 'bpm' }
         ];
-        container.innerHTML = charts.map(function (c) {
-          return '<div class="chart-wrap"><div class="chart-title">' + c.title + '</div>'
-               + svgChart(samples, c.idx, c.color) + '</div>';
-        }).join('');
+
+        container.innerHTML = summaryHtml
+          + '<div class="charts-grid">'
+          + charts.map(function (c) {
+              var avgDisp = c.avg != null ? c.fmt(c.avg) + ' ' + c.unit : '';
+              return '<div class="chart-wrap">'
+                + '<div class="chart-title">' + c.title + '</div>'
+                + '<div class="chart-current" style="color:' + c.color + '">' + avgDisp + '</div>'
+                + svgChart(samples, c.idx, c.color)
+                + '</div>';
+            }).join('')
+          + '</div>';
+
+        function tile(label, value, accent) {
+          return '<div class="modal-summary-tile' + (accent ? ' accent' : '') + '">'
+            +    '<div class="modal-summary-label">' + label + '</div>'
+            +    '<div class="modal-summary-value">' + value + '</div>'
+            +  '</div>';
+        }
       }
 
       function svgChart(samples, idx, color) {
-        var W = 600, H = 120, pad = 24;
+        var W = 600, H = 160, padL = 36, padR = 12, padT = 14, padB = 22;
         var n = samples.length;
         var xs = samples.map(function (s) { return +s[0]; });
         var ys = samples.map(function (s) { return s[idx] == null ? 0 : +s[idx]; });
         var xMin = xs[0], xMax = xs[n - 1];
         var yMin = Math.min.apply(null, ys);
         var yMax = Math.max.apply(null, ys);
-        if (yMin === yMax) { yMin -= 1; yMax += 1; }
+        // Pad y-range so the line never touches the edges
+        var yPad = (yMax - yMin) * 0.12 || 1;
+        yMin -= yPad; yMax += yPad;
 
-        var sx = function (x) { return pad + (x - xMin) / (xMax - xMin || 1) * (W - pad * 2); };
-        var sy = function (y) { return H - pad - (y - yMin) / (yMax - yMin) * (H - pad * 2); };
+        var sx = function (x) { return padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR); };
+        var sy = function (y) { return H - padB - (y - yMin) / (yMax - yMin || 1) * (H - padT - padB); };
 
-        var d = '';
-        for (var i = 0; i < n; i++) {
-          d += (i === 0 ? 'M' : 'L') + sx(xs[i]).toFixed(1) + ',' + sy(ys[i]).toFixed(1) + ' ';
+        // Build smoothed path using cubic bezier (Catmull-Rom-ish)
+        var pts = [];
+        for (var i = 0; i < n; i++) pts.push([sx(xs[i]), sy(ys[i])]);
+
+        var d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
+        for (var i = 0; i < pts.length - 1; i++) {
+          var p0 = pts[i - 1] || pts[i];
+          var p1 = pts[i];
+          var p2 = pts[i + 1];
+          var p3 = pts[i + 2] || p2;
+          var cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+          var cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+          var cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+          var cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+          d += ' C' + cp1x.toFixed(1) + ',' + cp1y.toFixed(1)
+             + ' '  + cp2x.toFixed(1) + ',' + cp2y.toFixed(1)
+             + ' '  + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
         }
-        var minLbl = Math.round(yMin), maxLbl = Math.round(yMax);
-        return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg">'
-             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>'
-             + '<text x="4" y="14" class="chart-label">' + maxLbl + '</text>'
-             + '<text x="4" y="' + (H - 6) + '" class="chart-label">' + minLbl + '</text>'
-             + '<text x="' + (W - 4) + '" y="' + (H - 6) + '" class="chart-label" text-anchor="end">'
-             + fmtDuration(xMax) + '</text>'
+
+        var fillD = d + ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + (H - padB)
+                      + ' L' + pts[0][0].toFixed(1) + ',' + (H - padB) + ' Z';
+
+        var gradId = 'grad_' + idx + '_' + Math.floor(Math.random() * 1e6);
+        var ticksY = 3;
+        var yTicks = '';
+        for (var k = 0; k <= ticksY; k++) {
+          var v  = yMin + (yMax - yMin) * (k / ticksY);
+          var yp = sy(v).toFixed(1);
+          yTicks += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yp + '" y2="' + yp
+                  + '" stroke="#1a1a1a" stroke-width="1"/>'
+                  + '<text x="' + (padL - 5) + '" y="' + (parseFloat(yp) + 3)
+                  + '" text-anchor="end" class="chart-label">' + Math.round(v) + '</text>';
+        }
+
+        return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
+             + '<defs><linearGradient id="' + gradId + '" x1="0" x2="0" y1="0" y2="1">'
+             +   '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.5"/>'
+             +   '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
+             + '</linearGradient></defs>'
+             + yTicks
+             + '<path d="' + fillD + '" fill="url(#' + gradId + ')"/>'
+             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2"'
+             +       ' stroke-linejoin="round" stroke-linecap="round"/>'
+             + '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end" class="chart-label">'
+             +   fmtDuration(xMax) + '</text>'
+             + '<text x="' + padL + '" y="' + (H - 6) + '" class="chart-label">0:00</text>'
              + '</svg>';
       }
 
