@@ -211,7 +211,12 @@
 
     // ── LOGIN ─────────────────────────────────────────────
     function doAutoLogin(msg) {
-      if (!msg.token) return;
+      console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
+      if (!msg.token) {
+        setLoginStatus('No token from app');
+        return;
+      }
+      setLoginStatus('Validating session...');
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,17 +225,21 @@
       .then(function(r) { return r.json(); })
       .then(function(arr) {
         var data = Array.isArray(arr) ? arr[0] : arr;
+        console.log('[autoLogin] validate response:', data);
         if (data && data.status === 'success') {
           appToken = msg.token;
           appUsername = data.username;
           document.getElementById('tbar-user').textContent = data.username;
+          setLoginStatus('');
           showHome();
         } else {
-          setLoginStatus('Session expired. Please log in again.');
+          setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
           show('screen-login');
         }
       })
-      .catch(function() {
+      .catch(function(e) {
+        console.warn('[autoLogin] error:', e);
+        setLoginStatus('Network error: ' + e.message);
         goOffline();
       });
     }
