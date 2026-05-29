@@ -65,6 +65,17 @@
     </div>
   </div>
 
+  <!-- ── EXIT CONFIRM ───────────────────────────────────── -->
+  <div id="exit-confirm" class="ftms-overlay">
+    <div class="ftms-overlay-title">EXIT</div>
+    <div class="ftms-overlay-subtitle">what would you like to do?</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn"         onclick="doLogoff()">LOG OFF</button>
+      <button class="ftms-btn primary" onclick="doQuit()">QUIT APP</button>
+      <button class="ftms-btn secondary" onclick="hideExitConfirm()">CANCEL</button>
+    </div>
+  </div>
+
 
   <script>
     var appToken = null;
@@ -120,6 +131,15 @@
         sendToApp('exit', {});
         return;
       }
+      document.getElementById('exit-confirm').classList.add('visible');
+    }
+
+    function hideExitConfirm() {
+      document.getElementById('exit-confirm').classList.remove('visible');
+    }
+
+    function doLogoff() {
+      hideExitConfirm();
       appToken = null;
       appUsername = null;
       bleConnected = false;
@@ -128,6 +148,11 @@
       document.getElementById('tbar-user').textContent = '';
       document.getElementById('password').value = '';
       show('screen-login');
+    }
+
+    function doQuit() {
+      hideExitConfirm();
+      sendToApp('exit', {});
     }
 
     // ── APP INVENTOR BRIDGE ───────────────────────────────
