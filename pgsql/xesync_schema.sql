@@ -684,6 +684,63 @@ $$;
 
 
 -- ============================================================================
+-- GET WORKOUT DETAIL
+-- Returns the full sample list for a single workout owned by the token's user.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION xesync.get_workout(token TEXT, workout TEXT)
+RETURNS TABLE (
+    workout_id      TEXT,
+    workout_date    TIMESTAMPTZ,
+    duration_sec    INTEGER,
+    distance_m      INTEGER,
+    total_strokes   INTEGER,
+    calories        INTEGER,
+    avg_spm         NUMERIC,
+    avg_pace_sec    INTEGER,
+    avg_watts       INTEGER,
+    avg_hr          INTEGER,
+    samples         JSONB
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+BEGIN
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        w.workout_id::TEXT,
+        w.workout_date,
+        w.duration_sec,
+        w.distance_m,
+        w.total_strokes,
+        w.calories,
+        w.avg_spm,
+        w.avg_pace_sec,
+        w.avg_watts,
+        w.avg_hr,
+        COALESCE(
+          (SELECT jsonb_agg(jsonb_build_array(
+              s.time_sec, s.distance_m, s.spm, s.watts, s.heartrate, s.pace_sec
+            ) ORDER BY s.stroke_number)
+           FROM xesync.workout_strokes s
+           WHERE s.workout_id = w.workout_id),
+          '[]'::jsonb
+        ) AS samples
+    FROM xesync.workouts w
+    WHERE w.user_id    = v_user_id
+      AND w.workout_id = get_workout.workout;
+END;
+$$;
+
+-- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
 
@@ -697,6 +754,7 @@ REVOKE ALL ON FUNCTION xesync.log_rawdata(TEXT, TEXT)         FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.verify_email(TEXT)              FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.resend_verification(TEXT)       FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.get_workout(TEXT, TEXT) 		  FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION xesync.login(TEXT, TEXT)               TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.validate_token(TEXT)            TO web_anon;
@@ -706,9 +764,13 @@ GRANT EXECUTE ON FUNCTION xesync.log_rawdata(TEXT, TEXT)         TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.verify_email(TEXT)              TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.resend_verification(TEXT)       TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)         TO web_anon;
 
 REVOKE ALL ON FUNCTION xesync.create_user(TEXT, TEXT)                      FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.reset_password(TEXT, TEXT)                   FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.email_queue_claim(INTEGER)                   FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.email_queue_mark_sent(BIGINT)                FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.email_queue_mark_failed(BIGINT, TEXT)        FROM PUBLIC;
+
+
+

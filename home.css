@@ -91,6 +91,88 @@ body.rowing-dashboard {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.rowing-card:hover {
+  border-color: #4a8;
+  background: #161616;
+}
+
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-backdrop.visible {
+  display: flex;
+}
+
+.modal-content {
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.2rem;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #4a8;
+  letter-spacing: 0.12em;
+  font-size: 0.95em;
+  border-bottom: 1px solid #1a1a1a;
+  padding-bottom: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.8em;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.4rem;
+}
+
+.modal-close:hover { color: #fff; }
+
+.chart-wrap {
+  margin-bottom: 1rem;
+}
+
+.chart-title {
+  font-size: 0.75em;
+  letter-spacing: 0.12em;
+  color: #888;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  background: #111;
+  border: 1px solid #1a1a1a;
+  display: block;
+}
+
+.chart-label {
+  fill: #555;
+  font-size: 10px;
+  font-family: "DotGothic16", monospace;
 }
 
 .card-header {

@@ -13,6 +13,16 @@
   <div id="summary"></div>
   <div id="dashboard" class="dashboard-container"></div>
 
+  <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span id="modal-title"></span>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var statusEl  = document.getElementById('status');
@@ -64,7 +74,7 @@
 
       function renderCard(w) {
         return ''
-          + '<div class="rowing-card">'
+          + '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
           +   '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
           +   '<div class="card-stats">'
           +     stat('Distance',   (w.distance_m || 0) + 'm')
@@ -93,6 +103,82 @@
           localStorage.removeItem('xesync_token');
           window.location.href = 'login.html';
         }
+      }
+
+      // Expose modal helpers to inline onclicks
+      window.openWorkout = function (id) {
+        if (!hToken) return;
+        var modal = document.getElementById('workout-modal');
+        var body  = document.getElementById('modal-body');
+        var title = document.getElementById('modal-title');
+        title.textContent = 'Loading…';
+        body.innerHTML = '';
+        modal.classList.add('visible');
+
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/get_workout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: hToken, workout: id })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (arr) {
+          var w = Array.isArray(arr) ? arr[0] : arr;
+          if (!w) { title.textContent = 'Workout not found'; return; }
+          title.textContent = fmtDate(w.workout_date);
+          renderCharts(body, w.samples || []);
+        })
+        .catch(function (e) { title.textContent = 'Error: ' + e.message; });
+      };
+
+      window.closeModal = function (e) {
+        if (e && e.target.id !== 'workout-modal' && e.type === 'click' && e.target !== e.currentTarget) return;
+        document.getElementById('workout-modal').classList.remove('visible');
+      };
+
+      // Samples tuples: [time, distance, spm, watts, hr, pace]
+      function renderCharts(container, samples) {
+        if (!samples.length) {
+          container.innerHTML = '<div class="status-msg">No sample data.</div>';
+          return;
+        }
+        var charts = [
+          { title: 'Pace (s/500m)',  idx: 5, color: '#4a8',  invert: true  },
+          { title: 'Watts',          idx: 3, color: '#fa3',  invert: false },
+          { title: 'SPM',            idx: 2, color: '#6cf',  invert: false },
+          { title: 'Heart Rate',     idx: 4, color: '#f55',  invert: false },
+          { title: 'Distance (m)',   idx: 1, color: '#aaa',  invert: false }
+        ];
+        container.innerHTML = charts.map(function (c) {
+          return '<div class="chart-wrap"><div class="chart-title">' + c.title + '</div>'
+               + svgChart(samples, c.idx, c.color) + '</div>';
+        }).join('');
+      }
+
+      function svgChart(samples, idx, color) {
+        var W = 600, H = 120, pad = 24;
+        var n = samples.length;
+        var xs = samples.map(function (s) { return +s[0]; });
+        var ys = samples.map(function (s) { return s[idx] == null ? 0 : +s[idx]; });
+        var xMin = xs[0], xMax = xs[n - 1];
+        var yMin = Math.min.apply(null, ys);
+        var yMax = Math.max.apply(null, ys);
+        if (yMin === yMax) { yMin -= 1; yMax += 1; }
+
+        var sx = function (x) { return pad + (x - xMin) / (xMax - xMin || 1) * (W - pad * 2); };
+        var sy = function (y) { return H - pad - (y - yMin) / (yMax - yMin) * (H - pad * 2); };
+
+        var d = '';
+        for (var i = 0; i < n; i++) {
+          d += (i === 0 ? 'M' : 'L') + sx(xs[i]).toFixed(1) + ',' + sy(ys[i]).toFixed(1) + ' ';
+        }
+        var minLbl = Math.round(yMin), maxLbl = Math.round(yMax);
+        return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg">'
+             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>'
+             + '<text x="4" y="14" class="chart-label">' + maxLbl + '</text>'
+             + '<text x="4" y="' + (H - 6) + '" class="chart-label">' + minLbl + '</text>'
+             + '<text x="' + (W - 4) + '" y="' + (H - 6) + '" class="chart-label" text-anchor="end">'
+             + fmtDuration(xMax) + '</text>'
+             + '</svg>';
       }
 
       function renderSummary(rows) {
