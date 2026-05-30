@@ -16,6 +16,11 @@ var RowingAnimation = (function() {
     // Fast rowing (90s/500m) ≈ 4.4, normal (120s) ≈ 3.3, slow (180s) ≈ 2.2
     var SPEED_NORMALIZE = 5.0;
 
+    // Wrap values to keep float precision good on mobile GPUs.
+    // 120s matches the day-cycle period, so day-cycle wrap is seamless.
+    var TIME_WRAP = 120.0;
+    var FLOW_WRAP = 1000.0;
+
     function compile(type, src) {
         var sh = gl.createShader(type);
         gl.shaderSource(sh, src);
@@ -45,13 +50,20 @@ var RowingAnimation = (function() {
         lastT = now;
 
         flow -= dt * currentSpeed * 0.26;
+        // Keep flow bounded so noise/hash stays in a precise range
+        if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
+        if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
+
         animPhase = (animPhase + dt * currentSpm / 60.0) % 1.0;
 
         var renderPhase = animPhase < 1.0 / 3.0
             ? animPhase * 1.5
             : 0.5 + (animPhase - 1.0 / 3.0) * 0.75;
 
-        gl.uniform1f(uniforms.uTime,   now - t0);
+        // Wrap u_time to TIME_WRAP (matches day cycle, so wrap is seamless)
+        var timeWrapped = (now - t0) % TIME_WRAP;
+
+        gl.uniform1f(uniforms.uTime,   timeWrapped);
         gl.uniform1f(uniforms.uSpeed,  currentSpeed);
         gl.uniform1f(uniforms.uFlow,   flow);
         gl.uniform1f(uniforms.uPhase,  renderPhase);

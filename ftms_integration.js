@@ -22,7 +22,7 @@
   var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is PAUSED
   var INACTIVITY_TICK  = 500;    // how often to check for inactivity (ms)
   var INITIAL_PACE     = 150;    // s/500m when we have no real pace yet
-  var PACE_EMA_ALPHA   = 0.3;    // new-sample weight in exponential smoothing
+  var PACE_EMA_ALPHA   = 0.1;    // new-sample weight in exponential smoothing
   var DEBUG            = false;
 
   // ─────────────────────────────────────────────────────────────────────

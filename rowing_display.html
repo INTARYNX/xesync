@@ -93,18 +93,27 @@
     uniform float u_scale;
     uniform float u_aspect;
 
+    // Wrap large coordinates before feeding them into hash/noise so float
+    // precision stays usable on mobile GPUs over long sessions.
+    vec2 wrapCoord(vec2 p) {
+      return mod(p, 1024.0);
+    }
+
     float hash(vec2 p){
+      p = wrapCoord(p);
       p = fract(p * vec2(123.34, 456.21));
       p += dot(p, p + 45.32);
       return fract(p.x * p.y);
     }
     float noise(vec2 p){
+      p = wrapCoord(p);
       vec2 i = floor(p), f = fract(p);
       vec2 u = f*f*f*(f*(f*6.0-15.0)+10.0);
       return mix(mix(hash(i),           hash(i+vec2(1,0)), u.x),
                  mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
     }
     float fbm(vec2 p){
+      p = wrapCoord(p);
       float v = 0.0, a = 0.5;
       for(int i=0;i<6;i++){ v += a*noise(p); p = p*2.03 + 17.0; a *= 0.5; }
       return v;
@@ -830,13 +839,14 @@
       if (rainIntensity > 0.01) {
         for (int ri = 0; ri < 3; ri++) {
           float rfi = float(ri);
-          float rainScroll = u_time * (8.0 + rfi * 4.0);
+          float rainScroll = mod(u_time * (8.0 + rfi * 4.0), 1024.0);
           float rainDensity = mix(40.0, 80.0, rfi * 0.5);
           vec2 rainUV = vec2(u + y * 0.15, y);
           rainUV.x = rainUV.x * rainDensity + rfi * 17.0;
           rainUV.y = rainUV.y * (rainDensity * 0.4) + rainScroll;
-          float cellX = floor(rainUV.x);
-          float cellY = floor(rainUV.y);
+          vec2 cellPos = wrapCoord(rainUV);
+          float cellX = floor(cellPos.x);
+          float cellY = floor(cellPos.y);
           float h = hash(vec2(cellX, cellY));
           vec2 localR = fract(rainUV) - vec2(0.5, 0.5);
           float dropD = max(abs(localR.x) - 0.05, abs(localR.y) - 0.30);
