@@ -13,6 +13,39 @@
   <div id="summary"></div>
   <div id="dashboard" class="dashboard-container"></div>
 
+  <button id="account-toggle" onclick="toggleAccount()">⚙</button>
+
+  <div id="account-panel">
+    <div class="account-header">
+      MANAGE ACCOUNT
+      <button class="account-close" onclick="toggleAccount()">×</button>
+    </div>
+
+    <div class="account-section">
+      <div class="account-section-title">Export your data</div>
+      <div class="account-help">Download all your account data and workouts as a JSON file.</div>
+      <button class="account-btn" onclick="exportAccount()">Download my data</button>
+      <div class="account-msg" id="exp-msg"></div>
+    </div>
+
+    <div class="account-section">
+      <div class="account-section-title">Change password</div>
+      <input type="password" id="cp-old" placeholder="current password">
+      <input type="password" id="cp-new" placeholder="new password (min 8)">
+      <input type="password" id="cp-new2" placeholder="confirm new password">
+      <button class="account-btn" onclick="changePassword()">Update password</button>
+      <div class="account-msg" id="cp-msg"></div>
+    </div>
+
+    <div class="account-section">
+      <div class="account-section-title danger">Delete account</div>
+      <div class="account-help">This permanently deletes your account and all workouts. Cannot be undone.</div>
+      <input type="password" id="del-pwd" placeholder="confirm with your password">
+      <button class="account-btn danger" onclick="deleteAccount()">Delete my account</button>
+      <div class="account-msg" id="del-msg"></div>
+    </div>
+  </div>
+
   <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
     <div class="modal-content" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -134,6 +167,112 @@
         if (e && e.target.id !== 'workout-modal' && e.type === 'click' && e.target !== e.currentTarget) return;
         document.getElementById('workout-modal').classList.remove('visible');
       };
+
+      window.exportAccount = function () {
+        var msg = document.getElementById('exp-msg');
+        msg.className = 'account-msg';
+        msg.textContent = '';
+        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
+        acctMsg(msg, 'Preparing export…', true);
+
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/export_account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: hToken })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (arr) {
+          var row = Array.isArray(arr) ? arr[0] : arr;
+          if (row && row.status === 'success' && row.data) {
+            var blob = new Blob([JSON.stringify(row.data, null, 2)], { type: 'application/json' });
+            var url  = URL.createObjectURL(blob);
+            var d    = new Date();
+            var pad  = function (n) { return n < 10 ? '0' + n : n; };
+            var name = 'xesync_export_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
+            var a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+            acctMsg(msg, 'Downloaded ' + name, true);
+          } else {
+            acctMsg(msg, (row && row.error) || 'Export failed', false);
+          }
+        })
+        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
+      };
+
+      window.toggleAccount = function () {
+        document.getElementById('account-panel').classList.toggle('open');
+      };
+
+      window.changePassword = function () {
+        var oldP = document.getElementById('cp-old').value;
+        var newP = document.getElementById('cp-new').value;
+        var newP2 = document.getElementById('cp-new2').value;
+        var msg = document.getElementById('cp-msg');
+        msg.className = 'account-msg';
+        msg.textContent = '';
+        if (!oldP || !newP) { acctMsg(msg, 'Fill all fields', false); return; }
+        if (newP.length < 8) { acctMsg(msg, 'New password must be at least 8 chars', false); return; }
+        if (newP !== newP2) { acctMsg(msg, 'Passwords do not match', false); return; }
+        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
+
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/change_password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: hToken, old_password: oldP, new_password: newP })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (arr) {
+          var row = Array.isArray(arr) ? arr[0] : arr;
+          if (row && row.status === 'success') {
+            acctMsg(msg, 'Password updated', true);
+            document.getElementById('cp-old').value = '';
+            document.getElementById('cp-new').value = '';
+            document.getElementById('cp-new2').value = '';
+          } else {
+            acctMsg(msg, (row && row.error) || 'Failed', false);
+          }
+        })
+        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
+      };
+
+      window.deleteAccount = function () {
+        var pwd = document.getElementById('del-pwd').value;
+        var msg = document.getElementById('del-msg');
+        msg.className = 'account-msg';
+        msg.textContent = '';
+        if (!pwd) { acctMsg(msg, 'Enter your password to confirm', false); return; }
+        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
+        if (!confirm('Permanently delete your account and all workouts? This cannot be undone.')) return;
+
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/delete_account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: hToken, password: pwd })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (arr) {
+          var row = Array.isArray(arr) ? arr[0] : arr;
+          if (row && row.status === 'success') {
+            acctMsg(msg, 'Account deleted', true);
+            if (inIframe) {
+              try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
+            } else {
+              localStorage.removeItem('xesync_token');
+              setTimeout(function () { window.location.href = 'login.html'; }, 1000);
+            }
+          } else {
+            acctMsg(msg, (row && row.error) || 'Failed', false);
+          }
+        })
+        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
+      };
+
+      function acctMsg(el, text, ok) {
+        el.textContent = text;
+        el.className = 'account-msg ' + (ok ? 'ok' : 'err');
+      }
 
       // Samples tuples: [time, distance, spm, watts, hr, pace]
       function renderCharts(container, w) {

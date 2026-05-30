@@ -25,7 +25,23 @@
     <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="password" placeholder="password">
     <button class="btn primary" onclick="doLogin()">LOGIN</button>
+    <button class="btn" onclick="show('screen-register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
     <div class="status-msg" id="login-status"></div>
+  </div>
+
+  <!-- ── REGISTER ─────────────────────────────────────── -->
+  <div id="screen-register" class="screen">
+    <h1>CREATE ACCOUNT</h1>
+    <input type="text"     id="reg-username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="email"    id="reg-email"    placeholder="email"    autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="reg-password" placeholder="password (min 8 chars)">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.8em;color:#888;max-width:320px;margin:10px 0;line-height:1.4;">
+      <input type="checkbox" id="reg-consent" style="width:auto;margin-top:3px;">
+      <span>I agree to the privacy policy and consent to my data being stored to provide the service.</span>
+    </label>
+    <button class="btn primary" onclick="doRegister()">CREATE</button>
+    <button class="btn" onclick="show('screen-login')" style="margin-top:10px;opacity:0.7;">BACK</button>
+    <div class="status-msg" id="register-status"></div>
   </div>
 
   <!-- ── HOME ─────────────────────────────────────────── -->
@@ -295,6 +311,48 @@
 
     function setLoginStatus(msg) {
       document.getElementById('login-status').textContent = msg;
+    }
+
+    function setRegisterStatus(msg, ok) {
+      var el = document.getElementById('register-status');
+      el.textContent = msg;
+      el.style.color = ok ? '#4CAF50' : '#f44336';
+    }
+
+    function doRegister() {
+      var u = document.getElementById('reg-username').value.trim();
+      var e = document.getElementById('reg-email').value.trim();
+      var p = document.getElementById('reg-password').value;
+      var consent = document.getElementById('reg-consent').checked;
+      if (!u || !e || !p) { setRegisterStatus('All fields required'); return; }
+      if (!consent) { setRegisterStatus('You must accept the privacy policy to continue'); return; }
+      setRegisterStatus('');
+      var btn = document.querySelector('#screen-register .btn.primary');
+      btn.disabled = true;
+      btn.textContent = 'CREATING...';
+
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, email: e, password: p })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success') {
+          setRegisterStatus('Check your email to verify your account', true);
+          document.getElementById('reg-password').value = '';
+        } else {
+          setRegisterStatus((data && data.error) || 'Registration failed');
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        setRegisterStatus('Network error: ' + err.message);
+      });
     }
 
     function goScanWithoutLogin() {

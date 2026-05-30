@@ -116,6 +116,23 @@ CREATE TABLE IF NOT EXISTS xesync.pending_verifications (
 
 CREATE INDEX IF NOT EXISTS idx_pending_user ON xesync.pending_verifications (user_id);
 
+-- ============================================================================
+-- ACCOUNT MANAGEMENT
+--   - request_password_reset(email)            → public, queues email
+--   - reset_password_with_token(token, pwd)    → public, consumes token
+--   - change_password(token, old_pwd, new_pwd) → logged-in
+--   - delete_account(token, password)          → logged-in
+-- ============================================================================
+
+-- Re-use pending_verifications table style but separate for clarity
+CREATE TABLE IF NOT EXISTS xesync.pending_resets (
+    token       VARCHAR(64) PRIMARY KEY,
+    user_id     BIGINT      NOT NULL REFERENCES xesync.users(user_id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_resets_user ON xesync.pending_resets (user_id);
 
 -- ============================================================================
 -- HELPERS
@@ -740,6 +757,289 @@ BEGIN
 END;
 $$;
 
+
+CREATE OR REPLACE FUNCTION xesync.reset_url_base() RETURNS TEXT
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT 'https://xesync.enlistia.com/reset_password.html';
+$$;
+
+CREATE OR REPLACE FUNCTION xesync.reset_ttl_hours() RETURNS INTEGER
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION xesync.build_reset_email(p_username TEXT, p_token TEXT)
+RETURNS TEXT
+LANGUAGE sql
+AS $$
+    SELECT
+        'Hi ' || p_username || ',' || chr(10) || chr(10) ||
+        'A password reset was requested for your XEsync account. To set a new password, visit:' || chr(10) || chr(10) ||
+        xesync.reset_url_base() || '?token=' || p_token || chr(10) || chr(10) ||
+        'This link expires in ' || xesync.reset_ttl_hours() || ' hour(s).' || chr(10) || chr(10) ||
+        'If you didn''t request this, ignore this email — your password is unchanged.' || chr(10) || chr(10) ||
+        '— XeSync';
+$$;
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Request a password reset. Always returns success (does not leak whether the
+-- email is registered).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION xesync.request_password_reset(email TEXT)
+RETURNS TABLE (status TEXT, error TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id  BIGINT;
+    v_username TEXT;
+    v_email    TEXT;
+    v_token    TEXT;
+BEGIN
+    IF email IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Missing email'::TEXT;
+        RETURN;
+    END IF;
+
+    v_email := lower(trim(email));
+
+    SELECT u.user_id, u.user_name INTO v_user_id, v_username
+      FROM xesync.users u
+     WHERE lower(u.email) = v_email
+       AND u.is_active = TRUE;
+
+    IF v_user_id IS NULL THEN
+        -- Silent success: don't reveal whether the address is registered
+        RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    DELETE FROM xesync.pending_resets WHERE user_id = v_user_id;
+
+    v_token := xesync.random_hex(64);
+    INSERT INTO xesync.pending_resets (token, user_id, expires_at)
+    VALUES (v_token, v_user_id, now() + (xesync.reset_ttl_hours() || ' hours')::interval);
+
+    INSERT INTO xesync.email_queue (to_addr, subject, body)
+    VALUES (
+        v_email,
+        'Reset your XEsync password',
+        xesync.build_reset_email(v_username, v_token)
+    );
+
+    RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN QUERY SELECT 'error'::TEXT, ('Reset request failed: ' || SQLERRM)::TEXT;
+END;
+$$;
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Consume a reset token to set a new password. Single-use; deletes the token.
+-- Also invalidates any existing session token (forces re-login).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION xesync.reset_password_with_token(token TEXT, new_password TEXT)
+RETURNS TABLE (status TEXT, error TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+    v_expires TIMESTAMPTZ;
+BEGIN
+    IF token IS NULL OR new_password IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Missing token or password'::TEXT;
+        RETURN;
+    END IF;
+    IF length(new_password) < 8 THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Password must be at least 8 characters'::TEXT;
+        RETURN;
+    END IF;
+
+    SELECT pr.user_id, pr.expires_at
+      INTO v_user_id, v_expires
+      FROM xesync.pending_resets pr
+     WHERE pr.token = reset_password_with_token.token;
+
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Invalid or already-used token'::TEXT;
+        RETURN;
+    END IF;
+
+    IF v_expires < now() THEN
+        DELETE FROM xesync.pending_resets pr WHERE pr.token = reset_password_with_token.token;
+        RETURN QUERY SELECT 'error'::TEXT, 'Token expired — request a new one'::TEXT;
+        RETURN;
+    END IF;
+
+    UPDATE xesync.users
+       SET password_hash = crypt(new_password, gen_salt('bf', 10)),
+           user_token    = NULL,
+           token_expiry  = NULL
+     WHERE user_id = v_user_id;
+
+    DELETE FROM xesync.pending_resets pr WHERE pr.token = reset_password_with_token.token;
+
+    RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
+END;
+$$;
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Change password while logged in. Requires the current password.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION xesync.change_password(token TEXT, old_password TEXT, new_password TEXT)
+RETURNS TABLE (status TEXT, error TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+    v_hash    TEXT;
+BEGIN
+    IF token IS NULL OR old_password IS NULL OR new_password IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Missing fields'::TEXT;
+        RETURN;
+    END IF;
+    IF length(new_password) < 8 THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'New password must be at least 8 characters'::TEXT;
+        RETURN;
+    END IF;
+
+    SELECT u.user_id, u.password_hash INTO v_user_id, v_hash
+      FROM xesync.users u
+     WHERE u.user_token   = change_password.token
+       AND u.token_expiry > now();
+
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Invalid or expired token'::TEXT;
+        RETURN;
+    END IF;
+
+    IF crypt(old_password, v_hash) <> v_hash THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Current password is incorrect'::TEXT;
+        RETURN;
+    END IF;
+
+    UPDATE xesync.users
+       SET password_hash = crypt(new_password, gen_salt('bf', 10))
+     WHERE user_id = v_user_id;
+
+    -- Keep the current session valid (don't force re-login)
+
+    RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
+END;
+$$;
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- Permanently delete the account and all associated data. Requires password.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION xesync.delete_account(token TEXT, password TEXT)
+RETURNS TABLE (status TEXT, error TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+    v_hash    TEXT;
+BEGIN
+    IF token IS NULL OR password IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Missing fields'::TEXT;
+        RETURN;
+    END IF;
+
+    SELECT u.user_id, u.password_hash INTO v_user_id, v_hash
+      FROM xesync.users u
+     WHERE u.user_token   = delete_account.token
+       AND u.token_expiry > now();
+
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Invalid or expired token'::TEXT;
+        RETURN;
+    END IF;
+
+    IF crypt(password, v_hash) <> v_hash THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Password is incorrect'::TEXT;
+        RETURN;
+    END IF;
+
+    -- ON DELETE CASCADE will clean up workouts, strokes, pending_*, etc.
+    DELETE FROM xesync.users WHERE user_id = v_user_id;
+
+    RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
+END;
+$$;
+
+
+-- ============================================================================
+-- DATA EXPORT (GDPR art. 20 — right to data portability)
+-- Returns the full account data + all workouts as a single JSON blob.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION xesync.export_account(token TEXT)
+RETURNS TABLE (status TEXT, data JSONB, error TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+    v_data    JSONB;
+BEGIN
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT, NULL::JSONB, 'Invalid or expired token'::TEXT;
+        RETURN;
+    END IF;
+
+    SELECT jsonb_build_object(
+        'exported_at', now(),
+        'account', (
+            SELECT jsonb_build_object(
+                'username',       u.user_name,
+                'email',          u.email,
+                'email_verified', u.email_verified,
+                'created_at',     u.created_at,
+                'last_connection', u.last_connection
+            )
+            FROM xesync.users u WHERE u.user_id = v_user_id
+        ),
+        'workouts', COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'workout_id',    w.workout_id,
+                'workout_date',  w.workout_date,
+                'duration_sec',  w.duration_sec,
+                'distance_m',    w.distance_m,
+                'total_strokes', w.total_strokes,
+                'calories',      w.calories,
+                'avg_spm',       w.avg_spm,
+                'avg_pace_sec',  w.avg_pace_sec,
+                'avg_watts',     w.avg_watts,
+                'avg_hr',        w.avg_hr,
+                'samples', COALESCE(
+                  (SELECT jsonb_agg(jsonb_build_array(
+                      s.time_sec, s.distance_m, s.spm, s.watts, s.heartrate, s.pace_sec
+                    ) ORDER BY s.stroke_number)
+                   FROM xesync.workout_strokes s
+                   WHERE s.workout_id = w.workout_id),
+                  '[]'::jsonb
+                )
+            ) ORDER BY w.workout_date DESC)
+            FROM xesync.workouts w WHERE w.user_id = v_user_id
+        ), '[]'::jsonb)
+    ) INTO v_data;
+
+    RETURN QUERY SELECT 'success'::TEXT, v_data, NULL::TEXT;
+END;
+$$;
+
 -- ============================================================================
 -- PERMISSIONS
 -- ============================================================================
@@ -755,6 +1055,12 @@ REVOKE ALL ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.verify_email(TEXT)              FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.resend_verification(TEXT)       FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.get_workout(TEXT, TEXT) 		  FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.request_password_reset(TEXT)           FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.reset_password_with_token(TEXT, TEXT)  FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.delete_account(TEXT, TEXT)             FROM PUBLIC;
+REVOKE ALL ON FUNCTION xesync.export_account(TEXT) FROM PUBLIC;
+
 
 GRANT EXECUTE ON FUNCTION xesync.login(TEXT, TEXT)               TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.validate_token(TEXT)            TO web_anon;
@@ -765,6 +1071,12 @@ GRANT EXECUTE ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.verify_email(TEXT)              TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.resend_verification(TEXT)       TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)         TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.request_password_reset(TEXT)           TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.reset_password_with_token(TEXT, TEXT)  TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.delete_account(TEXT, TEXT)             TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.export_account(TEXT) TO web_anon;
+
 
 REVOKE ALL ON FUNCTION xesync.create_user(TEXT, TEXT)                      FROM PUBLIC;
 REVOKE ALL ON FUNCTION xesync.reset_password(TEXT, TEXT)                   FROM PUBLIC;

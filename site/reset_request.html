@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Password — XEsync</title>
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            font-family: Helvetica, Arial, sans-serif;
+            color: #fff;
+            min-height: 100vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 40px 20px;
+        }
+        .back {
+            position: fixed; top: 24px; left: 24px; z-index: 100;
+            color: rgba(255,255,255,0.7); text-decoration: none;
+            font-size: 13px; display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 14px; border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .back:hover { color: #00d4ff; border-color: rgba(0,212,255,0.4); }
+        .card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px; padding: 48px 40px;
+            width: 100%; max-width: 420px;
+        }
+        .logo {
+            font-size: 28px; font-weight: 700;
+            font-family: 'Courier Prime', 'Courier New', monospace;
+            color: #00d4ff; text-align: center;
+            margin-bottom: 8px; letter-spacing: 2px;
+        }
+        .logo-sub {
+            text-align: center; font-size: 13px;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 36px; letter-spacing: 1px;
+        }
+        label {
+            display: block; font-size: 12px; letter-spacing: 1.5px;
+            text-transform: uppercase; color: rgba(255,255,255,0.5);
+            margin-bottom: 8px;
+        }
+        input {
+            width: 100%; background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+            color: #fff; font-size: 15px; padding: 13px 16px;
+            outline: none; font-family: inherit;
+            margin-bottom: 20px;
+        }
+        input:focus { border-color: #00d4ff; }
+        .btn {
+            width: 100%; padding: 14px;
+            background: #00d4ff; color: #0a0a0a;
+            border: none; border-radius: 8px;
+            font-size: 15px; font-weight: 600;
+            cursor: pointer; letter-spacing: 0.5px;
+            font-family: inherit; margin-top: 8px;
+        }
+        .btn:hover { background: #00b8e6; }
+        .btn:disabled { background: rgba(0,212,255,0.3); color: rgba(255,255,255,0.4); cursor: default; }
+        .msg {
+            border-radius: 8px; padding: 12px 16px;
+            font-size: 13px; margin-top: 20px;
+            display: none;
+        }
+        .msg.error { background: rgba(255,60,60,0.1); border: 1px solid rgba(255,60,60,0.3); color: #ff6b6b; }
+        .msg.success { background: rgba(60,255,120,0.08); border: 1px solid rgba(60,255,120,0.3); color: #7ee699; }
+        .help-text {
+            font-size: 12px; color: rgba(255,255,255,0.4);
+            margin-bottom: 28px; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <a href="login.html" class="back"><i class="fa-solid fa-arrow-left"></i> Back to login</a>
+
+    <div class="card">
+        <div class="logo">XEsync</div>
+        <div class="logo-sub">Reset your password</div>
+
+        <div class="help-text">
+            Enter the email address associated with your account. We'll send you a link to set a new password.
+        </div>
+
+        <form id="resetForm" onsubmit="handleSubmit(event)">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="you@example.com" autocomplete="email" required>
+            <button type="submit" class="btn" id="submitBtn">Send reset link</button>
+        </form>
+
+        <div class="msg" id="msg"></div>
+    </div>
+
+    <script>
+        function handleSubmit(e) {
+            e.preventDefault();
+            var msg = document.getElementById('msg');
+            var btn = document.getElementById('submitBtn');
+            msg.style.display = 'none';
+
+            var email = document.getElementById('email').value.trim();
+            if (!email) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+
+            fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/request_password_reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(arr) {
+                btn.disabled = false;
+                btn.textContent = 'Send reset link';
+                var data = Array.isArray(arr) ? arr[0] : arr;
+                if (data && data.status === 'success') {
+                    showMsg('If an account exists for that address, a reset link has been sent. Check your inbox.', 'success');
+                } else {
+                    showMsg((data && data.error) || 'Request failed.', 'error');
+                }
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = 'Send reset link';
+                showMsg('Network error: ' + err.message, 'error');
+            });
+        }
+
+        function showMsg(text, type) {
+            var el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = 'msg ' + type;
+            el.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
