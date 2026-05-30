@@ -6,68 +6,73 @@
   <title>FTMS Rowing Display</title>
   <link rel="stylesheet" href="rowing_display.css">
   <link rel="stylesheet" href="dialog.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
   <div id="main-container">
-    <div class="flex-container">
-      <div class="flex-item red-column auto-width">
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Pulse</th></tr></thead>
-            <tbody><tr><td><span id="heartrate">&nbsp;</span></td></tr></tbody>
-          </table>
+    <div id="wrapper">
+      <canvas id="glCanvas"></canvas>
+      <div id="gl-loading"></div>
+
+      <div class="hud hud-left">
+        <div class="hud-tile" style="--accent:#ff4d6d;">
+          <i class="fa-solid fa-heart-pulse hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">PULSE</div>
+            <div class="hud-value"><span id="heartrate">-</span></div>
+          </div>
         </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Meters</th></tr></thead>
-            <tbody><tr><td><span id="distance">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#4ade80;">
+          <i class="fa-solid fa-ruler hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">METERS</div>
+            <div class="hud-value"><span id="distance">0</span></div>
+          </div>
         </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Watts</th></tr></thead>
-            <tbody><tr><td><span id="watts">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#fbbf24;">
+          <i class="fa-solid fa-bolt hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">WATTS</div>
+            <div class="hud-value"><span id="watts">0</span></div>
+          </div>
         </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Time/500m</th></tr></thead>
-            <tbody><tr><td><span id="pace">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#22d3ee;">
+          <i class="fa-solid fa-gauge-high hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">/500M</div>
+            <div class="hud-value"><span id="pace">--:--</span></div>
+          </div>
         </div>
       </div>
 
-      <div class="flex-item black-column full-height">
-        <div id="wrapper">
-          <canvas id="glCanvas"></canvas>
-          <div id="gl-loading"></div>
+      <div class="hud hud-right">
+        <div class="hud-tile" style="--accent:#a78bfa;">
+          <i class="fa-solid fa-rotate hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">SPM</div>
+            <div class="hud-value"><span id="spm">0</span></div>
+          </div>
         </div>
-      </div>
-
-      <div class="flex-item red-column auto-width">
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>SPM</th></tr></thead>
-            <tbody><tr><td><span id="spm">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#fb923c;">
+          <i class="fa-solid fa-fire hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">CALS</div>
+            <div class="hud-value"><span id="cals">0</span></div>
+          </div>
         </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Cals</th></tr></thead>
-            <tbody><tr><td><span id="cals">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#f472b6;">
+          <i class="fa-solid fa-wave-square hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">STROKES</div>
+            <div class="hud-value"><span id="strokes">0</span></div>
+          </div>
         </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Strokes</th></tr></thead>
-            <tbody><tr><td><span id="strokes">&nbsp;</span></td></tr></tbody>
-          </table>
-        </div>
-        <div class="zone">
-          <table class="console">
-            <thead><tr><th>Time</th></tr></thead>
-            <tbody><tr><td><span id="elapsedtime">&nbsp;</span></td></tr></tbody>
-          </table>
+        <div class="hud-tile" style="--accent:#60a5fa;">
+          <i class="fa-solid fa-clock hud-icon"></i>
+          <div class="hud-content">
+            <div class="hud-label">TIME</div>
+            <div class="hud-value"><span id="elapsedtime">00:00</span></div>
+          </div>
         </div>
       </div>
     </div>
