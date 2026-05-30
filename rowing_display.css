@@ -53,20 +53,20 @@ html, body {
   pointer-events: none;
 }
 
-/* HUD overlay columns */
+/* HUD overlay — 4 corners, 2 tiles side-by-side each */
 .hud {
   position: absolute;
-  top: 2vh;
-  bottom: 2vh;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  flex-direction: row;
+  gap: 10px;
   z-index: 5;
   pointer-events: none;
 }
 
-.hud-left  { left:  2vw; }
-.hud-right { right: 2vw; }
+.hud-tl { top:    2vh; left:  2vw; }
+.hud-tr { top:    2vh; right: 2vw; }
+.hud-bl { bottom: 2vh; left:  2vw; }
+.hud-br { bottom: 2vh; right: 2vw; }
 
 .hud-tile {
   display: flex;
@@ -83,9 +83,9 @@ html, body {
 
 .hud-icon {
   color: var(--accent);
-  font-size: 1.4em;
-  width: 1.4em;
-  text-align: center;
+  width: 1.6em;
+  height: 1.6em;
+  flex-shrink: 0;
   filter: drop-shadow(0 0 6px var(--accent));
 }
 
@@ -115,6 +115,6 @@ html, body {
 /* Compact for smaller landscape viewports */
 @media (max-height: 500px) {
   .hud-tile { padding: 6px 12px; min-width: 120px; gap: 10px; }
-  .hud-icon { font-size: 1.2em; }
+  .hud-icon { width: 1.3em; height: 1.3em; }
   .hud-value { font-size: 1.3em; }
 }
