@@ -22,7 +22,7 @@
   var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is PAUSED
   var INACTIVITY_TICK  = 500;    // how often to check for inactivity (ms)
   var INITIAL_PACE     = 150;    // s/500m when we have no real pace yet
-  var PACE_EMA_ALPHA   = 0.1;    // new-sample weight in exponential smoothing
+  var PACE_WINDOW_MS   = 30000;
   var DEBUG            = false;
 
   // ─────────────────────────────────────────────────────────────────────
@@ -51,6 +51,7 @@
       rawCals:          0,
       // Smoothed pace
       paceSeconds:      INITIAL_PACE,
+	  paceHistory:      [],
       // Sampled-per-packet log used to build the save payload
       samples:          []
     };
@@ -105,15 +106,36 @@
     return (now - session.startedAt - pausedMs) / 1000;
   }
 
-  // Update smoothed pace based on real distance/time deltas between packets.
+  // Calcule l'allure (/500m) lissée sur une fenêtre glissante de 30 secondes
   function updatePace(prev, curr) {
-    if (!prev) return; // need two points
-    var dDist = (totalDistance()) - (session.distOffset + prev.distance);
-    var dTime = (curr.t - prev.t) / 1000;
-    if (dDist <= 0 || dTime < 0.1) return; // no movement
-    var instant = (dTime / dDist) * 500;
-    if (!isFinite(instant) || instant <= 0) return;
-    session.paceSeconds = session.paceSeconds * (1 - PACE_EMA_ALPHA) + instant * PACE_EMA_ALPHA;
+    var now = curr.t;
+    var currentTotalDist = totalDistance();
+
+    // 1. Enregistrer le point actuel dans l'historique
+    session.paceHistory.push({ t: now, dist: currentTotalDist });
+
+    // 2. Supprimer les points plus vieux que 30 secondes (PACE_WINDOW_MS)
+    var cutoff = now - PACE_WINDOW_MS;
+    while (session.paceHistory.length > 0 && session.paceHistory[0].t < cutoff) {
+      session.paceHistory.shift();
+    }
+
+    // 3. Calculer l'allure si on a assez de recul (au moins 2 points)
+    if (session.paceHistory.length < 2) return;
+
+    var oldestPoint = session.paceHistory[0];
+    var dDist = currentTotalDist - oldestPoint.dist; // Distance parcourue en 30s max
+    var dTime = (now - oldestPoint.t) / 1000;        // Temps exact écoulé en secondes
+
+    // Ne mettre à jour que si le rameur bouge pour éviter les divisions par zéro
+    if (dDist > 0 && dTime > 0.5) {
+      // Formule du temps pour 500m : (Temps / Distance) * 500
+      var averagePace = (dTime / dDist) * 500;
+      
+      if (isFinite(averagePace) && averagePace > 0) {
+        session.paceSeconds = averagePace;
+      }
+    }
   }
 
   // Sample one entry per second of session time (the rower may emit packets
