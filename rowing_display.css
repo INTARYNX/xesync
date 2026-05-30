@@ -56,11 +56,11 @@ html, body {
 /* HUD overlay columns */
 .hud {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 2vh;
+  bottom: 2vh;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: space-between;
   z-index: 5;
   pointer-events: none;
 }
@@ -115,7 +115,6 @@ html, body {
 
 /* Compact for smaller landscape viewports */
 @media (max-height: 500px) {
-  .hud { gap: 6px; }
   .hud-tile { padding: 6px 12px; min-width: 120px; gap: 10px; }
   .hud-icon { font-size: 1.2em; }
   .hud-value { font-size: 1.3em; }
