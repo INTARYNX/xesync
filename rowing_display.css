@@ -63,10 +63,10 @@ html, body {
   pointer-events: none;
 }
 
-.hud-tl { top:    2vh; left:  2vw; }
-.hud-tr { top:    2vh; right: 2vw; }
-.hud-bl { bottom: 2vh; left:  2vw; }
-.hud-br { bottom: 2vh; right: 2vw; }
+.hud.hud-tl { top:    2vh; left:  2vw; right: auto; bottom: auto; }
+.hud.hud-tr { top:    2vh; right: 2vw; left:  auto; bottom: auto; }
+.hud.hud-bl { bottom: 2vh; left:  2vw; right: auto; top:    auto; }
+.hud.hud-br { bottom: 2vh; right: 2vw; left:  auto; top:    auto; }
 
 .hud-tile {
   display: flex;
