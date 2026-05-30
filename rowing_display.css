@@ -1,3 +1,6 @@
+/* ==========================================================================
+   1. POLICES & CONFIGURATION GLOBALE
+   ========================================================================== */
 @font-face {
   font-family: "DotGothic16";
   src: url("DotGothic16-Regular.ttf") format("truetype");
@@ -5,7 +8,9 @@
   font-style: normal;
 }
 
-* { box-sizing: border-box; }
+* { 
+  box-sizing: border-box; 
+}
 
 html, body {
   margin: 0;
@@ -14,8 +19,12 @@ html, body {
   height: 100%;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #000;
 }
 
+/* ==========================================================================
+   2. CONTENEURS PHARE (CANVAS & LOADING)
+   ========================================================================== */
 #main-container {
   height: 100%;
   background: #000;
@@ -53,21 +62,27 @@ html, body {
   pointer-events: none;
 }
 
-/* HUD overlay — 4 corners, 2 tiles side-by-side each */
-.hud {
+/* ==========================================================================
+   3. CORRECTION DU HUD (4 COINS - 2 MODULES CÔTE À CÔTE)
+   ========================================================================== */
+.hud-corner {
   position: absolute;
   display: flex;
-  flex-direction: row;
-  gap: 10px;
+  flex-direction: row; /* Aligne les deux tuiles horizontalement */
+  gap: 10px;          /* Espace entre les deux tuiles d'un même coin */
   z-index: 5;
   pointer-events: none;
 }
 
-.hud.hud-tl { top:    2vh; left:  2vw; right: auto; bottom: auto; }
-.hud.hud-tr { top:    2vh; right: 2vw; left:  auto; bottom: auto; }
-.hud.hud-bl { bottom: 2vh; left:  2vw; right: auto; top:    auto; }
-.hud.hud-br { bottom: 2vh; right: 2vw; left:  auto; top:    auto; }
+/* Alignement précis selon les classes HTML (tl, tr, bl, br) */
+.hud-corner.tl { top:    2vh; left:  2vw; }
+.hud-corner.tr { top:    2vh; right: 2vw; }
+.hud-corner.bl { bottom: 2vh; left:  2vw; }
+.hud-corner.br { bottom: 2vh; right: 2vw; }
 
+/* ==========================================================================
+   4. STYLE DES TUILES & DU CONTENU
+   ========================================================================== */
 .hud-tile {
   display: flex;
   align-items: center;
@@ -112,9 +127,20 @@ html, body {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
-/* Compact for smaller landscape viewports */
+/* ==========================================================================
+   5. RESPONSIVE (ÉCRANS COMPACTS ET MOBILES)
+   ========================================================================== */
 @media (max-height: 500px) {
-  .hud-tile { padding: 6px 12px; min-width: 120px; gap: 10px; }
-  .hud-icon { width: 1.3em; height: 1.3em; }
-  .hud-value { font-size: 1.3em; }
+  .hud-tile { 
+    padding: 6px 12px; 
+    min-width: 120px; 
+    gap: 10px; 
+  }
+  .hud-icon { 
+    width: 1.3em; 
+    height: 1.3em; 
+  }
+  .hud-value { 
+    font-size: 1.3em; 
+  }
 }
