@@ -77,7 +77,6 @@ html, body {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-left: 3px solid var(--accent);
   border-radius: 10px;
   min-width: 140px;
 }
