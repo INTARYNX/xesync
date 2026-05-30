@@ -129,7 +129,7 @@
       strokes:  totalStrokes(),
       spm:      p.spm,
       watts:    p.watts,
-      hr:       p.hr,
+      hr:       p.hr === 255 ? null : p.hr,
       pace:     session.paceSeconds
     });
   }
@@ -380,9 +380,13 @@
   // ─────────────────────────────────────────────────────────────────────
   function avg(arr, key) {
     if (!arr.length) return 0;
-    var s = 0;
-    for (var i = 0; i < arr.length; i++) s += arr[i][key];
-    return s / arr.length;
+    var s = 0, n = 0;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i][key] == null) continue;
+      s += arr[i][key];
+      n++;
+    }
+    return n ? s / n : 0;
   }
 
   function buildPayload() {
@@ -406,7 +410,7 @@
           x.strokes,
           Math.round(x.spm * 10) / 10,
           Math.round(x.watts),
-          Math.round(x.hr),
+          x.hr == null ? null : Math.round(x.hr),
           Math.round(x.pace)
         ];
       })

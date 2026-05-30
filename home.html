@@ -84,7 +84,7 @@
           +     stat('SPM',        w.avg_spm || 0)
           +     stat('Pace',       fmtPace(w.avg_pace_sec), true)
           +     stat('Calories',   w.calories || 0)
-          +     stat('Heart Rate', w.avg_hr || 0)
+          +     stat('Heart Rate', w.avg_hr || '-')
           +   '</div>'
           + '</div>';
       }
@@ -145,7 +145,7 @@
           +   tile('Pace',       fmtPace(w.avg_pace_sec), true)
           +   tile('Watts',      w.avg_watts || 0)
           +   tile('SPM',        w.avg_spm || 0)
-          +   tile('Heart Rate', w.avg_hr || 0)
+          +   tile('Heart Rate', w.avg_hr || '-')
           +   tile('Strokes',    w.total_strokes || 0)
           +   tile('Calories',   w.calories || 0)
           + '</div>';
@@ -184,9 +184,16 @@
 
       function svgChart(samples, idx, color) {
         var W = 600, H = 160, padL = 36, padR = 12, padT = 14, padB = 22;
-        var n = samples.length;
-        var xs = samples.map(function (s) { return +s[0]; });
-        var ys = samples.map(function (s) { return s[idx] == null ? 0 : +s[idx]; });
+        // Filter out samples where this metric is null (e.g. HR with no belt)
+        var valid = samples.filter(function (s) { return s[idx] != null; });
+        if (!valid.length) {
+          return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
+               + '<text x="' + (W/2) + '" y="' + (H/2) + '" text-anchor="middle" class="chart-label">no data</text>'
+               + '</svg>';
+        }
+        var n = valid.length;
+        var xs = valid.map(function (s) { return +s[0]; });
+        var ys = valid.map(function (s) { return +s[idx]; });
         var xMin = xs[0], xMax = xs[n - 1];
         var yMin = Math.min.apply(null, ys);
         var yMax = Math.max.apply(null, ys);
