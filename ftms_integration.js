@@ -4,13 +4,6 @@
  * Public API (called from app.html):
  *   initFtmsTracking()  — call when entering rowing screen
  *   ingestData(csv)     — call for each FTMS packet (20 comma-separated bytes)
- *
- * Phases:
- *   IDLE   — no rowing yet, waiting for first stroke
- *   ACTIVE — rowing in progress
- *   PAUSED — rower stopped for >5s. Clock is frozen, pause-aware dialog
- *            is shown. Resuming (spm>0) returns to ACTIVE without losing
- *            the session. Save/Exit ends the session.
  */
 
 (function () {
@@ -29,7 +22,6 @@
   // State
   // ─────────────────────────────────────────────────────────────────────
   var phase = 'IDLE';
-
   var session = null;
   var lastPacket = null;
   var lastActiveAt = 0;
@@ -37,18 +29,18 @@
 
   function resetSession() {
     session = {
-      startedAt:        null,
-      totalPausedMs:    0,
-      pausedAt:         null,
-      distOffset:       0,
-      strokeOffset:     0,
-      calOffset:        0,
-      rawDist:          0,
-      rawStrokes:       0,
-      rawCals:          0,
-      paceSeconds:      INITIAL_PACE,
-	  paceHistory:      [],
-      samples:          []
+      startedAt:     null,
+      totalPausedMs: 0,
+      pausedAt:      null,
+      distOffset:    0,
+      strokeOffset:  0,
+      calOffset:     0,
+      rawDist:       0,
+      rawStrokes:    0,
+      rawCals:       0,
+      paceSeconds:   INITIAL_PACE,
+      paceHistory:   [],
+      samples:       []
     };
   }
 
@@ -61,15 +53,15 @@
     if (b.length < 20 || b.some(isNaN)) return null;
     var u16 = function (hi, lo) { return b[hi] * 255 + b[lo]; };
     return {
-      t:         Date.now(),
-      spm:       b[2] * 0.5,
-      strokes:   u16(4, 3),
-      distance:  u16(6, 5),
-      pace:      u16(9, 8),
-      watts:     u16(11, 10),
-      cals:      u16(13, 12),
-      hr:        b[16],
-      elapsed:   u16(19, 18)
+      t:        Date.now(),
+      spm:      b[2] * 0.5,
+      strokes:  u16(4, 3),
+      distance: u16(6, 5),
+      pace:     u16(9, 8),
+      watts:    u16(11, 10),
+      cals:     u16(13, 12),
+      hr:       b[16],
+      elapsed:  u16(19, 18)
     };
   }
 
@@ -100,25 +92,18 @@
   function updatePace(prev, curr) {
     var now = curr.t;
     var currentTotalDist = totalDistance();
-
     session.paceHistory.push({ t: now, dist: currentTotalDist });
-
     var cutoff = now - PACE_WINDOW_MS;
     while (session.paceHistory.length > 0 && session.paceHistory[0].t < cutoff) {
       session.paceHistory.shift();
     }
-
     if (session.paceHistory.length < 2) return;
-
     var oldestPoint = session.paceHistory[0];
     var dDist = currentTotalDist - oldestPoint.dist;
     var dTime = (now - oldestPoint.t) / 1000;
-
     if (dDist > 0 && dTime > 0.5) {
       var averagePace = (dTime / dDist) * 500;
-      if (isFinite(averagePace) && averagePace > 0) {
-        session.paceSeconds = averagePace;
-      }
+      if (isFinite(averagePace) && averagePace > 0) session.paceSeconds = averagePace;
     }
   }
 
@@ -206,7 +191,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Pause dialog
+  // Pause dialog — SAVE or EXIT SESSION
   // ─────────────────────────────────────────────────────────────────────
   function ensurePauseDialog() {
     if (document.getElementById('pauseDialog')) return;
@@ -247,36 +232,53 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Offline choice screen
+  // Post-workout screen (shown after SAVE or EXIT, online or offline)
   // ─────────────────────────────────────────────────────────────────────
-  function ensureOfflineChoice() {
-    if (document.getElementById('offlineChoice')) return;
+  function ensurePostWorkout() {
+    if (document.getElementById('postWorkout')) return;
     var html = ''
-      + '<div id="offlineChoice" class="ftms-overlay">'
-      +   '<div class="ftms-overlay-title">WORKOUT SAVED</div>'
-      +   '<div class="ftms-overlay-subtitle">stored offline</div>'
+      + '<div id="postWorkout" class="ftms-overlay">'
+      +   '<div id="pwTitle" class="ftms-overlay-title">WORKOUT ENDED</div>'
+      +   '<div id="pwSubtitle" class="ftms-overlay-subtitle"></div>'
       +   '<div class="ftms-actions">'
-      +     '<button class="ftms-btn primary" onclick="offlineChoiceRow()">ROW AGAIN</button>'
-      +     '<button class="ftms-btn"         onclick="offlineChoiceLogin()">GO TO LOGIN</button>'
+      +     '<button class="ftms-btn primary" onclick="postWorkoutWorkouts()">WORKOUTS</button>'
+      +     '<button class="ftms-btn"         onclick="postWorkoutLogin()">LOGIN</button>'
       +   '</div>'
       + '</div>';
     document.body.insertAdjacentHTML('beforeend', html);
   }
-  function showOfflineChoice() {
-    ensureOfflineChoice();
-    document.getElementById('offlineChoice').classList.add('visible');
+  function showPostWorkout(savedState) {
+    ensurePostWorkout();
+    var title = document.getElementById('pwTitle');
+    var sub   = document.getElementById('pwSubtitle');
+    if (savedState === 'online') {
+      title.textContent = 'WORKOUT SAVED';
+      sub.textContent = 'synced to your account';
+    } else if (savedState === 'offline') {
+      title.textContent = 'WORKOUT SAVED';
+      sub.textContent = 'stored offline, will sync on next login';
+    } else {
+      title.textContent = 'WORKOUT ENDED';
+      sub.textContent = 'not saved';
+    }
+    document.getElementById('postWorkout').classList.add('visible');
   }
-  function hideOfflineChoice() {
-    var el = document.getElementById('offlineChoice');
+  function hidePostWorkout() {
+    var el = document.getElementById('postWorkout');
     if (el) el.classList.remove('visible');
   }
-  function offlineChoiceRow() {
-    hideOfflineChoice();
-    goIdle();
+  function postWorkoutWorkouts() {
+    hidePostWorkout();
+    var token = typeof appToken !== 'undefined' ? appToken : null;
+    if (token && typeof showHome === 'function') {
+      showHome();
+    } else if (typeof showNotConnected === 'function') {
+      showNotConnected();
+    }
   }
-  function offlineChoiceLogin() {
-    hideOfflineChoice();
-    if (typeof doExit === 'function') doExit();
+  function postWorkoutLogin() {
+    hidePostWorkout();
+    if (typeof show === 'function') show('screen-login');
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -293,7 +295,6 @@
       hideBanner();
       phase = 'ACTIVE';
       lastActiveAt = Date.now();
-      if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
       return;
     }
     resetSession();
@@ -302,7 +303,6 @@
     phase = 'ACTIVE';
     hideBanner();
     hidePauseDialog();
-    if (DEBUG) console.log('[FTMS] phase IDLE → ACTIVE');
   }
 
   function goPaused() {
@@ -311,7 +311,6 @@
     phase = 'PAUSED';
     if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
     showPauseDialog();
-    if (DEBUG) console.log('[FTMS] phase ACTIVE → PAUSED');
   }
 
   function goIdle() {
@@ -321,7 +320,6 @@
     renderIdle();
     hidePauseDialog();
     hideBanner();
-    if (DEBUG) console.log('[FTMS] phase → IDLE');
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -347,8 +345,7 @@
 
     if (phase === 'IDLE') {
       if (p.spm > 0) goActive(); else return;
-    }
-    else if (phase === 'PAUSED') {
+    } else if (phase === 'PAUSED') {
       if (p.spm > 0) goActive(); else return;
     }
 
@@ -417,6 +414,13 @@
       + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
 
+  function getAppInventor() {
+    return (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
+      ? AppInventor
+      : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
+        ? window.AppInventor : null;
+  }
+
   function saveWorkout() {
     hidePauseDialog();
     var payload = buildPayload();
@@ -426,30 +430,19 @@
 
     if (!token) {
       var tag = workoutTag();
-      var msg = JSON.stringify({ action: 'saveData', workout: tag, data: payload });
-      var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
-        ? AppInventor
-        : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
-          ? window.AppInventor : null;
+      var ai = getAppInventor();
       if (ai) {
-        ai.setWebViewString(msg);
-        setTimeout(function () {
-          hideBanner();
-          phase = 'IDLE';
-          showPostWorkout('offline');
-        }, 1200);
-      } else {
-        setTimeout(function () {
-          hideBanner();
-          phase = 'IDLE';
-          showPostWorkout('offline');
-        }, 1200);
+        ai.setWebViewString(JSON.stringify({ action: 'saveData', workout: tag, data: payload }));
       }
+      setTimeout(function () {
+        hideBanner();
+        phase = 'IDLE';
+        showPostWorkout('offline');
+      }, 1200);
       return;
     }
 
-    var tag = workoutTag();
-    var body = JSON.stringify({ token: token, workout: tag, data: payload });
+    var body = JSON.stringify({ token: token, workout: workoutTag(), data: payload });
     var timeout = new Promise(function (_, reject) {
       setTimeout(function () { reject(new Error('timeout')); }, 10000);
     });
@@ -460,7 +453,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: body
       }).then(function (r) {
-        return r.text().then(function (txt) { return { ok: r.ok, status: r.status, txt: txt }; });
+        return r.text().then(function (txt) { return { ok: r.ok, txt: txt }; });
       }),
       timeout
     ])
@@ -471,11 +464,7 @@
       var json;
       try { json = JSON.parse(resp.txt); } catch (e) { showPostWorkout('offline'); return; }
       var row = Array.isArray(json) ? json[0] : json;
-      if (row && row.status === 'success') {
-        showPostWorkout('online');
-      } else {
-        showPostWorkout('offline');
-      }
+      showPostWorkout(row && row.status === 'success' ? 'online' : 'offline');
     })
     .catch(function () {
       hideBanner();
