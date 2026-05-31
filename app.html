@@ -58,17 +58,14 @@
 
   <!-- ── SCAN ──────────────────────────────────────────── -->
   <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
-
     <div id="scan-idle">
       <button class="btn primary" onclick="doScan()" style="font-size:1.6em;padding:20px 40px;letter-spacing:0.2em;max-width:none;">SCAN</button>
     </div>
-
     <div id="scan-active">
       <div id="pulse-ring"></div>
       <div id="scan-label">SCANNING...</div>
       <div id="device-list"></div>
     </div>
-
   </div>
 
   <!-- ── CONNECTING ────────────────────────────────────── -->
@@ -88,7 +85,7 @@
     </div>
   </div>
 
-  <!-- ── REGISTER SUCCESS ──────────────────────────────────── -->
+  <!-- ── REGISTER SUCCESS ──────────────────────────────── -->
   <div id="register-success" class="ftms-overlay">
     <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
     <div class="ftms-overlay-subtitle">a verification link has been sent to your inbox</div>
@@ -102,12 +99,11 @@
     <div class="ftms-overlay-title">EXIT</div>
     <div class="ftms-overlay-subtitle">what would you like to do?</div>
     <div class="ftms-actions">
-      <button class="ftms-btn"         onclick="doLogoff()">LOG OFF</button>
-      <button class="ftms-btn primary" onclick="doQuit()">QUIT APP</button>
+      <button class="ftms-btn"           onclick="doLogoff()">LOG OFF</button>
+      <button class="ftms-btn primary"   onclick="doQuit()">QUIT APP</button>
       <button class="ftms-btn secondary" onclick="hideExitConfirm()">CANCEL</button>
     </div>
   </div>
-
 
   <script>
     var appToken = null;
@@ -126,11 +122,10 @@
       s.classList.add('hidden');
       setTimeout(function() { if (s.parentNode) s.parentNode.removeChild(s); }, 300);
     }
+
     document.addEventListener('DOMContentLoaded', function() {
       if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
     });
-
-
 
     // ── SCREENS ───────────────────────────────────────────
     var SCREENS_NO_BAR = { 'screen-rowing': true };
@@ -155,6 +150,13 @@
       }
     }
 
+    function setUserBadge(username) {
+      var el = document.getElementById('tbar-user');
+      if (!username) { el.innerHTML = ''; return; }
+      var initials = username.slice(0, 2).toUpperCase();
+      el.innerHTML = '<div class="tbar-avatar">' + initials + '</div>';
+    }
+
     function debugMode() {
       bleConnected = true;
       inDebugMode = true;
@@ -168,15 +170,17 @@
 
     function doExit() {
       var onLogin = document.getElementById('screen-login').classList.contains('active');
-      if (onLogin) {
-        sendToApp('exit', {});
-        return;
-      }
+      if (onLogin) { sendToApp('exit', {}); return; }
       document.getElementById('exit-confirm').classList.add('visible');
     }
 
     function hideExitConfirm() {
       document.getElementById('exit-confirm').classList.remove('visible');
+    }
+
+    function hideRegisterSuccess() {
+      document.getElementById('register-success').classList.remove('visible');
+      show('screen-login');
     }
 
     function doLogoff() {
@@ -213,12 +217,9 @@
       var msg;
       try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
       catch(e) {
-        if (typeof json === 'string' && /^\s*\d/.test(json)) {
-          ingestData(json.trim());
-        }
+        if (typeof json === 'string' && /^\s*\d/.test(json)) ingestData(json.trim());
         return;
       }
-
       switch (msg.action) {
         case 'autoLogin':      doAutoLogin(msg);      break;
         case 'scanResult':     onScanResult(msg);     break;
@@ -251,13 +252,8 @@
     // ── LOGIN ─────────────────────────────────────────────
     function doAutoLogin(msg) {
       if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
-
       console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
-      if (!msg.token) {
-        show('screen-login');
-        hideBootSplash();
-        return;
-      }
+      if (!msg.token) { show('screen-login'); hideBootSplash(); return; }
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -304,7 +300,6 @@
       var btn = document.querySelector('#screen-login .btn');
       btn.disabled = true;
       btn.textContent = 'LOGGING IN...';
-
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -345,7 +340,7 @@
     function setRegisterStatus(msg, ok) {
       var el = document.getElementById('register-status');
       el.textContent = msg;
-      el.style.color = ok ? '#4CAF50' : '#f44336';
+      el.style.color = ok ? '#00A2E8' : '#f44336';
     }
 
     function doRegister() {
@@ -359,7 +354,6 @@
       var btn = document.querySelector('#screen-register .btn.primary');
       btn.disabled = true;
       btn.textContent = 'CREATING...';
-
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -371,9 +365,9 @@
         btn.textContent = 'CREATE';
         var data = Array.isArray(arr) ? arr[0] : arr;
         if (data && data.status === 'success') {
-            document.getElementById('reg-password').value = '';
-            document.getElementById('register-success').classList.add('visible');
-          } else {
+          document.getElementById('reg-password').value = '';
+          document.getElementById('register-success').classList.add('visible');
+        } else {
           setRegisterStatus((data && data.error) || 'Registration failed');
         }
       })
@@ -384,10 +378,7 @@
       });
     }
 
-    function hideRegisterSuccess() {
-      document.getElementById('register-success').classList.remove('visible');
-      show('screen-login');
-    }
+    function goScanWithoutLogin() {
       document.getElementById('scan-idle').style.display = 'flex';
       document.getElementById('scan-active').style.display = 'none';
       show('screen-scan');
@@ -495,9 +486,7 @@
       document.getElementById('reconnect-overlay').classList.remove('visible');
     }
 
-    function onSaveAck() {
-      showHome();
-    }
+    function onSaveAck() { showHome(); }
 
     function onTagCleared(msg) {
       console.log('[upload] tag cleared by AI2:', msg.workout);
@@ -512,9 +501,7 @@
       .then(function(r) { return r.json(); })
       .then(function(arr) {
         var row = Array.isArray(arr) ? arr[0] : arr;
-        if (row && row.status === 'success') {
-          sendToApp('uploadAck', { workout: msg.workout });
-        }
+        if (row && row.status === 'success') sendToApp('uploadAck', { workout: msg.workout });
       })
       .catch(function() {});
     }
@@ -531,19 +518,12 @@
       show('screen-rowing');
       initRowing();
       initFtmsTracking();
-      if (inDebugMode) {
-        DebugSim.reset();
-        DebugSim.start();
-      }
+      if (inDebugMode) { DebugSim.reset(); DebugSim.start(); }
     }
 
     function disconnectRower() {
-      if (inDebugMode) {
-        DebugSim.stop();
-        inDebugMode = false;
-      } else {
-        sendToApp('disconnect', {});
-      }
+      if (inDebugMode) { DebugSim.stop(); inDebugMode = false; }
+      else { sendToApp('disconnect', {}); }
       bleConnected = false;
       show('screen-home');
     }
@@ -570,9 +550,7 @@
     }
 
     window.addEventListener('hashchange', function() {
-      if (window.location.hash.indexOf('#data=') === 0) {
-        ingestData(null);
-      }
+      if (window.location.hash.indexOf('#data=') === 0) ingestData(null);
     });
 
     // ── UTILS ─────────────────────────────────────────────
