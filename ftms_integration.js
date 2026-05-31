@@ -437,6 +437,7 @@
       setTimeout(function () {
         hideBanner();
         phase = 'IDLE';
+        leaveRowingScreen();
         showPostWorkout('offline');
       }, 1200);
       return;
@@ -460,6 +461,7 @@
     .then(function (resp) {
       hideBanner();
       phase = 'IDLE';
+      leaveRowingScreen();
       if (!resp.ok) { showPostWorkout('offline'); return; }
       var json;
       try { json = JSON.parse(resp.txt); } catch (e) { showPostWorkout('offline'); return; }
@@ -469,14 +471,24 @@
     .catch(function () {
       hideBanner();
       phase = 'IDLE';
+      leaveRowingScreen();
       showPostWorkout('offline');
     });
+  }
+
+  function leaveRowingScreen() {
+    var rowing = document.getElementById('screen-rowing');
+    if (rowing) rowing.classList.remove('active');
+    var bar = document.getElementById('topbar');
+    if (bar) bar.classList.add('visible');
+    document.body.classList.add('with-bar');
   }
 
   function exitSession() {
     hidePauseDialog();
     hideBanner();
     phase = 'IDLE';
+    leaveRowingScreen();
     showPostWorkout(null);
   }
 

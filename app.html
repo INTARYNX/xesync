@@ -397,6 +397,11 @@
       }
     }
 
+    function showPostWorkoutScreen() {
+      show('screen-connecting');
+      document.getElementById('connecting-label').textContent = '';
+    }
+
     function showNotConnected() {
       document.getElementById('not-connected').classList.add('visible');
     }
@@ -587,6 +592,9 @@
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
+
+    window.showPostWorkoutScreen = showPostWorkoutScreen;
+    window.showNotConnected = showNotConnected;
 
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') doLogin();
