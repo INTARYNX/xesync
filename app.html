@@ -86,6 +86,12 @@
     </div>
   </div>
 
+  <!-- ── OFFLINE HOME ──────────────────────────────────── -->
+  <div id="screen-offline" class="screen">
+    <div class="big-label">OFFLINE MODE</div>
+    <button class="btn primary" onclick="resumeRowing()">ROW AGAIN</button>
+  </div>
+
   <!-- ── REGISTER SUCCESS ──────────────────────────────── -->
   <div id="register-success" class="ftms-overlay">
     <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
@@ -112,6 +118,7 @@
     var lastWebViewString = '';
     var bleConnected = false;
     var inDebugMode = false;
+    var isOffline = false;
     var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
 
     var bootSplashTimer = setTimeout(hideBootSplash, 1500);
@@ -143,11 +150,21 @@
       } else {
         bar.classList.add('visible');
         var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
-        var showScan = !onSecondary && !bleConnected;
-        document.getElementById('tbar-scan-btn').style.display = showScan ? '' : 'none';
-        document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
-        document.getElementById('tbar-row-btn').style.display = (id === 'screen-home' && bleConnected) ? '' : 'none';
-        document.getElementById('tbar-disconnect-btn').style.display = (id === 'screen-home' && bleConnected) ? '' : 'none';
+        document.getElementById('tbar-scan-btn').style.display = (!onSecondary && !bleConnected) ? '' : 'none';
+        document.getElementById('tbar-debug-btn').style.display = (debugMenu && !onSecondary) ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = (bleConnected && id === 'screen-home') ? '' : 'none';
+        document.getElementById('tbar-disconnect-btn').style.display = (bleConnected && id === 'screen-home') ? '' : 'none';
+      }
+    }
+
+    // Where to go when a rowing session ends but BLE stays connected.
+    function returnFromSession() {
+      if (appToken) {
+        showHome();
+      } else if (isOffline) {
+        show('screen-offline');
+      } else {
+        show('screen-login');
       }
     }
 
@@ -317,6 +334,7 @@
         if (data && data.status === 'success' && data.token) {
           appToken = data.token;
           appUsername = u;
+          isOffline = false;
           setUserBadge(u);
           sendToApp('loginResult', { success: true, token: data.token, username: u });
           showHome();
@@ -402,6 +420,7 @@
     }
 
     function goOffline() {
+      isOffline = true;
       sendToApp('loginResult', { success: false, offline: true });
       show('screen-scan');
       showOfflineBanner();
