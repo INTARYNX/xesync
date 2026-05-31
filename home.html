@@ -23,7 +23,11 @@
   <div id="account-panel">
     <div class="account-header">
       MANAGE ACCOUNT
-      <button class="account-close" onclick="toggleAccount()">×</button>
+      <button class="account-close" onclick="toggleAccount()" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
     </div>
 
     <div class="account-section" id="export-section">
@@ -55,7 +59,11 @@
     <div class="modal-content" onclick="event.stopPropagation()">
       <div class="modal-header">
         <span id="modal-title"></span>
-        <button class="modal-close" onclick="closeModal()">×</button>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
       <div id="modal-body"></div>
     </div>
@@ -150,7 +158,6 @@
         }
       }
 
-      // Expose modal helpers to inline onclicks
       window.openWorkout = function (id) {
         if (!hToken) return;
         var modal = document.getElementById('workout-modal');
@@ -286,7 +293,6 @@
         el.className = 'account-msg ' + (ok ? 'ok' : 'err');
       }
 
-      // Samples tuples: [time, distance, spm, watts, hr, pace]
       function renderCharts(container, w) {
         var samples = w.samples || [];
         var summaryHtml = ''
@@ -335,7 +341,6 @@
 
       function svgChart(samples, idx, color) {
         var W = 600, H = 160, padL = 36, padR = 12, padT = 14, padB = 22;
-        // Filter out samples where this metric is null (e.g. HR with no belt)
         var valid = samples.filter(function (s) { return s[idx] != null; });
         if (!valid.length) {
           return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
@@ -348,14 +353,12 @@
         var xMin = xs[0], xMax = xs[n - 1];
         var yMin = Math.min.apply(null, ys);
         var yMax = Math.max.apply(null, ys);
-        // Pad y-range so the line never touches the edges
         var yPad = (yMax - yMin) * 0.12 || 1;
         yMin -= yPad; yMax += yPad;
 
         var sx = function (x) { return padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR); };
         var sy = function (y) { return H - padB - (y - yMin) / (yMax - yMin || 1) * (H - padT - padB); };
 
-        // Build smoothed path using cubic bezier (Catmull-Rom-ish)
         var pts = [];
         for (var i = 0; i < n; i++) pts.push([sx(xs[i]), sy(ys[i])]);
 
@@ -408,7 +411,7 @@
         var now = new Date();
         var startOfWeek = new Date(now);
         startOfWeek.setHours(0,0,0,0);
-        var day = (startOfWeek.getDay() + 6) % 7; // Monday=0
+        var day = (startOfWeek.getDay() + 6) % 7;
         startOfWeek.setDate(startOfWeek.getDate() - day);
 
         var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
