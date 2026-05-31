@@ -69,6 +69,21 @@
     </div>
   </div>
 
+  <div id="delete-confirm" class="modal-backdrop">
+    <div class="modal-content" style="flex:none;max-width:400px;margin:auto;padding:2rem;">
+      <div class="modal-header" style="color:#c54;border-color:#c54;">
+        <span>DELETE ACCOUNT</span>
+      </div>
+      <p style="font-size:0.85em;color:#888;line-height:1.6;margin-bottom:1.5rem;">
+        This will permanently delete your account and all your workouts. This action cannot be undone.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button class="account-btn danger" id="delete-confirm-btn">YES, DELETE EVERYTHING</button>
+        <button class="account-btn" onclick="hideDeleteConfirm()">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var statusEl  = document.getElementById('status');
@@ -224,6 +239,10 @@
         document.getElementById('account-panel').classList.toggle('open');
       };
 
+      window.hideDeleteConfirm = function () {
+        document.getElementById('delete-confirm').classList.remove('visible');
+      };
+
       window.changePassword = function () {
         var oldP = document.getElementById('cp-old').value;
         var newP = document.getElementById('cp-new').value;
@@ -263,9 +282,15 @@
         msg.textContent = '';
         if (!pwd) { acctMsg(msg, 'Enter your password to confirm', false); return; }
         if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-        if (!confirm('Permanently delete your account and all workouts? This cannot be undone.')) return;
+        var modal = document.getElementById('delete-confirm');
+        modal.classList.add('visible');
+        document.getElementById('delete-confirm-btn').onclick = function () {
+          modal.classList.remove('visible');
+          doDeleteAccount(pwd, msg);
+        };
+      };
 
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/delete_account', {
+      function doDeleteAccount(pwd, msg) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: hToken, password: pwd })
@@ -286,9 +311,7 @@
           }
         })
         .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      };
-
-      function acctMsg(el, text, ok) {
+      }(el, text, ok) {
         el.textContent = text;
         el.className = 'account-msg ' + (ok ? 'ok' : 'err');
       }

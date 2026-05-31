@@ -12,11 +12,12 @@
   <!-- ── TOP BAR ──────────────────────────────────────── -->
   <div id="topbar" class="visible">
     <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
-    <span id="tbar-user"></span>
+    <span style="flex:1"></span>
     <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
     <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
     <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
     <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
+    <div id="tbar-user"></div>
   </div>
 
   <!-- ── BOOT SPLASH ───────────────────────────────────── -->
@@ -84,6 +85,15 @@
     <div id="reconnect-overlay" class="rowing-overlay" style="background:rgba(0,0,0,0.85);">
       <div class="big-label">RECONNECTING...</div>
       <button class="btn danger" onclick="doGiveUp()">STOP</button>
+    </div>
+  </div>
+
+  <!-- ── REGISTER SUCCESS ──────────────────────────────────── -->
+  <div id="register-success" class="ftms-overlay">
+    <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
+    <div class="ftms-overlay-subtitle">a verification link has been sent to your inbox</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn primary" onclick="hideRegisterSuccess()">GO TO LOGIN</button>
     </div>
   </div>
 
@@ -176,7 +186,7 @@
       bleConnected = false;
       inDebugMode = false;
       DebugSim.stop();
-      document.getElementById('tbar-user').textContent = '';
+      setUserBadge('');
       document.getElementById('password').value = '';
       show('screen-login');
     }
@@ -232,7 +242,7 @@
       if (e.data && e.data.type === 'tokenExpired') {
         appToken = null;
         appUsername = null;
-        document.getElementById('tbar-user').textContent = '';
+        setUserBadge('');
         setLoginStatus('Session expired. Please log in again.');
         show('screen-login');
       }
@@ -260,12 +270,13 @@
         if (data && data.status === 'success') {
           appToken = msg.token;
           appUsername = data.username;
-          document.getElementById('tbar-user').textContent = data.username;
+          setUserBadge(data.username);
           setLoginStatus('');
           showHome();
           hideBootSplash();
         } else {
           setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
+          setUserBadge('');
           show('screen-login');
           hideBootSplash();
         }
@@ -310,7 +321,7 @@
         if (data && data.status === 'success' && data.token) {
           appToken = data.token;
           appUsername = u;
-          document.getElementById('tbar-user').textContent = u;
+          setUserBadge(u);
           sendToApp('loginResult', { success: true, token: data.token, username: u });
           showHome();
         } else {
@@ -360,9 +371,9 @@
         btn.textContent = 'CREATE';
         var data = Array.isArray(arr) ? arr[0] : arr;
         if (data && data.status === 'success') {
-          setRegisterStatus('Check your email to verify your account', true);
-          document.getElementById('reg-password').value = '';
-        } else {
+            document.getElementById('reg-password').value = '';
+            document.getElementById('register-success').classList.add('visible');
+          } else {
           setRegisterStatus((data && data.error) || 'Registration failed');
         }
       })
@@ -373,7 +384,10 @@
       });
     }
 
-    function goScanWithoutLogin() {
+    function hideRegisterSuccess() {
+      document.getElementById('register-success').classList.remove('visible');
+      show('screen-login');
+    }
       document.getElementById('scan-idle').style.display = 'flex';
       document.getElementById('scan-active').style.display = 'none';
       show('screen-scan');

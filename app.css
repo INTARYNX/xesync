@@ -177,7 +177,20 @@ input:focus { border-color: #555; }
 .tbar-btn.danger:active { color: #f44; background: #110000; }
 .tbar-btn.accent { color: #00A2E8; }
 .tbar-btn.accent:active { color: #00A2E8; background: #00111a; }
-#tbar-user { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8em; color: #333; }
+#tbar-user { display: flex; align-items: center; margin-left: 8px; margin-right: 4px; }
+.tbar-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #00A2E8;
+  color: #000;
+  font-size: 0.7em;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* Status screens */
 .big-label {
