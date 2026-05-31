@@ -1,532 +1,531 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XeSync — Workouts</title>
-  <link rel="stylesheet" href="home.css">
-  <script src="config.js"></script>
-</head>
-<body class="rowing-dashboard">
+/**
+ * FTMS Integration — session tracking + display sync
+ *
+ * Public API (called from app.html):
+ *   initFtmsTracking()  — call when entering rowing screen
+ *   ingestData(csv)     — call for each FTMS packet (20 comma-separated bytes)
+ *
+ * Phases:
+ *   IDLE   — no rowing yet, waiting for first stroke
+ *   ACTIVE — rowing in progress
+ *   PAUSED — rower stopped for >5s. Clock is frozen, pause-aware dialog
+ *            is shown. Resuming (spm>0) returns to ACTIVE without losing
+ *            the session. Save/Exit ends the session.
+ */
 
-  <div id="status" class="status-msg">Loading…</div>
-  <div id="summary"></div>
-  <div id="dashboard" class="dashboard-container"></div>
+(function () {
+  'use strict';
 
-  <button id="account-toggle" onclick="toggleAccount()" aria-label="Settings">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-  </button>
+  // ─────────────────────────────────────────────────────────────────────
+  // Config
+  // ─────────────────────────────────────────────────────────────────────
+  var INACTIVITY_MS    = 5000;
+  var INACTIVITY_TICK  = 500;
+  var INITIAL_PACE     = 150;
+  var PACE_WINDOW_MS   = 30000;
+  var DEBUG            = false;
 
-  <div id="account-panel">
-    <div class="account-header">
-      MANAGE ACCOUNT
-      <button class="account-close" onclick="toggleAccount()" aria-label="Close">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
+  // ─────────────────────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────────────────────
+  var phase = 'IDLE';
 
-    <div class="account-section" id="export-section">
-      <div class="account-section-title">Export your data</div>
-      <div class="account-help">Download all your account data and workouts as a JSON file.</div>
-      <button class="account-btn" onclick="exportAccount()">Download my data</button>
-      <div class="account-msg" id="exp-msg"></div>
-    </div>
+  var session = null;
+  var lastPacket = null;
+  var lastActiveAt = 0;
+  var inactivityTimerId = null;
 
-    <div class="account-section">
-      <div class="account-section-title">Change password</div>
-      <input type="password" id="cp-old" placeholder="current password">
-      <input type="password" id="cp-new" placeholder="new password (min 8)">
-      <input type="password" id="cp-new2" placeholder="confirm new password">
-      <button class="account-btn" onclick="changePassword()">Update password</button>
-      <div class="account-msg" id="cp-msg"></div>
-    </div>
+  function resetSession() {
+    session = {
+      startedAt:        null,
+      totalPausedMs:    0,
+      pausedAt:         null,
+      distOffset:       0,
+      strokeOffset:     0,
+      calOffset:        0,
+      rawDist:          0,
+      rawStrokes:       0,
+      rawCals:          0,
+      paceSeconds:      INITIAL_PACE,
+	  paceHistory:      [],
+      samples:          []
+    };
+  }
 
-    <div class="account-section">
-      <div class="account-section-title danger">Delete account</div>
-      <div class="account-help">This permanently deletes your account and all workouts. Cannot be undone.</div>
-      <input type="password" id="del-pwd" placeholder="confirm with your password">
-      <button class="account-btn danger" onclick="deleteAccount()">Delete my account</button>
-      <div class="account-msg" id="del-msg"></div>
-    </div>
-  </div>
+  // ─────────────────────────────────────────────────────────────────────
+  // Parsing — Xebex FTMS: 20 bytes, big = byte[hi]*255 + byte[lo]
+  // ─────────────────────────────────────────────────────────────────────
+  function parsePacket(csv) {
+    if (!csv) return null;
+    var b = csv.split(',').map(function (s) { return parseInt(s, 10); });
+    if (b.length < 20 || b.some(isNaN)) return null;
+    var u16 = function (hi, lo) { return b[hi] * 255 + b[lo]; };
+    return {
+      t:         Date.now(),
+      spm:       b[2] * 0.5,
+      strokes:   u16(4, 3),
+      distance:  u16(6, 5),
+      pace:      u16(9, 8),
+      watts:     u16(11, 10),
+      cals:      u16(13, 12),
+      hr:        b[16],
+      elapsed:   u16(19, 18)
+    };
+  }
 
-  <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <span id="modal-title"></span>
-        <button class="modal-close" onclick="closeModal()" aria-label="Close">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div id="modal-body"></div>
-    </div>
-  </div>
+  // ─────────────────────────────────────────────────────────────────────
+  // Session math
+  // ─────────────────────────────────────────────────────────────────────
+  function applyResetIfNeeded(p) {
+    if (p.distance < session.rawDist)    session.distOffset   += session.rawDist;
+    if (p.strokes  < session.rawStrokes) session.strokeOffset += session.rawStrokes;
+    if (p.cals     < session.rawCals)    session.calOffset    += session.rawCals;
+    session.rawDist    = p.distance;
+    session.rawStrokes = p.strokes;
+    session.rawCals    = p.cals;
+  }
 
-  <div id="delete-confirm" class="modal-backdrop">
-    <div class="modal-content" style="flex:none;max-width:400px;margin:auto;padding:2rem;">
-      <div class="modal-header" style="color:#c54;border-color:#c54;">
-        <span>DELETE ACCOUNT</span>
-      </div>
-      <p style="font-size:0.85em;color:#888;line-height:1.6;margin-bottom:1.5rem;">
-        This will permanently delete your account and all your workouts. This action cannot be undone.
-      </p>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="account-btn danger" id="delete-confirm-btn">YES, DELETE EVERYTHING</button>
-        <button class="account-btn" onclick="hideDeleteConfirm()">CANCEL</button>
-      </div>
-    </div>
-  </div>
+  function totalDistance() { return session.distOffset   + session.rawDist; }
+  function totalStrokes()  { return session.strokeOffset + session.rawStrokes; }
+  function totalCals()     { return session.calOffset    + session.rawCals; }
 
-  <script>
-    (function () {
-      var statusEl  = document.getElementById('status');
-      var summaryEl = document.getElementById('summary');
-      var dashEl    = document.getElementById('dashboard');
-      var inIframe = window.parent && window.parent !== window;
-      var hToken   = inIframe ? null : localStorage.getItem('xesync_token');
+  function sessionSeconds() {
+    if (!session || !session.startedAt) return 0;
+    var now = Date.now();
+    var pausedMs = session.totalPausedMs;
+    if (session.pausedAt != null) pausedMs += (now - session.pausedAt);
+    return (now - session.startedAt - pausedMs) / 1000;
+  }
 
-      // Hide the data export in the App Inventor WebView — Blob download
-      // doesn't work there. Users can export from the browser instead.
-      if (inIframe) {
-        var ex = document.getElementById('export-section');
-        if (ex) ex.style.display = 'none';
+  function updatePace(prev, curr) {
+    var now = curr.t;
+    var currentTotalDist = totalDistance();
+
+    session.paceHistory.push({ t: now, dist: currentTotalDist });
+
+    var cutoff = now - PACE_WINDOW_MS;
+    while (session.paceHistory.length > 0 && session.paceHistory[0].t < cutoff) {
+      session.paceHistory.shift();
+    }
+
+    if (session.paceHistory.length < 2) return;
+
+    var oldestPoint = session.paceHistory[0];
+    var dDist = currentTotalDist - oldestPoint.dist;
+    var dTime = (now - oldestPoint.t) / 1000;
+
+    if (dDist > 0 && dTime > 0.5) {
+      var averagePace = (dTime / dDist) * 500;
+      if (isFinite(averagePace) && averagePace > 0) {
+        session.paceSeconds = averagePace;
       }
+    }
+  }
 
-      window.addEventListener('message', function (e) {
-        if (e.data && e.data.type === 'token' && e.data.token) {
-          hToken = e.data.token;
-          load();
-        }
-      });
+  function recordSample(p) {
+    var now = sessionSeconds();
+    var last = session.samples.length ? session.samples[session.samples.length - 1] : null;
+    if (last && now - last.time < 1.0) return;
+    session.samples.push({
+      time:     now,
+      distance: totalDistance(),
+      strokes:  totalStrokes(),
+      spm:      p.spm,
+      watts:    p.watts,
+      hr:       p.hr === 255 ? null : p.hr,
+      pace:     session.paceSeconds
+    });
+  }
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-        statusEl.style.display = text ? 'block' : 'none';
+  // ─────────────────────────────────────────────────────────────────────
+  // Display
+  // ─────────────────────────────────────────────────────────────────────
+  function fmtTime(s) {
+    s = Math.max(0, Math.round(s));
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function paceToAnimSpeed(paceSec) {
+    if (!paceSec || paceSec <= 0) return 0;
+    return (500 / paceSec) * 0.8;
+  }
+
+  function render() {
+    if (!lastPacket) return;
+    setText('heartrate',   lastPacket.hr === 255 ? '-' : lastPacket.hr);
+    setText('distance',    totalDistance());
+    setText('watts',       Math.round(lastPacket.watts));
+    setText('pace',        fmtTime(session.paceSeconds));
+    setText('spm',         Math.round(lastPacket.spm));
+    setText('cals',        totalCals());
+    setText('strokes',     totalStrokes());
+    setText('elapsedtime', fmtTime(sessionSeconds()));
+    if (typeof setConsoleSpeedAndSpm === 'function') {
+      setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds), lastPacket.spm);
+    }
+  }
+
+  function renderIdle() {
+    setText('heartrate', '-');
+    setText('distance',  '0');
+    setText('watts',     '0');
+    setText('pace',      '--:--');
+    setText('spm',       '0.0');
+    setText('cals',      '0');
+    setText('strokes',   '0');
+    setText('elapsedtime', '00:00');
+    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Status banner
+  // ─────────────────────────────────────────────────────────────────────
+  function ensureBanner() {
+    var el = document.getElementById('ftmsBanner');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'ftmsBanner';
+    document.body.appendChild(el);
+    return el;
+  }
+  function showBanner(text) {
+    var el = ensureBanner();
+    el.textContent = text;
+    el.classList.add('visible');
+  }
+  function hideBanner() {
+    var el = document.getElementById('ftmsBanner');
+    if (el) el.classList.remove('visible');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Pause dialog
+  // ─────────────────────────────────────────────────────────────────────
+  function ensurePauseDialog() {
+    if (document.getElementById('pauseDialog')) return;
+    var html = ''
+      + '<div id="pauseDialog" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">PAUSED</div>'
+      +   '<div class="ftms-overlay-subtitle">row again to continue</div>'
+      +   '<div class="ftms-summary-grid">'
+      +     tile('summaryTime',     'TIME',     '00:00')
+      +     tile('summaryDistance', 'DISTANCE', '0m')
+      +     tile('summaryStrokes',  'STROKES',  '0')
+      +     tile('summaryCalories', 'CALORIES', '0')
+      +   '</div>'
+      +   '<div class="ftms-actions">'
+      +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE</button>'
+      +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
+      +   '</div>'
+      + '</div>';
+    function tile(id, label, val) {
+      return '<div class="ftms-summary-tile">'
+        + '<div class="ftms-summary-label">' + label + '</div>'
+        + '<div id="' + id + '" class="ftms-summary-value">' + val + '</div>'
+        + '</div>';
+    }
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+  function showPauseDialog() {
+    ensurePauseDialog();
+    setText('summaryTime',     fmtTime(sessionSeconds()));
+    setText('summaryDistance', totalDistance() + 'm');
+    setText('summaryStrokes',  totalStrokes());
+    setText('summaryCalories', totalCals());
+    document.getElementById('pauseDialog').classList.add('visible');
+  }
+  function hidePauseDialog() {
+    var el = document.getElementById('pauseDialog');
+    if (el) el.classList.remove('visible');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Offline choice screen
+  // ─────────────────────────────────────────────────────────────────────
+  function ensureOfflineChoice() {
+    if (document.getElementById('offlineChoice')) return;
+    var html = ''
+      + '<div id="offlineChoice" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">WORKOUT SAVED</div>'
+      +   '<div class="ftms-overlay-subtitle">stored offline</div>'
+      +   '<div class="ftms-actions">'
+      +     '<button class="ftms-btn primary" onclick="offlineChoiceRow()">ROW AGAIN</button>'
+      +     '<button class="ftms-btn"         onclick="offlineChoiceLogin()">GO TO LOGIN</button>'
+      +   '</div>'
+      + '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+  function showOfflineChoice() {
+    ensureOfflineChoice();
+    document.getElementById('offlineChoice').classList.add('visible');
+  }
+  function hideOfflineChoice() {
+    var el = document.getElementById('offlineChoice');
+    if (el) el.classList.remove('visible');
+  }
+  function offlineChoiceRow() {
+    hideOfflineChoice();
+    goIdle();
+  }
+  function offlineChoiceLogin() {
+    hideOfflineChoice();
+    if (typeof doExit === 'function') doExit();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Phase transitions
+  // ─────────────────────────────────────────────────────────────────────
+  function goActive() {
+    if (phase === 'ACTIVE') return;
+    if (phase === 'PAUSED') {
+      if (session.pausedAt != null) {
+        session.totalPausedMs += (Date.now() - session.pausedAt);
+        session.pausedAt = null;
       }
+      hidePauseDialog();
+      hideBanner();
+      phase = 'ACTIVE';
+      lastActiveAt = Date.now();
+      if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
+      return;
+    }
+    resetSession();
+    session.startedAt = Date.now();
+    lastActiveAt = Date.now();
+    phase = 'ACTIVE';
+    hideBanner();
+    hidePauseDialog();
+    if (DEBUG) console.log('[FTMS] phase IDLE → ACTIVE');
+  }
 
-      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function goPaused() {
+    if (phase !== 'ACTIVE') return;
+    session.pausedAt = Date.now();
+    phase = 'PAUSED';
+    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
+    showPauseDialog();
+    if (DEBUG) console.log('[FTMS] phase ACTIVE → PAUSED');
+  }
 
-      function fmtDuration(s) {
-        s = Math.max(0, Math.round(s || 0));
-        var h = Math.floor(s / 3600);
-        var m = Math.floor((s % 3600) / 60);
-        var r = s % 60;
-        return pad(h) + ':' + pad(m) + ':' + pad(r);
-      }
+  function goIdle() {
+    phase = 'IDLE';
+    resetSession();
+    lastPacket = null;
+    renderIdle();
+    hidePauseDialog();
+    var rowingScreen = document.getElementById('screen-rowing');
+    if (rowingScreen && rowingScreen.classList.contains('active')) {
+      showBanner('READY TO ROW !');
+    } else {
+      hideBanner();
+    }
+    if (DEBUG) console.log('[FTMS] phase → IDLE');
+  }
 
-      function fmtPace(s) {
-        s = Math.max(0, Math.round(s || 0));
-        var m = Math.floor(s / 60);
-        var r = s % 60;
-        return pad(m) + ':' + pad(r);
-      }
+  // ─────────────────────────────────────────────────────────────────────
+  // Inactivity watchdog
+  // ─────────────────────────────────────────────────────────────────────
+  function tickInactivity() {
+    if (phase !== 'ACTIVE') return;
+    if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
+  }
 
-      function fmtDate(iso) {
-        if (!iso) return '';
-        var d = new Date(iso);
-        return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear()
-             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-      }
+  // ─────────────────────────────────────────────────────────────────────
+  // Public API
+  // ─────────────────────────────────────────────────────────────────────
+  function ingestData(csv) {
+    if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
+      csv = decodeURIComponent(csv.slice(6));
+    }
+    var p = parsePacket(csv);
+    if (!p) return;
 
-      function escHtml(s) {
-        return String(s == null ? '' : s)
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      }
+    var prev = lastPacket;
+    lastPacket = p;
 
-      function renderCard(w) {
-        return ''
-          + '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
-          +   '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
-          +   '<div class="card-stats">'
-          +     stat('Distance',   (w.distance_m || 0) + 'm')
-          +     stat('Elapsed',    fmtDuration(w.duration_sec))
-          +     stat('Strokes',    w.total_strokes || 0)
-          +     stat('Watts',      w.avg_watts || 0)
-          +     stat('SPM',        w.avg_spm || 0)
-          +     stat('Pace',       fmtPace(w.avg_pace_sec), true)
-          +     stat('Calories',   w.calories || 0)
-          +     stat('Heart Rate', w.avg_hr || '-')
-          +   '</div>'
-          + '</div>';
-      }
+    if (phase === 'IDLE') {
+      if (p.spm > 0) goActive(); else return;
+    }
+    else if (phase === 'PAUSED') {
+      if (p.spm > 0) goActive(); else return;
+    }
 
-      function stat(label, value, isPace) {
-        return '<div class="stat' + (isPace ? ' pace' : '') + '">'
-          + escHtml(label) + ': <span class="stat-value' + (isPace ? ' pace-value' : '') + '">'
-          + escHtml(value) + '</span></div>';
-      }
+    applyResetIfNeeded(p);
+    updatePace(prev, p);
+    if (p.spm > 0) {
+      lastActiveAt = Date.now();
+      recordSample(p);
+    }
+    render();
+  }
 
-      function notifyTokenExpired() {
-        hToken = null;
-        if (inIframe) {
-          try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
-        } else {
-          localStorage.removeItem('xesync_token');
-          window.location.href = 'login.html';
-        }
-      }
+  function initFtmsTracking() {
+    ensurePauseDialog();
+    if (inactivityTimerId) clearInterval(inactivityTimerId);
+    inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
+    goIdle();
+  }
 
-      window.openWorkout = function (id) {
-        if (!hToken) return;
-        var modal = document.getElementById('workout-modal');
-        var body  = document.getElementById('modal-body');
-        var title = document.getElementById('modal-title');
-        title.textContent = 'Loading…';
-        body.innerHTML = '';
-        modal.classList.add('visible');
+  // ─────────────────────────────────────────────────────────────────────
+  // Save / exit
+  // ─────────────────────────────────────────────────────────────────────
+  function avg(arr, key) {
+    if (!arr.length) return 0;
+    var s = 0, n = 0;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i][key] == null) continue;
+      s += arr[i][key];
+      n++;
+    }
+    return n ? s / n : 0;
+  }
 
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/get_workout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, workout: id })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var w = Array.isArray(arr) ? arr[0] : arr;
-          if (!w) { title.textContent = 'Workout not found'; return; }
-          title.textContent = fmtDate(w.workout_date);
-          renderCharts(body, w);
-        })
-        .catch(function (e) { title.textContent = 'Error: ' + e.message; });
-      };
-
-      window.closeModal = function (e) {
-        if (e && e.target.id !== 'workout-modal' && e.type === 'click' && e.target !== e.currentTarget) return;
-        document.getElementById('workout-modal').classList.remove('visible');
-      };
-
-      window.exportAccount = function () {
-        var msg = document.getElementById('exp-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-        acctMsg(msg, 'Preparing export…', true);
-
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/export_account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success' && row.data) {
-            var blob = new Blob([JSON.stringify(row.data, null, 2)], { type: 'application/json' });
-            var url  = URL.createObjectURL(blob);
-            var d    = new Date();
-            var pad  = function (n) { return n < 10 ? '0' + n : n; };
-            var name = 'xesync_export_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
-            var a = document.createElement('a');
-            a.href = url; a.download = name;
-            document.body.appendChild(a); a.click(); a.remove();
-            URL.revokeObjectURL(url);
-            acctMsg(msg, 'Downloaded ' + name, true);
-          } else {
-            acctMsg(msg, (row && row.error) || 'Export failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      };
-
-      window.toggleAccount = function () {
-        document.getElementById('account-panel').classList.toggle('open');
-      };
-
-      window.hideDeleteConfirm = function () {
-        document.getElementById('delete-confirm').classList.remove('visible');
-      };
-
-      window.changePassword = function () {
-        var oldP = document.getElementById('cp-old').value;
-        var newP = document.getElementById('cp-new').value;
-        var newP2 = document.getElementById('cp-new2').value;
-        var msg = document.getElementById('cp-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!oldP || !newP) { acctMsg(msg, 'Fill all fields', false); return; }
-        if (newP.length < 8) { acctMsg(msg, 'New password must be at least 8 chars', false); return; }
-        if (newP !== newP2) { acctMsg(msg, 'Passwords do not match', false); return; }
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/change_password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, old_password: oldP, new_password: newP })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success') {
-            acctMsg(msg, 'Password updated', true);
-            document.getElementById('cp-old').value = '';
-            document.getElementById('cp-new').value = '';
-            document.getElementById('cp-new2').value = '';
-          } else {
-            acctMsg(msg, (row && row.error) || 'Failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      };
-
-      window.deleteAccount = function () {
-        var pwd = document.getElementById('del-pwd').value;
-        var msg = document.getElementById('del-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!pwd) { acctMsg(msg, 'Enter your password to confirm', false); return; }
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-        var modal = document.getElementById('delete-confirm');
-        modal.classList.add('visible');
-        document.getElementById('delete-confirm-btn').onclick = function () {
-          modal.classList.remove('visible');
-          doDeleteAccount(pwd, msg);
-        };
-      };
-
-      function doDeleteAccount(pwd, msg) {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, password: pwd })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success') {
-            acctMsg(msg, 'Account deleted', true);
-            if (inIframe) {
-              try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
-            } else {
-              localStorage.removeItem('xesync_token');
-              setTimeout(function () { window.location.href = 'login.html'; }, 1000);
-            }
-          } else {
-            acctMsg(msg, (row && row.error) || 'Failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      }(el, text, ok) {
-        el.textContent = text;
-        el.className = 'account-msg ' + (ok ? 'ok' : 'err');
-      }
-
-      function renderCharts(container, w) {
-        var samples = w.samples || [];
-        var summaryHtml = ''
-          + '<div class="modal-summary">'
-          +   tile('Distance',   (w.distance_m || 0) + ' m', true)
-          +   tile('Time',       fmtDuration(w.duration_sec))
-          +   tile('Pace',       fmtPace(w.avg_pace_sec), true)
-          +   tile('Watts',      w.avg_watts || 0)
-          +   tile('SPM',        w.avg_spm || 0)
-          +   tile('Heart Rate', w.avg_hr || '-')
-          +   tile('Strokes',    w.total_strokes || 0)
-          +   tile('Calories',   w.calories || 0)
-          + '</div>';
-
-        if (!samples.length) {
-          container.innerHTML = summaryHtml + '<div class="status-msg">No sample data.</div>';
-          return;
-        }
-
-        var charts = [
-          { title: 'Pace',       idx: 5, color: '#4a8', avg: w.avg_pace_sec, fmt: fmtPace, unit: '/500m' },
-          { title: 'Watts',      idx: 3, color: '#fa3', avg: w.avg_watts,    fmt: function(v){ return Math.round(v); }, unit: 'W' },
-          { title: 'SPM',        idx: 2, color: '#6cf', avg: w.avg_spm,      fmt: function(v){ return (+v).toFixed(1); }, unit: '' },
-          { title: 'Heart Rate', idx: 4, color: '#f55', avg: w.avg_hr,       fmt: function(v){ return Math.round(v); }, unit: 'bpm' }
+  function buildPayload() {
+    var s = session.samples;
+    return {
+      version: 1,
+      summary: {
+        duration: Math.round(sessionSeconds()),
+        distance: totalDistance(),
+        strokes:  totalStrokes(),
+        calories: totalCals(),
+        avgSpm:   Math.round(avg(s, 'spm')   * 10) / 10,
+        avgPace:  Math.round(avg(s, 'pace')),
+        avgWatts: Math.round(avg(s, 'watts')),
+        avgHr:    Math.round(avg(s, 'hr'))
+      },
+      samples: s.map(function (x) {
+        return [
+          Math.round(x.time * 10) / 10,
+          Math.round(x.distance),
+          x.strokes,
+          Math.round(x.spm * 10) / 10,
+          Math.round(x.watts),
+          x.hr == null ? null : Math.round(x.hr),
+          Math.round(x.pace)
         ];
+      })
+    };
+  }
 
-        container.innerHTML = summaryHtml
-          + '<div class="charts-grid">'
-          + charts.map(function (c) {
-              var avgDisp = c.avg != null ? c.fmt(c.avg) + ' ' + c.unit : '';
-              return '<div class="chart-wrap">'
-                + '<div class="chart-title">' + c.title + '</div>'
-                + '<div class="chart-current" style="color:' + c.color + '">' + avgDisp + '</div>'
-                + svgChart(samples, c.idx, c.color)
-                + '</div>';
-            }).join('')
-          + '</div>';
+  function workoutTag() {
+    var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return 'workout_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+      + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
 
-        function tile(label, value, accent) {
-          return '<div class="modal-summary-tile' + (accent ? ' accent' : '') + '">'
-            +    '<div class="modal-summary-label">' + label + '</div>'
-            +    '<div class="modal-summary-value">' + value + '</div>'
-            +  '</div>';
-        }
+  function saveWorkout() {
+    hidePauseDialog();
+    var payload = buildPayload();
+    var token = typeof appToken !== 'undefined' ? appToken : null;
+
+    var goHome = function () {
+      hideBanner();
+      goIdle();
+      if (typeof showHome === 'function') showHome();
+    };
+
+    showBanner('SAVING...');
+
+    if (!token) {
+      var tag = workoutTag();
+      var msg = JSON.stringify({
+        action:  'saveData',
+        workout: tag,
+        data:    payload
+      });
+      var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
+        ? AppInventor
+        : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
+          ? window.AppInventor
+          : null;
+      if (ai) {
+        showBanner('SENT TO APP');
+        ai.setWebViewString(msg);
+        setTimeout(function () {
+          hideBanner();
+          phase = 'IDLE';
+          showOfflineChoice();
+        }, 1500);
+      } else {
+        showBanner('NO APP BRIDGE (browser mode)');
+        setTimeout(function () {
+          hideBanner();
+          phase = 'IDLE';
+          showOfflineChoice();
+        }, 2000);
       }
+      return;
+    }
 
-      function svgChart(samples, idx, color) {
-        var W = 600, H = 160, padL = 36, padR = 12, padT = 14, padB = 22;
-        var valid = samples.filter(function (s) { return s[idx] != null; });
-        if (!valid.length) {
-          return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
-               + '<text x="' + (W/2) + '" y="' + (H/2) + '" text-anchor="middle" class="chart-label">no data</text>'
-               + '</svg>';
-        }
-        var n = valid.length;
-        var xs = valid.map(function (s) { return +s[0]; });
-        var ys = valid.map(function (s) { return +s[idx]; });
-        var xMin = xs[0], xMax = xs[n - 1];
-        var yMin = Math.min.apply(null, ys);
-        var yMax = Math.max.apply(null, ys);
-        var yPad = (yMax - yMin) * 0.12 || 1;
-        yMin -= yPad; yMax += yPad;
+    var tag = workoutTag();
+    var body = JSON.stringify({ token: token, workout: tag, data: payload });
 
-        var sx = function (x) { return padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR); };
-        var sy = function (y) { return H - padB - (y - yMin) / (yMax - yMin || 1) * (H - padT - padB); };
+    var timeout = new Promise(function (_, reject) {
+      setTimeout(function () { reject(new Error('timeout')); }, 10000);
+    });
 
-        var pts = [];
-        for (var i = 0; i < n; i++) pts.push([sx(xs[i]), sy(ys[i])]);
-
-        var d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
-        for (var i = 0; i < pts.length - 1; i++) {
-          var p0 = pts[i - 1] || pts[i];
-          var p1 = pts[i];
-          var p2 = pts[i + 1];
-          var p3 = pts[i + 2] || p2;
-          var cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-          var cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-          var cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-          var cp2y = p2[1] - (p3[1] - p1[1]) / 6;
-          d += ' C' + cp1x.toFixed(1) + ',' + cp1y.toFixed(1)
-             + ' '  + cp2x.toFixed(1) + ',' + cp2y.toFixed(1)
-             + ' '  + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
-        }
-
-        var fillD = d + ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + (H - padB)
-                      + ' L' + pts[0][0].toFixed(1) + ',' + (H - padB) + ' Z';
-
-        var gradId = 'grad_' + idx + '_' + Math.floor(Math.random() * 1e6);
-        var ticksY = 3;
-        var yTicks = '';
-        for (var k = 0; k <= ticksY; k++) {
-          var v  = yMin + (yMax - yMin) * (k / ticksY);
-          var yp = sy(v).toFixed(1);
-          yTicks += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yp + '" y2="' + yp
-                  + '" stroke="#1a1a1a" stroke-width="1"/>'
-                  + '<text x="' + (padL - 5) + '" y="' + (parseFloat(yp) + 3)
-                  + '" text-anchor="end" class="chart-label">' + Math.round(v) + '</text>';
-        }
-
-        return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
-             + '<defs><linearGradient id="' + gradId + '" x1="0" x2="0" y1="0" y2="1">'
-             +   '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.5"/>'
-             +   '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
-             + '</linearGradient></defs>'
-             + yTicks
-             + '<path d="' + fillD + '" fill="url(#' + gradId + ')"/>'
-             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2"'
-             +       ' stroke-linejoin="round" stroke-linecap="round"/>'
-             + '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end" class="chart-label">'
-             +   fmtDuration(xMax) + '</text>'
-             + '<text x="' + padL + '" y="' + (H - 6) + '" class="chart-label">0:00</text>'
-             + '</svg>';
-      }
-
-      function renderSummary(rows) {
-        var now = new Date();
-        var startOfWeek = new Date(now);
-        startOfWeek.setHours(0,0,0,0);
-        var day = (startOfWeek.getDay() + 6) % 7;
-        startOfWeek.setDate(startOfWeek.getDate() - day);
-
-        var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        var startOfYear  = new Date(now.getFullYear(), 0, 1);
-
-        var buckets = {
-          week:  { dist: 0, dur: 0, count: 0 },
-          month: { dist: 0, dur: 0, count: 0 },
-          year:  { dist: 0, dur: 0, count: 0 }
-        };
-
-        rows.forEach(function (w) {
-          var d = new Date(w.workout_date);
-          var dist = w.distance_m || 0;
-          var dur  = w.duration_sec || 0;
-          if (d >= startOfWeek)  { buckets.week.dist  += dist; buckets.week.dur  += dur; buckets.week.count++;  }
-          if (d >= startOfMonth) { buckets.month.dist += dist; buckets.month.dur += dur; buckets.month.count++; }
-          if (d >= startOfYear)  { buckets.year.dist  += dist; buckets.year.dur  += dur; buckets.year.count++;  }
+    Promise.race([
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+      }).then(function (r) {
+        return r.text().then(function (txt) {
+          return { ok: r.ok, status: r.status, txt: txt };
         });
-
-        function block(label, b) {
-          return ''
-            + '<div class="summary-block">'
-            +   '<div class="summary-label">' + label + '</div>'
-            +   '<div class="summary-stats">'
-            +     '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
-            +     '<span>' + fmtDuration(b.dur) + '</span>'
-            +     '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
-            +   '</div>'
-            + '</div>';
-        }
-
-        function encouragement(week) {
-          if (week.count === 0) return 'Ready when you are.';
-          if (week.count === 1) return 'Nice start to the week.';
-          if (week.count <= 3)  return 'Good progress.';
-          if (week.count <= 5)  return 'Strong week.';
-          return 'Excellent consistency.';
-        }
-
-        summaryEl.innerHTML = ''
-          + '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
-          + '<div class="summary-container">'
-          +   block('This week',  buckets.week)
-          +   block('This month', buckets.month)
-          +   block('This year',  buckets.year)
-          + '</div>';
+      }),
+      timeout
+    ])
+    .then(function (resp) {
+      if (!resp.ok) {
+        showBanner('HTTP ' + resp.status + ': ' + (resp.txt || '').slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+        return;
       }
-
-      function load() {
-        if (!hToken) {
-          if (inIframe) {
-            setStatus('Waiting for session...');
-          } else {
-            window.location.href = 'login.html';
-          }
-          return;
-        }
-
-        setStatus('Loading…');
-
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken })
-        })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function (rows) {
-          if (!Array.isArray(rows) || rows.length === 0) {
-            setStatus('Your uploaded workouts will appear here.');
-            return;
-          }
-          setStatus('');
-          renderSummary(rows);
-          dashEl.innerHTML = rows.map(renderCard).join('');
-        })
-        .catch(function (err) {
-          var msg = err.message || '';
-          if (/401|403|invalid|expired/i.test(msg)) {
-            notifyTokenExpired();
-            setStatus('Session expired. Please log in again.');
-          } else {
-            setStatus('Failed to load workouts: ' + msg);
-          }
-        });
+      var json;
+      try { json = JSON.parse(resp.txt); }
+      catch (e) {
+        showBanner('BAD JSON: ' + (resp.txt || '').slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+        return;
       }
+      var row = Array.isArray(json) ? json[0] : json;
+      if (row && row.status === 'success') {
+        showBanner('SAVED ✓');
+        setTimeout(function () { hideBanner(); goHome(); }, 1000);
+      } else {
+        showBanner('SAVE FAIL: ' + ((row && (row.error || row.status)) || resp.txt).toString().slice(0, 80));
+        setTimeout(function () { hideBanner(); goHome(); }, 4000);
+      }
+    })
+    .catch(function (err) {
+      showBanner('NET ERROR: ' + err.message);
+      setTimeout(function () { hideBanner(); goHome(); }, 4000);
+    });
+  }
 
-      load();
-    })();
-  </script>
-</body>
-</html>
+  function exitSession() {
+    hidePauseDialog();
+    hideBanner();
+    goIdle();
+    if (typeof showHome === 'function') showHome();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Exports
+  // ─────────────────────────────────────────────────────────────────────
+  window.initFtmsTracking   = initFtmsTracking;
+  window.ingestData         = ingestData;
+  window.saveWorkout        = saveWorkout;
+  window.exitSession        = exitSession;
+  window.offlineChoiceRow   = offlineChoiceRow;
+  window.offlineChoiceLogin = offlineChoiceLogin;
+})();
