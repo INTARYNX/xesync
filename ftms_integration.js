@@ -19,9 +19,9 @@
   // ─────────────────────────────────────────────────────────────────────
   // Config
   // ─────────────────────────────────────────────────────────────────────
-  var INACTIVITY_MS    = 5000;   // ms of spm=0 before workout is PAUSED
-  var INACTIVITY_TICK  = 500;    // how often to check for inactivity (ms)
-  var INITIAL_PACE     = 150;    // s/500m when we have no real pace yet
+  var INACTIVITY_MS    = 5000;
+  var INACTIVITY_TICK  = 500;
+  var INITIAL_PACE     = 150;
   var PACE_WINDOW_MS   = 30000;
   var DEBUG            = false;
 
@@ -30,29 +30,24 @@
   // ─────────────────────────────────────────────────────────────────────
   var phase = 'IDLE';
 
-  var session = null;            // see resetSession()
-  var lastPacket = null;         // most recent parsed FTMS packet
-  var lastActiveAt = 0;          // ms timestamp of last spm>0 packet
+  var session = null;
+  var lastPacket = null;
+  var lastActiveAt = 0;
   var inactivityTimerId = null;
 
   function resetSession() {
     session = {
       startedAt:        null,
-      // Pause-aware clock: total ms spent in PAUSED state
       totalPausedMs:    0,
       pausedAt:         null,
-      // Session-level accumulators (added to current rower reading)
       distOffset:       0,
       strokeOffset:     0,
       calOffset:        0,
-      // Last raw values from the rower (used to detect resets)
       rawDist:          0,
       rawStrokes:       0,
       rawCals:          0,
-      // Smoothed pace
       paceSeconds:      INITIAL_PACE,
 	  paceHistory:      [],
-      // Sampled-per-packet log used to build the save payload
       samples:          []
     };
   }
@@ -70,7 +65,7 @@
       spm:       b[2] * 0.5,
       strokes:   u16(4, 3),
       distance:  u16(6, 5),
-      pace:      u16(9, 8),   // raw pace from rower, s/500m
+      pace:      u16(9, 8),
       watts:     u16(11, 10),
       cals:      u16(13, 12),
       hr:        b[16],
@@ -81,8 +76,6 @@
   // ─────────────────────────────────────────────────────────────────────
   // Session math
   // ─────────────────────────────────────────────────────────────────────
-  // Detect a rower reset (any monotonic counter dropped) and roll its
-  // previous peak into the session offset, so totals keep climbing.
   function applyResetIfNeeded(p) {
     if (p.distance < session.rawDist)    session.distOffset   += session.rawDist;
     if (p.strokes  < session.rawStrokes) session.strokeOffset += session.rawStrokes;
@@ -96,8 +89,6 @@
   function totalStrokes()  { return session.strokeOffset + session.rawStrokes; }
   function totalCals()     { return session.calOffset    + session.rawCals; }
 
-  // Pause-aware elapsed time: total wall time since start, minus any
-  // accumulated paused intervals, minus the currently-running pause if any.
   function sessionSeconds() {
     if (!session || !session.startedAt) return 0;
     var now = Date.now();
@@ -106,41 +97,31 @@
     return (now - session.startedAt - pausedMs) / 1000;
   }
 
-  // Calcule l'allure (/500m) lissée sur une fenêtre glissante de 30 secondes
   function updatePace(prev, curr) {
     var now = curr.t;
     var currentTotalDist = totalDistance();
 
-    // 1. Enregistrer le point actuel dans l'historique
     session.paceHistory.push({ t: now, dist: currentTotalDist });
 
-    // 2. Supprimer les points plus vieux que 30 secondes (PACE_WINDOW_MS)
     var cutoff = now - PACE_WINDOW_MS;
     while (session.paceHistory.length > 0 && session.paceHistory[0].t < cutoff) {
       session.paceHistory.shift();
     }
 
-    // 3. Calculer l'allure si on a assez de recul (au moins 2 points)
     if (session.paceHistory.length < 2) return;
 
     var oldestPoint = session.paceHistory[0];
-    var dDist = currentTotalDist - oldestPoint.dist; // Distance parcourue en 30s max
-    var dTime = (now - oldestPoint.t) / 1000;        // Temps exact écoulé en secondes
+    var dDist = currentTotalDist - oldestPoint.dist;
+    var dTime = (now - oldestPoint.t) / 1000;
 
-    // Ne mettre à jour que si le rameur bouge pour éviter les divisions par zéro
     if (dDist > 0 && dTime > 0.5) {
-      // Formule du temps pour 500m : (Temps / Distance) * 500
       var averagePace = (dTime / dDist) * 500;
-      
       if (isFinite(averagePace) && averagePace > 0) {
         session.paceSeconds = averagePace;
       }
     }
   }
 
-  // Sample one entry per second of session time (the rower may emit packets
-  // faster than that; we downsample to keep the save payload bounded — a 1h
-  // session caps at ~3600 samples instead of growing unbounded).
   function recordSample(p) {
     var now = sessionSeconds();
     var last = session.samples.length ? session.samples[session.samples.length - 1] : null;
@@ -173,7 +154,7 @@
 
   function paceToAnimSpeed(paceSec) {
     if (!paceSec || paceSec <= 0) return 0;
-    return (500 / paceSec) * 0.8; // ~4.4 fast, ~2.2 slow
+    return (500 / paceSec) * 0.8;
   }
 
   function render() {
@@ -225,7 +206,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Pause dialog — SAVE or EXIT SESSION. Rowing again dismisses it.
+  // Pause dialog
   // ─────────────────────────────────────────────────────────────────────
   function ensurePauseDialog() {
     if (document.getElementById('pauseDialog')) return;
@@ -266,7 +247,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Offline choice screen (shown after an offline save)
+  // Offline choice screen
   // ─────────────────────────────────────────────────────────────────────
   function ensureOfflineChoice() {
     if (document.getElementById('offlineChoice')) return;
@@ -304,7 +285,6 @@
   function goActive() {
     if (phase === 'ACTIVE') return;
     if (phase === 'PAUSED') {
-      // Resume — accumulate the just-ended pause and clear marker.
       if (session.pausedAt != null) {
         session.totalPausedMs += (Date.now() - session.pausedAt);
         session.pausedAt = null;
@@ -316,7 +296,6 @@
       if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
       return;
     }
-    // IDLE → ACTIVE: brand new session
     resetSession();
     session.startedAt = Date.now();
     lastActiveAt = Date.now();
@@ -351,7 +330,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Inactivity watchdog — runs while ACTIVE
+  // Inactivity watchdog
   // ─────────────────────────────────────────────────────────────────────
   function tickInactivity() {
     if (phase !== 'ACTIVE') return;
@@ -371,16 +350,13 @@
     var prev = lastPacket;
     lastPacket = p;
 
-    // IDLE: first stroke kicks off a fresh session.
     if (phase === 'IDLE') {
       if (p.spm > 0) goActive(); else return;
     }
-    // PAUSED: any stroke resumes the same session.
     else if (phase === 'PAUSED') {
       if (p.spm > 0) goActive(); else return;
     }
 
-    // ACTIVE: apply reset detection, update pace, sample, render.
     applyResetIfNeeded(p);
     updatePace(prev, p);
     if (p.spm > 0) {
@@ -451,8 +427,9 @@
     var token = typeof appToken !== 'undefined' ? appToken : null;
 
     var goHome = function () {
-      if (typeof showHome === 'function') showHome();
+      hideBanner();
       goIdle();
+      if (typeof showHome === 'function') showHome();
     };
 
     showBanner('SAVING...');
@@ -537,6 +514,7 @@
 
   function exitSession() {
     hidePauseDialog();
+    hideBanner();
     goIdle();
     if (typeof showHome === 'function') showHome();
   }
