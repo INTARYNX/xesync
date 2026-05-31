@@ -64,6 +64,7 @@
     <div id="scan-active">
       <div id="pulse-ring"></div>
       <div id="scan-label">SCANNING...</div>
+      <button class="btn danger" onclick="stopScan()" style="margin-top:16px;">STOP</button>
       <div id="device-list"></div>
     </div>
   </div>
@@ -376,6 +377,17 @@
         btn.textContent = 'CREATE';
         setRegisterStatus('Network error: ' + err.message);
       });
+    }
+
+    function stopScan() {
+      sendToApp('stopScan', {});
+      if (appToken) {
+        showHome();
+      } else {
+        document.getElementById('scan-idle').style.display = 'flex';
+        document.getElementById('scan-active').style.display = 'none';
+        show('screen-scan');
+      }
     }
 
     function goScanWithoutLogin() {
