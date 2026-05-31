@@ -134,8 +134,13 @@ body.rowing-dashboard {
   font-size: 1.4em;
   cursor: pointer;
   line-height: 1;
-  padding: 0.2rem 0.7rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 2px;
+  padding: 0;
 }
 .account-close:hover { color: #fff; border-color: #4a8; }
 
