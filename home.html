@@ -2,531 +2,588 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XeSync — Workouts</title>
-  <link rel="stylesheet" href="home.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>XeSync</title>
+  <link rel="stylesheet" href="app.css">
   <script src="config.js"></script>
 </head>
-<body class="rowing-dashboard">
+<body>
 
-  <div id="status" class="status-msg">Loading…</div>
-  <div id="summary"></div>
-  <div id="dashboard" class="dashboard-container"></div>
+  <!-- ── TOP BAR ──────────────────────────────────────── -->
+  <div id="topbar" class="visible">
+    <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
+    <span style="flex:1"></span>
+    <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
+    <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
+    <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
+    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
+    <div id="tbar-user"></div>
+  </div>
 
-  <button id="account-toggle" onclick="toggleAccount()" aria-label="Settings">
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-  </button>
+  <!-- ── BOOT SPLASH ───────────────────────────────────── -->
+  <div id="boot-splash">
+    <div class="boot-logo">XESYNC</div>
+    <div class="boot-spinner"></div>
+  </div>
 
-  <div id="account-panel">
-    <div class="account-header">
-      MANAGE ACCOUNT
-      <button class="account-close" onclick="toggleAccount()" aria-label="Close">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+  <!-- ── LOGIN ─────────────────────────────────────────── -->
+  <div id="screen-login" class="screen active" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+    <h1>XESYNC</h1>
+    <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="password" placeholder="password">
+    <button class="btn primary" onclick="doLogin()">LOGIN</button>
+    <button class="btn" onclick="show('screen-register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
+    <div class="status-msg" id="login-status"></div>
+  </div>
+
+  <!-- ── REGISTER ─────────────────────────────────────── -->
+  <div id="screen-register" class="screen" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+    <h1>CREATE ACCOUNT</h1>
+    <input type="text"     id="reg-username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="email"    id="reg-email"    placeholder="email"    autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="reg-password" placeholder="password (min 8 chars)">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.8em;color:#888;max-width:320px;margin:10px 0;line-height:1.4;">
+      <input type="checkbox" id="reg-consent" style="width:auto;margin-top:3px;">
+      <span>I agree to the privacy policy and consent to my data being stored to provide the service.</span>
+    </label>
+    <button class="btn primary" onclick="doRegister()">CREATE</button>
+    <button class="btn" onclick="show('screen-login')" style="margin-top:10px;opacity:0.7;">BACK</button>
+    <div class="status-msg" id="register-status"></div>
+  </div>
+
+  <!-- ── HOME ─────────────────────────────────────────── -->
+  <div id="screen-home" class="screen">
+    <iframe id="home-frame" src="about:blank"></iframe>
+  </div>
+
+  <!-- ── SCAN ──────────────────────────────────────────── -->
+  <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
+
+    <div id="scan-idle">
+      <button class="btn primary" onclick="doScan()" style="font-size:1.6em;padding:20px 40px;letter-spacing:0.2em;max-width:none;">SCAN</button>
     </div>
 
-    <div class="account-section" id="export-section">
-      <div class="account-section-title">Export your data</div>
-      <div class="account-help">Download all your account data and workouts as a JSON file.</div>
-      <button class="account-btn" onclick="exportAccount()">Download my data</button>
-      <div class="account-msg" id="exp-msg"></div>
+    <div id="scan-active">
+      <div id="pulse-ring"></div>
+      <div id="scan-label">SCANNING...</div>
+      <div id="device-list"></div>
     </div>
 
-    <div class="account-section">
-      <div class="account-section-title">Change password</div>
-      <input type="password" id="cp-old" placeholder="current password">
-      <input type="password" id="cp-new" placeholder="new password (min 8)">
-      <input type="password" id="cp-new2" placeholder="confirm new password">
-      <button class="account-btn" onclick="changePassword()">Update password</button>
-      <div class="account-msg" id="cp-msg"></div>
-    </div>
+  </div>
 
-    <div class="account-section">
-      <div class="account-section-title danger">Delete account</div>
-      <div class="account-help">This permanently deletes your account and all workouts. Cannot be undone.</div>
-      <input type="password" id="del-pwd" placeholder="confirm with your password">
-      <button class="account-btn danger" onclick="deleteAccount()">Delete my account</button>
-      <div class="account-msg" id="del-msg"></div>
+  <!-- ── CONNECTING ────────────────────────────────────── -->
+  <div id="screen-connecting" class="screen">
+    <div class="big-label" id="connecting-label">CONNECTING...</div>
+  </div>
+
+  <!-- ── ROWING ─────────────────────────────────────────── -->
+  <div id="screen-rowing" class="screen" style="position:relative;">
+    <!-- ROWING_DISPLAY -->
+    <div id="loading-overlay" class="rowing-overlay visible">
+      <div class="big-label">LOADING...</div>
+    </div>
+    <div id="reconnect-overlay" class="rowing-overlay" style="background:rgba(0,0,0,0.85);">
+      <div class="big-label">RECONNECTING...</div>
+      <button class="btn danger" onclick="doGiveUp()">STOP</button>
     </div>
   </div>
 
-  <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <span id="modal-title"></span>
-        <button class="modal-close" onclick="closeModal()" aria-label="Close">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div id="modal-body"></div>
+  <!-- ── REGISTER SUCCESS ──────────────────────────────────── -->
+  <div id="register-success" class="ftms-overlay">
+    <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
+    <div class="ftms-overlay-subtitle">a verification link has been sent to your inbox</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn primary" onclick="hideRegisterSuccess()">GO TO LOGIN</button>
     </div>
   </div>
 
-  <div id="delete-confirm" class="modal-backdrop">
-    <div class="modal-content" style="flex:none;max-width:400px;margin:auto;padding:2rem;">
-      <div class="modal-header" style="color:#c54;border-color:#c54;">
-        <span>DELETE ACCOUNT</span>
-      </div>
-      <p style="font-size:0.85em;color:#888;line-height:1.6;margin-bottom:1.5rem;">
-        This will permanently delete your account and all your workouts. This action cannot be undone.
-      </p>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <button class="account-btn danger" id="delete-confirm-btn">YES, DELETE EVERYTHING</button>
-        <button class="account-btn" onclick="hideDeleteConfirm()">CANCEL</button>
-      </div>
+  <!-- ── EXIT CONFIRM ───────────────────────────────────── -->
+  <div id="exit-confirm" class="ftms-overlay">
+    <div class="ftms-overlay-title">EXIT</div>
+    <div class="ftms-overlay-subtitle">what would you like to do?</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn"         onclick="doLogoff()">LOG OFF</button>
+      <button class="ftms-btn primary" onclick="doQuit()">QUIT APP</button>
+      <button class="ftms-btn secondary" onclick="hideExitConfirm()">CANCEL</button>
     </div>
   </div>
+
 
   <script>
-    (function () {
-      var statusEl  = document.getElementById('status');
-      var summaryEl = document.getElementById('summary');
-      var dashEl    = document.getElementById('dashboard');
-      var inIframe = window.parent && window.parent !== window;
-      var hToken   = inIframe ? null : localStorage.getItem('xesync_token');
+    var appToken = null;
+    var appUsername = null;
+    var lastWebViewString = '';
+    var bleConnected = false;
+    var inDebugMode = false;
+    var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
 
-      // Hide the data export in the App Inventor WebView — Blob download
-      // doesn't work there. Users can export from the browser instead.
-      if (inIframe) {
-        var ex = document.getElementById('export-section');
-        if (ex) ex.style.display = 'none';
-      }
+    var bootSplashTimer = setTimeout(hideBootSplash, 1500);
 
-      window.addEventListener('message', function (e) {
-        if (e.data && e.data.type === 'token' && e.data.token) {
-          hToken = e.data.token;
-          load();
-        }
+    function hideBootSplash() {
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+      var s = document.getElementById('boot-splash');
+      if (!s) return;
+      s.classList.add('hidden');
+      setTimeout(function() { if (s.parentNode) s.parentNode.removeChild(s); }, 300);
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+    });
+
+
+
+    // ── SCREENS ───────────────────────────────────────────
+    var SCREENS_NO_BAR = { 'screen-rowing': true };
+
+    function show(id) {
+      document.querySelectorAll('.screen').forEach(function(s) {
+        s.classList.remove('active');
       });
+      document.getElementById(id).classList.add('active');
 
-      function setStatus(text) {
-        statusEl.textContent = text;
-        statusEl.style.display = text ? 'block' : 'none';
+      var bar = document.getElementById('topbar');
+      if (SCREENS_NO_BAR[id]) {
+        bar.classList.remove('visible');
+      } else {
+        bar.classList.add('visible');
+        var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
+        document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
+        document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
+        var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
+        document.getElementById('tbar-disconnect-btn').style.display = showRowerCtrls;
+      }
+    }
+
+    function debugMode() {
+      bleConnected = true;
+      inDebugMode = true;
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      DebugSim.reset();
+      DebugSim.start();
+    }
+
+    function doExit() {
+      var onLogin = document.getElementById('screen-login').classList.contains('active');
+      if (onLogin) {
+        sendToApp('exit', {});
+        return;
+      }
+      document.getElementById('exit-confirm').classList.add('visible');
+    }
+
+    function hideExitConfirm() {
+      document.getElementById('exit-confirm').classList.remove('visible');
+    }
+
+    function doLogoff() {
+      hideExitConfirm();
+      appToken = null;
+      appUsername = null;
+      bleConnected = false;
+      inDebugMode = false;
+      DebugSim.stop();
+      setUserBadge('');
+      document.getElementById('password').value = '';
+      show('screen-login');
+    }
+
+    function doQuit() {
+      hideExitConfirm();
+      sendToApp('exit', {});
+    }
+
+    // ── APP INVENTOR BRIDGE ───────────────────────────────
+    function sendToApp(action, data) {
+      var payload = JSON.stringify(Object.assign({ action: action }, data));
+      var ai = window.AppInventor || (typeof AppInventor !== 'undefined' ? AppInventor : null);
+      if (ai && ai.setWebViewString) {
+        ai.setWebViewString(payload);
+      } else {
+        console.log('[→ App]', payload);
+      }
+    }
+
+    function handleAppResponse(json) {
+      if (!json) return;
+      lastWebViewString = json;
+      var msg;
+      try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch(e) {
+        if (typeof json === 'string' && /^\s*\d/.test(json)) {
+          ingestData(json.trim());
+        }
+        return;
       }
 
-      function pad(n) { return n < 10 ? '0' + n : '' + n; }
-
-      function fmtDuration(s) {
-        s = Math.max(0, Math.round(s || 0));
-        var h = Math.floor(s / 3600);
-        var m = Math.floor((s % 3600) / 60);
-        var r = s % 60;
-        return pad(h) + ':' + pad(m) + ':' + pad(r);
+      switch (msg.action) {
+        case 'autoLogin':      doAutoLogin(msg);      break;
+        case 'scanResult':     onScanResult(msg);     break;
+        case 'connectResult':  onConnectResult(msg);  break;
+        case 'disconnected':   onDisconnected();      break;
+        case 'reconnected':    onReconnected();       break;
+        case 'ftmsData':       onFtmsData(msg);       break;
+        case 'saveAck':        onSaveAck();           break;
+        case 'uploadWorkout':  onUploadWorkout(msg);  break;
+        case 'tagCleared':     onTagCleared(msg);     break;
+        case 'goHome':         showHome();            break;
+        default: console.warn('Unknown action:', msg.action);
       }
+    }
+    window.handleAppResponse = handleAppResponse;
 
-      function fmtPace(s) {
-        s = Math.max(0, Math.round(s || 0));
-        var m = Math.floor(s / 60);
-        var r = s % 60;
-        return pad(m) + ':' + pad(r);
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'shaderReady') {
+        document.getElementById('loading-overlay').classList.remove('visible');
       }
-
-      function fmtDate(iso) {
-        if (!iso) return '';
-        var d = new Date(iso);
-        return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear()
-             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      if (e.data && e.data.type === 'tokenExpired') {
+        appToken = null;
+        appUsername = null;
+        setUserBadge('');
+        setLoginStatus('Session expired. Please log in again.');
+        show('screen-login');
       }
+    });
 
-      function escHtml(s) {
-        return String(s == null ? '' : s)
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // ── LOGIN ─────────────────────────────────────────────
+    function doAutoLogin(msg) {
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+
+      console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
+      if (!msg.token) {
+        show('screen-login');
+        hideBootSplash();
+        return;
       }
-
-      function renderCard(w) {
-        return ''
-          + '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
-          +   '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
-          +   '<div class="card-stats">'
-          +     stat('Distance',   (w.distance_m || 0) + 'm')
-          +     stat('Elapsed',    fmtDuration(w.duration_sec))
-          +     stat('Strokes',    w.total_strokes || 0)
-          +     stat('Watts',      w.avg_watts || 0)
-          +     stat('SPM',        w.avg_spm || 0)
-          +     stat('Pace',       fmtPace(w.avg_pace_sec), true)
-          +     stat('Calories',   w.calories || 0)
-          +     stat('Heart Rate', w.avg_hr || '-')
-          +   '</div>'
-          + '</div>';
-      }
-
-      function stat(label, value, isPace) {
-        return '<div class="stat' + (isPace ? ' pace' : '') + '">'
-          + escHtml(label) + ': <span class="stat-value' + (isPace ? ' pace-value' : '') + '">'
-          + escHtml(value) + '</span></div>';
-      }
-
-      function notifyTokenExpired() {
-        hToken = null;
-        if (inIframe) {
-          try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        console.log('[autoLogin] validate response:', data);
+        if (data && data.status === 'success') {
+          appToken = msg.token;
+          appUsername = data.username;
+          setUserBadge(data.username);
+          setLoginStatus('');
+          showHome();
+          hideBootSplash();
         } else {
-          localStorage.removeItem('xesync_token');
-          window.location.href = 'login.html';
+          setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
+          setUserBadge('');
+          show('screen-login');
+          hideBootSplash();
         }
-      }
+      })
+      .catch(function(e) {
+        console.warn('[autoLogin] error:', e);
+        setLoginStatus('Network error: ' + e.message);
+        hideBootSplash();
+        goOffline();
+      });
+    }
 
-      window.openWorkout = function (id) {
-        if (!hToken) return;
-        var modal = document.getElementById('workout-modal');
-        var body  = document.getElementById('modal-body');
-        var title = document.getElementById('modal-title');
-        title.textContent = 'Loading…';
-        body.innerHTML = '';
-        modal.classList.add('visible');
+    function doLogin() {
+      var u = document.getElementById('username').value.trim();
+      var p = document.getElementById('password').value;
+      if (!u || !p) { setLoginStatus('Username and password required'); return; }
+      setLoginStatus('');
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+      fetchLogin(u, p);
+    }
 
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/get_workout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, workout: id })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var w = Array.isArray(arr) ? arr[0] : arr;
-          if (!w) { title.textContent = 'Workout not found'; return; }
-          title.textContent = fmtDate(w.workout_date);
-          renderCharts(body, w);
-        })
-        .catch(function (e) { title.textContent = 'Error: ' + e.message; });
-      };
+    function fetchLogin(u, p) {
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
 
-      window.closeModal = function (e) {
-        if (e && e.target.id !== 'workout-modal' && e.type === 'click' && e.target !== e.currentTarget) return;
-        document.getElementById('workout-modal').classList.remove('visible');
-      };
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success' && data.token) {
+          appToken = data.token;
+          appUsername = u;
+          setUserBadge(u);
+          sendToApp('loginResult', { success: true, token: data.token, username: u });
+          showHome();
+        } else {
+          var err = (data && data.error) || 'Login failed';
+          setLoginStatus(err);
+          sendToApp('loginResult', { success: false, error: err });
+        }
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        console.error(e);
+        goOffline();
+      });
+    }
 
-      window.exportAccount = function () {
-        var msg = document.getElementById('exp-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-        acctMsg(msg, 'Preparing export…', true);
+    function setLoginStatus(msg) {
+      document.getElementById('login-status').textContent = msg;
+    }
 
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/export_account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success' && row.data) {
-            var blob = new Blob([JSON.stringify(row.data, null, 2)], { type: 'application/json' });
-            var url  = URL.createObjectURL(blob);
-            var d    = new Date();
-            var pad  = function (n) { return n < 10 ? '0' + n : n; };
-            var name = 'xesync_export_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
-            var a = document.createElement('a');
-            a.href = url; a.download = name;
-            document.body.appendChild(a); a.click(); a.remove();
-            URL.revokeObjectURL(url);
-            acctMsg(msg, 'Downloaded ' + name, true);
+    function setRegisterStatus(msg, ok) {
+      var el = document.getElementById('register-status');
+      el.textContent = msg;
+      el.style.color = ok ? '#4CAF50' : '#f44336';
+    }
+
+    function doRegister() {
+      var u = document.getElementById('reg-username').value.trim();
+      var e = document.getElementById('reg-email').value.trim();
+      var p = document.getElementById('reg-password').value;
+      var consent = document.getElementById('reg-consent').checked;
+      if (!u || !e || !p) { setRegisterStatus('All fields required'); return; }
+      if (!consent) { setRegisterStatus('You must accept the privacy policy to continue'); return; }
+      setRegisterStatus('');
+      var btn = document.querySelector('#screen-register .btn.primary');
+      btn.disabled = true;
+      btn.textContent = 'CREATING...';
+
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, email: e, password: p })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success') {
+            document.getElementById('reg-password').value = '';
+            document.getElementById('register-success').classList.add('visible');
           } else {
-            acctMsg(msg, (row && row.error) || 'Export failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
+          setRegisterStatus((data && data.error) || 'Registration failed');
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        setRegisterStatus('Network error: ' + err.message);
+      });
+    }
+
+    function hideRegisterSuccess() {
+      document.getElementById('register-success').classList.remove('visible');
+      show('screen-login');
+    }
+      document.getElementById('scan-idle').style.display = 'flex';
+      document.getElementById('scan-active').style.display = 'none';
+      show('screen-scan');
+    }
+
+    function startScan() {
+      show('screen-scan');
+      doScan();
+    }
+
+    function goOffline() {
+      sendToApp('loginResult', { success: false, offline: true });
+      show('screen-scan');
+      showOfflineBanner();
+    }
+
+    function showOfflineBanner() {
+      var existing = document.getElementById('offline-banner');
+      if (existing) return;
+      var banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1000;color:#886;' +
+        'font-size:11px;padding:6px 12px;text-align:center;border-top:1px solid #332200;z-index:50;';
+      banner.textContent = 'OFFLINE — workouts will be uploaded on next login';
+      document.body.appendChild(banner);
+    }
+
+    // ── HOME ──────────────────────────────────────────────
+    function showHome() {
+      var iframe = document.getElementById('home-frame');
+      var sendToken = function() {
+        iframe.contentWindow.postMessage({ type: 'token', token: appToken }, '*');
       };
-
-      window.toggleAccount = function () {
-        document.getElementById('account-panel').classList.toggle('open');
-      };
-
-      window.hideDeleteConfirm = function () {
-        document.getElementById('delete-confirm').classList.remove('visible');
-      };
-
-      window.changePassword = function () {
-        var oldP = document.getElementById('cp-old').value;
-        var newP = document.getElementById('cp-new').value;
-        var newP2 = document.getElementById('cp-new2').value;
-        var msg = document.getElementById('cp-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!oldP || !newP) { acctMsg(msg, 'Fill all fields', false); return; }
-        if (newP.length < 8) { acctMsg(msg, 'New password must be at least 8 chars', false); return; }
-        if (newP !== newP2) { acctMsg(msg, 'Passwords do not match', false); return; }
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/change_password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, old_password: oldP, new_password: newP })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success') {
-            acctMsg(msg, 'Password updated', true);
-            document.getElementById('cp-old').value = '';
-            document.getElementById('cp-new').value = '';
-            document.getElementById('cp-new2').value = '';
-          } else {
-            acctMsg(msg, (row && row.error) || 'Failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      };
-
-      window.deleteAccount = function () {
-        var pwd = document.getElementById('del-pwd').value;
-        var msg = document.getElementById('del-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!pwd) { acctMsg(msg, 'Enter your password to confirm', false); return; }
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-        var modal = document.getElementById('delete-confirm');
-        modal.classList.add('visible');
-        document.getElementById('delete-confirm-btn').onclick = function () {
-          modal.classList.remove('visible');
-          doDeleteAccount(pwd, msg);
-        };
-      };
-
-      function doDeleteAccount(pwd, msg) {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, password: pwd })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success') {
-            acctMsg(msg, 'Account deleted', true);
-            if (inIframe) {
-              try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
-            } else {
-              localStorage.removeItem('xesync_token');
-              setTimeout(function () { window.location.href = 'login.html'; }, 1000);
-            }
-          } else {
-            acctMsg(msg, (row && row.error) || 'Failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      }(el, text, ok) {
-        el.textContent = text;
-        el.className = 'account-msg ' + (ok ? 'ok' : 'err');
+      if (iframe.src && iframe.src !== 'about:blank' && iframe.src.indexOf(XESYNC_CONFIG.apexHomeUrl) === 0) {
+        sendToken();
+      } else {
+        iframe.onload = sendToken;
+        iframe.src = XESYNC_CONFIG.apexHomeUrl;
       }
+      show('screen-home');
+    }
 
-      function renderCharts(container, w) {
-        var samples = w.samples || [];
-        var summaryHtml = ''
-          + '<div class="modal-summary">'
-          +   tile('Distance',   (w.distance_m || 0) + ' m', true)
-          +   tile('Time',       fmtDuration(w.duration_sec))
-          +   tile('Pace',       fmtPace(w.avg_pace_sec), true)
-          +   tile('Watts',      w.avg_watts || 0)
-          +   tile('SPM',        w.avg_spm || 0)
-          +   tile('Heart Rate', w.avg_hr || '-')
-          +   tile('Strokes',    w.total_strokes || 0)
-          +   tile('Calories',   w.calories || 0)
-          + '</div>';
+    // ── SCAN ──────────────────────────────────────────────
+    function doScan() {
+      document.getElementById('device-list').innerHTML = '';
+      document.getElementById('pulse-ring').style.display = '';
+      document.getElementById('scan-label').textContent = 'SCANNING...';
+      document.getElementById('scan-idle').style.display = 'none';
+      document.getElementById('scan-active').style.display = 'flex';
+      sendToApp('scan', {});
+    }
 
-        if (!samples.length) {
-          container.innerHTML = summaryHtml + '<div class="status-msg">No sample data.</div>';
-          return;
-        }
-
-        var charts = [
-          { title: 'Pace',       idx: 5, color: '#4a8', avg: w.avg_pace_sec, fmt: fmtPace, unit: '/500m' },
-          { title: 'Watts',      idx: 3, color: '#fa3', avg: w.avg_watts,    fmt: function(v){ return Math.round(v); }, unit: 'W' },
-          { title: 'SPM',        idx: 2, color: '#6cf', avg: w.avg_spm,      fmt: function(v){ return (+v).toFixed(1); }, unit: '' },
-          { title: 'Heart Rate', idx: 4, color: '#f55', avg: w.avg_hr,       fmt: function(v){ return Math.round(v); }, unit: 'bpm' }
-        ];
-
-        container.innerHTML = summaryHtml
-          + '<div class="charts-grid">'
-          + charts.map(function (c) {
-              var avgDisp = c.avg != null ? c.fmt(c.avg) + ' ' + c.unit : '';
-              return '<div class="chart-wrap">'
-                + '<div class="chart-title">' + c.title + '</div>'
-                + '<div class="chart-current" style="color:' + c.color + '">' + avgDisp + '</div>'
-                + svgChart(samples, c.idx, c.color)
-                + '</div>';
-            }).join('')
-          + '</div>';
-
-        function tile(label, value, accent) {
-          return '<div class="modal-summary-tile' + (accent ? ' accent' : '') + '">'
-            +    '<div class="modal-summary-label">' + label + '</div>'
-            +    '<div class="modal-summary-value">' + value + '</div>'
-            +  '</div>';
-        }
+    function onScanResult(msg) {
+      document.getElementById('pulse-ring').style.display = 'none';
+      document.getElementById('scan-label').textContent = 'SELECT ROWER';
+      var list = document.getElementById('device-list');
+      list.innerHTML = '';
+      var seen = {};
+      var devices = (msg.devices || []).reduce(function(acc, d) {
+        var parts = (d.id || '').trim().split(/\s+/);
+        var mac = parts[0];
+        if (!seen[mac]) { seen[mac] = true; acc.push({ id: mac, name: parts.slice(1).join(' ') || mac }); }
+        return acc;
+      }, []);
+      if (devices.length === 0) {
+        list.innerHTML = '<div class="empty-msg">No rower found</div>';
+        return;
       }
+      devices.forEach(function(d) {
+        var item = document.createElement('div');
+        item.className = 'device-item';
+        item.innerHTML = '<span>' + escHtml(d.name) + '</span>' +
+                         '<span class="device-rssi">' + escHtml(d.id) + '</span>';
+        item.onclick = function() { doConnect(d); };
+        list.appendChild(item);
+      });
+    }
 
-      function svgChart(samples, idx, color) {
-        var W = 600, H = 160, padL = 36, padR = 12, padT = 14, padB = 22;
-        var valid = samples.filter(function (s) { return s[idx] != null; });
-        if (!valid.length) {
-          return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
-               + '<text x="' + (W/2) + '" y="' + (H/2) + '" text-anchor="middle" class="chart-label">no data</text>'
-               + '</svg>';
-        }
-        var n = valid.length;
-        var xs = valid.map(function (s) { return +s[0]; });
-        var ys = valid.map(function (s) { return +s[idx]; });
-        var xMin = xs[0], xMax = xs[n - 1];
-        var yMin = Math.min.apply(null, ys);
-        var yMax = Math.max.apply(null, ys);
-        var yPad = (yMax - yMin) * 0.12 || 1;
-        yMin -= yPad; yMax += yPad;
+    // ── CONNECT ───────────────────────────────────────────
+    function doConnect(device) {
+      document.getElementById('connecting-label').textContent = 'CONNECTING...';
+      show('screen-connecting');
+      sendToApp('connect', { deviceId: device.id, deviceName: device.name });
+    }
 
-        var sx = function (x) { return padL + (x - xMin) / (xMax - xMin || 1) * (W - padL - padR); };
-        var sy = function (y) { return H - padB - (y - yMin) / (yMax - yMin || 1) * (H - padT - padB); };
-
-        var pts = [];
-        for (var i = 0; i < n; i++) pts.push([sx(xs[i]), sy(ys[i])]);
-
-        var d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
-        for (var i = 0; i < pts.length - 1; i++) {
-          var p0 = pts[i - 1] || pts[i];
-          var p1 = pts[i];
-          var p2 = pts[i + 1];
-          var p3 = pts[i + 2] || p2;
-          var cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-          var cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-          var cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-          var cp2y = p2[1] - (p3[1] - p1[1]) / 6;
-          d += ' C' + cp1x.toFixed(1) + ',' + cp1y.toFixed(1)
-             + ' '  + cp2x.toFixed(1) + ',' + cp2y.toFixed(1)
-             + ' '  + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
-        }
-
-        var fillD = d + ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + (H - padB)
-                      + ' L' + pts[0][0].toFixed(1) + ',' + (H - padB) + ' Z';
-
-        var gradId = 'grad_' + idx + '_' + Math.floor(Math.random() * 1e6);
-        var ticksY = 3;
-        var yTicks = '';
-        for (var k = 0; k <= ticksY; k++) {
-          var v  = yMin + (yMax - yMin) * (k / ticksY);
-          var yp = sy(v).toFixed(1);
-          yTicks += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yp + '" y2="' + yp
-                  + '" stroke="#1a1a1a" stroke-width="1"/>'
-                  + '<text x="' + (padL - 5) + '" y="' + (parseFloat(yp) + 3)
-                  + '" text-anchor="end" class="chart-label">' + Math.round(v) + '</text>';
-        }
-
-        return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
-             + '<defs><linearGradient id="' + gradId + '" x1="0" x2="0" y1="0" y2="1">'
-             +   '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.5"/>'
-             +   '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
-             + '</linearGradient></defs>'
-             + yTicks
-             + '<path d="' + fillD + '" fill="url(#' + gradId + ')"/>'
-             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2"'
-             +       ' stroke-linejoin="round" stroke-linecap="round"/>'
-             + '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end" class="chart-label">'
-             +   fmtDuration(xMax) + '</text>'
-             + '<text x="' + padL + '" y="' + (H - 6) + '" class="chart-label">0:00</text>'
-             + '</svg>';
+    function onConnectResult(msg) {
+      if (msg.success) {
+        bleConnected = true;
+        document.getElementById('loading-overlay').classList.add('visible');
+        show('screen-rowing');
+        initRowing();
+        initFtmsTracking();
+      } else {
+        document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
+        setTimeout(function() { show('screen-scan'); }, 2000);
       }
+    }
 
-      function renderSummary(rows) {
-        var now = new Date();
-        var startOfWeek = new Date(now);
-        startOfWeek.setHours(0,0,0,0);
-        var day = (startOfWeek.getDay() + 6) % 7;
-        startOfWeek.setDate(startOfWeek.getDate() - day);
+    function onDisconnected() {
+      document.getElementById('reconnect-overlay').classList.add('visible');
+      sendToApp('reconnect', {});
+    }
 
-        var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        var startOfYear  = new Date(now.getFullYear(), 0, 1);
+    function onReconnected() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+    }
 
-        var buckets = {
-          week:  { dist: 0, dur: 0, count: 0 },
-          month: { dist: 0, dur: 0, count: 0 },
-          year:  { dist: 0, dur: 0, count: 0 }
-        };
+    function onSaveAck() {
+      showHome();
+    }
 
-        rows.forEach(function (w) {
-          var d = new Date(w.workout_date);
-          var dist = w.distance_m || 0;
-          var dur  = w.duration_sec || 0;
-          if (d >= startOfWeek)  { buckets.week.dist  += dist; buckets.week.dur  += dur; buckets.week.count++;  }
-          if (d >= startOfMonth) { buckets.month.dist += dist; buckets.month.dur += dur; buckets.month.count++; }
-          if (d >= startOfYear)  { buckets.year.dist  += dist; buckets.year.dur  += dur; buckets.year.count++;  }
-        });
+    function onTagCleared(msg) {
+      console.log('[upload] tag cleared by AI2:', msg.workout);
+    }
 
-        function block(label, b) {
-          return ''
-            + '<div class="summary-block">'
-            +   '<div class="summary-label">' + label + '</div>'
-            +   '<div class="summary-stats">'
-            +     '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
-            +     '<span>' + fmtDuration(b.dur) + '</span>'
-            +     '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
-            +   '</div>'
-            + '</div>';
+    function onUploadWorkout(msg) {
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token, workout: msg.workout, data: msg.data })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var row = Array.isArray(arr) ? arr[0] : arr;
+        if (row && row.status === 'success') {
+          sendToApp('uploadAck', { workout: msg.workout });
         }
+      })
+      .catch(function() {});
+    }
 
-        function encouragement(week) {
-          if (week.count === 0) return 'Ready when you are.';
-          if (week.count === 1) return 'Nice start to the week.';
-          if (week.count <= 3)  return 'Good progress.';
-          if (week.count <= 5)  return 'Strong week.';
-          return 'Excellent consistency.';
-        }
+    function doGiveUp() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+      sendToApp('disconnect', {});
+      bleConnected = false;
+      goScanWithoutLogin();
+    }
 
-        summaryEl.innerHTML = ''
-          + '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
-          + '<div class="summary-container">'
-          +   block('This week',  buckets.week)
-          +   block('This month', buckets.month)
-          +   block('This year',  buckets.year)
-          + '</div>';
+    function resumeRowing() {
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      if (inDebugMode) {
+        DebugSim.reset();
+        DebugSim.start();
       }
+    }
 
-      function load() {
-        if (!hToken) {
-          if (inIframe) {
-            setStatus('Waiting for session...');
-          } else {
-            window.location.href = 'login.html';
-          }
-          return;
-        }
-
-        setStatus('Loading…');
-
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken })
-        })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .then(function (rows) {
-          if (!Array.isArray(rows) || rows.length === 0) {
-            setStatus('Your uploaded workouts will appear here.');
-            return;
-          }
-          setStatus('');
-          renderSummary(rows);
-          dashEl.innerHTML = rows.map(renderCard).join('');
-        })
-        .catch(function (err) {
-          var msg = err.message || '';
-          if (/401|403|invalid|expired/i.test(msg)) {
-            notifyTokenExpired();
-            setStatus('Session expired. Please log in again.');
-          } else {
-            setStatus('Failed to load workouts: ' + msg);
-          }
-        });
+    function disconnectRower() {
+      if (inDebugMode) {
+        DebugSim.stop();
+        inDebugMode = false;
+      } else {
+        sendToApp('disconnect', {});
       }
+      bleConnected = false;
+      show('screen-home');
+    }
 
-      load();
-    })();
+    function onFtmsData(msg) {
+      console.log('[FTMS]', msg.data);
+      ingestData(msg.data);
+      if (XESYNC_CONFIG.logRawData) sendRawData(msg.data);
+    }
+
+    function sendRawData(data) {
+      var d = new Date();
+      var p = function(n, w) { return String(n).padStart(w || 2, '0'); };
+      var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
+                    p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
+                    p(d.getMilliseconds(), 3);
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/log_rawdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr, data: data })
+      })
+      .then(function(r) { return r.text().then(function(t) { console.log('[FTMS raw]', r.status, t); }); })
+      .catch(function(e) { console.warn('[FTMS raw] fetch error:', e.message); });
+    }
+
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash.indexOf('#data=') === 0) {
+        ingestData(null);
+      }
+    });
+
+    // ── UTILS ─────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
   </script>
+  <script src="debug_sim.js"></script>
 </body>
 </html>
