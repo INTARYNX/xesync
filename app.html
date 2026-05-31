@@ -143,11 +143,11 @@
       } else {
         bar.classList.add('visible');
         var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
-        document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
+        var showScan = !onSecondary && !bleConnected;
+        document.getElementById('tbar-scan-btn').style.display = showScan ? '' : 'none';
         document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
-        var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
-        document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
-        document.getElementById('tbar-disconnect-btn').style.display = showRowerCtrls;
+        document.getElementById('tbar-row-btn').style.display = (id === 'screen-home' && bleConnected) ? '' : 'none';
+        document.getElementById('tbar-disconnect-btn').style.display = (id === 'screen-home' && bleConnected) ? '' : 'none';
       }
     }
 
@@ -537,7 +537,11 @@
       if (inDebugMode) { DebugSim.stop(); inDebugMode = false; }
       else { sendToApp('disconnect', {}); }
       bleConnected = false;
-      show('screen-home');
+      if (appToken) {
+        showHome();
+      } else {
+        show('screen-login');
+      }
     }
 
     function onFtmsData(msg) {

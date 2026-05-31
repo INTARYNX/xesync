@@ -320,12 +320,7 @@
     lastPacket = null;
     renderIdle();
     hidePauseDialog();
-    var rowingScreen = document.getElementById('screen-rowing');
-    if (rowingScreen && rowingScreen.classList.contains('active')) {
-      showBanner('READY TO ROW !');
-    } else {
-      hideBanner();
-    }
+    hideBanner();
     if (DEBUG) console.log('[FTMS] phase → IDLE');
   }
 
@@ -371,6 +366,7 @@
     if (inactivityTimerId) clearInterval(inactivityTimerId);
     inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
     goIdle();
+    showBanner('READY TO ROW !');
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -516,7 +512,19 @@
     hidePauseDialog();
     hideBanner();
     goIdle();
-    if (typeof showHome === 'function') showHome();
+    var token = typeof appToken !== 'undefined' ? appToken : null;
+    var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
+      ? AppInventor
+      : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
+        ? window.AppInventor : null;
+    var online = !!ai || window.location.protocol !== 'file:';
+    if (token) {
+      if (typeof showHome === 'function') showHome();
+    } else if (online) {
+      if (typeof show === 'function') show('screen-login');
+    } else {
+      if (typeof showOfflineChoice === 'function') showOfflineChoice();
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
