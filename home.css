@@ -91,10 +91,12 @@ body.rowing-dashboard {
   background: #111;
   border: 1px solid #1a1a1a;
   color: #888;
-  font-size: 1.4em;
   cursor: pointer;
   z-index: 90;
-  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 #account-toggle:hover { color: #4a8; border-color: #4a8; }
 
@@ -122,7 +124,7 @@ body.rowing-dashboard {
   align-items: center;
   color: #4a8;
   letter-spacing: 0.15em;
-  font-size: 0.95em;
+  font-size: 1.1em;
   border-bottom: 1px solid #1a1a1a;
   padding-bottom: 0.8rem;
   margin-bottom: 1.5rem;
@@ -132,10 +134,11 @@ body.rowing-dashboard {
   background: none;
   border: 1px solid #333;
   color: #888;
-  font-size: 1.2em;
+  font-size: 1.4em;
   cursor: pointer;
   line-height: 1;
-  padding: 0.15rem 0.6rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 2px;
 }
 
 .account-close:hover { color: #fff; border-color: #4a8; }

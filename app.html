@@ -6,6 +6,38 @@
   <title>XeSync</title>
   <link rel="stylesheet" href="app.css">
   <script src="config.js"></script>
+  <style>
+    /* Boot splash — hides the login screen until AI2 either delivers an
+       autoLogin token (and we've validated/failed it) or we time out waiting. */
+    #boot-splash {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.25s ease;
+    }
+    #boot-splash.hidden { opacity: 0; pointer-events: none; }
+    .boot-logo {
+      font-family: "DotGothic16", monospace;
+      font-size: 2em;
+      color: #fff;
+      letter-spacing: 0.3em;
+      margin-bottom: 24px;
+    }
+    .boot-spinner {
+      width: 32px;
+      height: 32px;
+      border: 2px solid #222;
+      border-top-color: #4CAF50;
+      border-radius: 50%;
+      animation: boot-spin 0.9s linear infinite;
+    }
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
 
@@ -19,8 +51,14 @@
     <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
   </div>
 
+  <!-- ── BOOT SPLASH ───────────────────────────────────── -->
+  <div id="boot-splash">
+    <div class="boot-logo">XESYNC</div>
+    <div class="boot-spinner"></div>
+  </div>
+
   <!-- ── LOGIN ─────────────────────────────────────────── -->
-  <div id="screen-login" class="screen active">
+  <div id="screen-login" class="screen active" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
     <h1>XESYNC</h1>
     <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="password" placeholder="password">
@@ -30,7 +68,7 @@
   </div>
 
   <!-- ── REGISTER ─────────────────────────────────────── -->
-  <div id="screen-register" class="screen">
+  <div id="screen-register" class="screen" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
     <h1>CREATE ACCOUNT</h1>
     <input type="text"     id="reg-username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="email"    id="reg-email"    placeholder="email"    autocomplete="off" autocorrect="off" autocapitalize="off">
@@ -100,6 +138,19 @@
     var bleConnected = false;
     var inDebugMode = false;
     var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+    // Boot splash management — hide as soon as either:
+    //  (1) we receive an autoLogin message and finish validating, or
+    //  (2) 1.5s pass with no autoLogin attempt (offline / browser / new user).
+    var bootSplashTimer = setTimeout(hideBootSplash, 1500);
+
+    function hideBootSplash() {
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+      var s = document.getElementById('boot-splash');
+      if (!s) return;
+      s.classList.add('hidden');
+      setTimeout(function() { if (s.parentNode) s.parentNode.removeChild(s); }, 300);
+    }
     document.addEventListener('DOMContentLoaded', function() {
       if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
     });
@@ -227,12 +278,16 @@
 
     // ── LOGIN ─────────────────────────────────────────────
     function doAutoLogin(msg) {
+      // Cancel the splash auto-hide while we validate
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+
       console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
       if (!msg.token) {
-        setLoginStatus('No token from app');
+        // Empty token = AI2 telling us there's no stored session. Just show login.
+        show('screen-login');
+        hideBootSplash();
         return;
       }
-      setLoginStatus('Validating session...');
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,14 +303,17 @@
           document.getElementById('tbar-user').textContent = data.username;
           setLoginStatus('');
           showHome();
+          hideBootSplash();
         } else {
           setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
           show('screen-login');
+          hideBootSplash();
         }
       })
       .catch(function(e) {
         console.warn('[autoLogin] error:', e);
         setLoginStatus('Network error: ' + e.message);
+        hideBootSplash();
         goOffline();
       });
     }

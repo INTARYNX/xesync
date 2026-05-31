@@ -17,8 +17,9 @@ var RowingAnimation = (function() {
     var SPEED_NORMALIZE = 5.0;
 
     // Wrap values to keep float precision good on mobile GPUs.
-    // 120s matches the day-cycle period, so day-cycle wrap is seamless.
-    var TIME_WRAP = 120.0;
+    // TIME_WRAP must match the day-cycle period in the shader so the
+    // wrap is seamless (sky/sun/clouds don't jump on reset).
+    var TIME_WRAP = 300.0;
     var FLOW_WRAP = 1000.0;
 
     function compile(type, src) {
@@ -50,7 +51,6 @@ var RowingAnimation = (function() {
         lastT = now;
 
         flow -= dt * currentSpeed * 0.26;
-        // Keep flow bounded so noise/hash stays in a precise range
         if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
         if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
 
@@ -60,7 +60,6 @@ var RowingAnimation = (function() {
             ? animPhase * 1.5
             : 0.5 + (animPhase - 1.0 / 3.0) * 0.75;
 
-        // Wrap u_time to TIME_WRAP (matches day cycle, so wrap is seamless)
         var timeWrapped = (now - t0) % TIME_WRAP;
 
         gl.uniform1f(uniforms.uTime,   timeWrapped);
