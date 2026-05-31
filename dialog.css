@@ -11,18 +11,18 @@
   justify-content: center;
   align-items: center;
   padding: 10px;
-  font-family: "SpaceGrotesk", monospace;
-  color: #0ff;
+  font-family: "Press Start 2P", monospace; /* pixel font */
+  color: #0ff; /* neon cyan text */
 }
 
 .dialog-container {
-  background: #111;
+  background: #111; /* dark gray background */
   padding: 20px;
-  border-radius: 0;
+  border-radius: 0; /* sharp corners */
   width: 100%;
   max-width: 600px;
   text-align: center;
-  border: 3px solid #0ff;
+  border: 3px solid #0ff; /* neon border */
 }
 
 .dialog-title {
@@ -40,7 +40,7 @@
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2,1fr);
   gap: 8px;
   margin-bottom: 15px;
 }
@@ -48,7 +48,7 @@
 .metric-box {
   background: #222;
   padding: 10px;
-  border-radius: 0;
+  border-radius: 0; /* sharp corners */
   border: 2px solid #0ff;
 }
 
@@ -61,7 +61,7 @@
 .metric-value {
   font-size: 18px;
   font-weight: bold;
-  color: #ff0;
+  color: #ff0; /* yellow numbers for contrast */
 }
 
 .save-button {
@@ -75,5 +75,12 @@
   text-transform: uppercase;
 }
 
-.save-button:hover { background: #0ff; color: #000; }
-.save-button:active { background: #00f; color: #fff; }
+.save-button:hover {
+  background: #0ff;
+  color: #000;
+}
+
+.save-button:active {
+  background: #00f;
+  color: #fff;
+}
