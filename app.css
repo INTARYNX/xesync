@@ -152,12 +152,14 @@ input:focus { border-color: #555; }
 /* Top bar */
 #topbar {
   display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
   background: #0a0a0a;
   border-bottom: 1px solid #1a1a1a;
-  height: 56px;
-  flex-shrink: 0;
   align-items: stretch;
-  position: relative;
   z-index: 300;
 }
 #topbar.visible { display: flex; }
@@ -227,10 +229,7 @@ input:focus { border-color: #555; }
 /* Save dialog + offline choice */
 .ftms-overlay {
   position: fixed;
-  top: 56px;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: #000;
   display: none;
   flex-direction: column;
@@ -241,6 +240,10 @@ input:focus { border-color: #555; }
   overflow-y: auto;
   padding: 12px;
 }
+
+/* When the top bar is visible, push everything below it */
+body.with-bar { padding-top: 56px; }
+body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
 .ftms-overlay.visible { display: flex !important; }
 
 .ftms-overlay-title {

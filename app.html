@@ -147,8 +147,10 @@
       var bar = document.getElementById('topbar');
       if (SCREENS_NO_BAR[id]) {
         bar.classList.remove('visible');
+        document.body.classList.remove('with-bar');
       } else {
         bar.classList.add('visible');
+        document.body.classList.add('with-bar');
         var onSecondary = id === 'screen-connecting' || id === 'screen-rowing';
         var scanning = document.getElementById('scan-active').style.display === 'flex';
         // SCAN FOR ROWER: available when not connected, not mid-scan, not on a secondary flow screen
