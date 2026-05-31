@@ -266,7 +266,7 @@
       .then(function(r) { return r.json(); })
       .then(function(arr) {
         var data = Array.isArray(arr) ? arr[0] : arr;
-        console.log('[autoLogin] validate response:', data);
+        alert('[autoLogin] status=' + (data && data.status) + ' error=' + (data && data.error) + ' raw=' + JSON.stringify(arr).slice(0, 200));
         if (data && data.status === 'success') {
           appToken = msg.token;
           appUsername = data.username;
