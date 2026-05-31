@@ -55,20 +55,6 @@
     </div>
   </div>
 
-  <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <span id="modal-title"></span>
-        <button class="modal-close" onclick="closeModal()" aria-label="Close">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div id="modal-body"></div>
-    </div>
-  </div>
-
   <div id="delete-confirm" class="modal-backdrop">
     <div class="modal-content" style="flex:none;max-width:400px;margin:auto;padding:2rem;">
       <div class="modal-header" style="color:#c54;border-color:#c54;">
@@ -84,16 +70,28 @@
     </div>
   </div>
 
+  <div id="workout-modal" class="modal-backdrop" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span id="modal-title"></span>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var statusEl  = document.getElementById('status');
       var summaryEl = document.getElementById('summary');
       var dashEl    = document.getElementById('dashboard');
-      var inIframe = window.parent && window.parent !== window;
-      var hToken   = inIframe ? null : localStorage.getItem('xesync_token');
+      var inIframe  = window.parent && window.parent !== window;
+      var hToken    = inIframe ? null : localStorage.getItem('xesync_token');
 
-      // Hide the data export in the App Inventor WebView — Blob download
-      // doesn't work there. Users can export from the browser instead.
       if (inIframe) {
         var ex = document.getElementById('export-section');
         if (ex) ex.style.display = 'none';
@@ -115,17 +113,12 @@
 
       function fmtDuration(s) {
         s = Math.max(0, Math.round(s || 0));
-        var h = Math.floor(s / 3600);
-        var m = Math.floor((s % 3600) / 60);
-        var r = s % 60;
-        return pad(h) + ':' + pad(m) + ':' + pad(r);
+        return pad(Math.floor(s / 3600)) + ':' + pad(Math.floor((s % 3600) / 60)) + ':' + pad(s % 60);
       }
 
       function fmtPace(s) {
         s = Math.max(0, Math.round(s || 0));
-        var m = Math.floor(s / 60);
-        var r = s % 60;
-        return pad(m) + ':' + pad(r);
+        return pad(Math.floor(s / 60)) + ':' + pad(s % 60);
       }
 
       function fmtDate(iso) {
@@ -141,26 +134,23 @@
       }
 
       function renderCard(w) {
-        return ''
-          + '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
-          +   '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
-          +   '<div class="card-stats">'
-          +     stat('Distance',   (w.distance_m || 0) + 'm')
-          +     stat('Elapsed',    fmtDuration(w.duration_sec))
-          +     stat('Strokes',    w.total_strokes || 0)
-          +     stat('Watts',      w.avg_watts || 0)
-          +     stat('SPM',        w.avg_spm || 0)
-          +     stat('Pace',       fmtPace(w.avg_pace_sec), true)
-          +     stat('Calories',   w.calories || 0)
-          +     stat('Heart Rate', w.avg_hr || '-')
-          +   '</div>'
-          + '</div>';
+        return '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
+          + '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + '</div>'
+          + '<div class="card-stats">'
+          + stat('Distance',   (w.distance_m || 0) + 'm')
+          + stat('Elapsed',    fmtDuration(w.duration_sec))
+          + stat('Strokes',    w.total_strokes || 0)
+          + stat('Watts',      w.avg_watts || 0)
+          + stat('SPM',        w.avg_spm || 0)
+          + stat('Pace',       fmtPace(w.avg_pace_sec), true)
+          + stat('Calories',   w.calories || 0)
+          + stat('Heart Rate', w.avg_hr || '-')
+          + '</div></div>';
       }
 
       function stat(label, value, isPace) {
         return '<div class="stat' + (isPace ? ' pace' : '') + '">'
-          + escHtml(label) + ': <span class="stat-value' + (isPace ? ' pace-value' : '') + '">'
-          + escHtml(value) + '</span></div>';
+          + escHtml(label) + ': <span class="stat-value">' + escHtml(value) + '</span></div>';
       }
 
       function notifyTokenExpired() {
@@ -173,6 +163,19 @@
         }
       }
 
+      function acctMsg(el, text, ok) {
+        el.textContent = text;
+        el.className = 'account-msg ' + (ok ? 'ok' : 'err');
+      }
+
+      window.toggleAccount = function () {
+        document.getElementById('account-panel').classList.toggle('open');
+      };
+
+      window.hideDeleteConfirm = function () {
+        document.getElementById('delete-confirm').classList.remove('visible');
+      };
+
       window.openWorkout = function (id) {
         if (!hToken) return;
         var modal = document.getElementById('workout-modal');
@@ -181,7 +184,6 @@
         title.textContent = 'Loading…';
         body.innerHTML = '';
         modal.classList.add('visible');
-
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/get_workout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -198,7 +200,7 @@
       };
 
       window.closeModal = function (e) {
-        if (e && e.target.id !== 'workout-modal' && e.type === 'click' && e.target !== e.currentTarget) return;
+        if (e && e.target !== e.currentTarget) return;
         document.getElementById('workout-modal').classList.remove('visible');
       };
 
@@ -208,7 +210,6 @@
         msg.textContent = '';
         if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
         acctMsg(msg, 'Preparing export…', true);
-
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/export_account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -221,7 +222,6 @@
             var blob = new Blob([JSON.stringify(row.data, null, 2)], { type: 'application/json' });
             var url  = URL.createObjectURL(blob);
             var d    = new Date();
-            var pad  = function (n) { return n < 10 ? '0' + n : n; };
             var name = 'xesync_export_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '.json';
             var a = document.createElement('a');
             a.href = url; a.download = name;
@@ -235,26 +235,16 @@
         .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
       };
 
-      window.toggleAccount = function () {
-        document.getElementById('account-panel').classList.toggle('open');
-      };
-
-      window.hideDeleteConfirm = function () {
-        document.getElementById('delete-confirm').classList.remove('visible');
-      };
-
       window.changePassword = function () {
-        var oldP = document.getElementById('cp-old').value;
-        var newP = document.getElementById('cp-new').value;
+        var oldP  = document.getElementById('cp-old').value;
+        var newP  = document.getElementById('cp-new').value;
         var newP2 = document.getElementById('cp-new2').value;
-        var msg = document.getElementById('cp-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!oldP || !newP) { acctMsg(msg, 'Fill all fields', false); return; }
-        if (newP.length < 8) { acctMsg(msg, 'New password must be at least 8 chars', false); return; }
-        if (newP !== newP2) { acctMsg(msg, 'Passwords do not match', false); return; }
-        if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
-
+        var msg   = document.getElementById('cp-msg');
+        msg.className = 'account-msg'; msg.textContent = '';
+        if (!oldP || !newP)    { acctMsg(msg, 'Fill all fields', false); return; }
+        if (newP.length < 8)   { acctMsg(msg, 'New password must be at least 8 chars', false); return; }
+        if (newP !== newP2)    { acctMsg(msg, 'Passwords do not match', false); return; }
+        if (!hToken)           { acctMsg(msg, 'Not logged in', false); return; }
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/change_password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -278,58 +268,56 @@
       window.deleteAccount = function () {
         var pwd = document.getElementById('del-pwd').value;
         var msg = document.getElementById('del-msg');
-        msg.className = 'account-msg';
-        msg.textContent = '';
-        if (!pwd) { acctMsg(msg, 'Enter your password to confirm', false); return; }
+        msg.className = 'account-msg'; msg.textContent = '';
+        if (!pwd)    { acctMsg(msg, 'Enter your password to confirm', false); return; }
         if (!hToken) { acctMsg(msg, 'Not logged in', false); return; }
         var modal = document.getElementById('delete-confirm');
         modal.classList.add('visible');
         document.getElementById('delete-confirm-btn').onclick = function () {
           modal.classList.remove('visible');
-          doDeleteAccount(pwd, msg);
+          fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/delete_account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: hToken, password: pwd })
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (arr) {
+            var row = Array.isArray(arr) ? arr[0] : arr;
+            if (row && row.status === 'success') {
+              acctMsg(msg, 'Account deleted', true);
+              if (inIframe) {
+                try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
+              } else {
+                localStorage.removeItem('xesync_token');
+                setTimeout(function () { window.location.href = 'login.html'; }, 1000);
+              }
+            } else {
+              acctMsg(msg, (row && row.error) || 'Failed', false);
+            }
+          })
+          .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
         };
       };
 
-      function doDeleteAccount(pwd, msg) {
-        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/delete_account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: hToken, password: pwd })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (arr) {
-          var row = Array.isArray(arr) ? arr[0] : arr;
-          if (row && row.status === 'success') {
-            acctMsg(msg, 'Account deleted', true);
-            if (inIframe) {
-              try { window.parent.postMessage({ type: 'tokenExpired' }, '*'); } catch (e) {}
-            } else {
-              localStorage.removeItem('xesync_token');
-              setTimeout(function () { window.location.href = 'login.html'; }, 1000);
-            }
-          } else {
-            acctMsg(msg, (row && row.error) || 'Failed', false);
-          }
-        })
-        .catch(function (e) { acctMsg(msg, 'Error: ' + e.message, false); });
-      }(el, text, ok) {
-        el.textContent = text;
-        el.className = 'account-msg ' + (ok ? 'ok' : 'err');
-      }
-
       function renderCharts(container, w) {
         var samples = w.samples || [];
-        var summaryHtml = ''
-          + '<div class="modal-summary">'
-          +   tile('Distance',   (w.distance_m || 0) + ' m', true)
-          +   tile('Time',       fmtDuration(w.duration_sec))
-          +   tile('Pace',       fmtPace(w.avg_pace_sec), true)
-          +   tile('Watts',      w.avg_watts || 0)
-          +   tile('SPM',        w.avg_spm || 0)
-          +   tile('Heart Rate', w.avg_hr || '-')
-          +   tile('Strokes',    w.total_strokes || 0)
-          +   tile('Calories',   w.calories || 0)
+        var summaryHtml = '<div class="modal-summary">'
+          + tile('Distance',   (w.distance_m || 0) + ' m', true)
+          + tile('Time',       fmtDuration(w.duration_sec))
+          + tile('Pace',       fmtPace(w.avg_pace_sec), true)
+          + tile('Watts',      w.avg_watts || 0)
+          + tile('SPM',        w.avg_spm || 0)
+          + tile('Heart Rate', w.avg_hr || '-')
+          + tile('Strokes',    w.total_strokes || 0)
+          + tile('Calories',   w.calories || 0)
           + '</div>';
+
+        function tile(label, value, accent) {
+          return '<div class="modal-summary-tile' + (accent ? ' accent' : '') + '">'
+            + '<div class="modal-summary-label">' + label + '</div>'
+            + '<div class="modal-summary-value">' + value + '</div>'
+            + '</div>';
+        }
 
         if (!samples.length) {
           container.innerHTML = summaryHtml + '<div class="status-msg">No sample data.</div>';
@@ -337,10 +325,10 @@
         }
 
         var charts = [
-          { title: 'Pace',       idx: 5, color: '#4a8', avg: w.avg_pace_sec, fmt: fmtPace, unit: '/500m' },
-          { title: 'Watts',      idx: 3, color: '#fa3', avg: w.avg_watts,    fmt: function(v){ return Math.round(v); }, unit: 'W' },
-          { title: 'SPM',        idx: 2, color: '#6cf', avg: w.avg_spm,      fmt: function(v){ return (+v).toFixed(1); }, unit: '' },
-          { title: 'Heart Rate', idx: 4, color: '#f55', avg: w.avg_hr,       fmt: function(v){ return Math.round(v); }, unit: 'bpm' }
+          { title: 'Pace',       idx: 5, color: '#00A2E8', avg: w.avg_pace_sec, fmt: fmtPace,                                  unit: '/500m' },
+          { title: 'Watts',      idx: 3, color: '#fa3',    avg: w.avg_watts,    fmt: function(v){ return Math.round(v); },      unit: 'W'     },
+          { title: 'SPM',        idx: 2, color: '#6cf',    avg: w.avg_spm,      fmt: function(v){ return (+v).toFixed(1); },    unit: ''      },
+          { title: 'Heart Rate', idx: 4, color: '#f55',    avg: w.avg_hr,       fmt: function(v){ return Math.round(v); },      unit: 'bpm'   }
         ];
 
         container.innerHTML = summaryHtml
@@ -354,13 +342,6 @@
                 + '</div>';
             }).join('')
           + '</div>';
-
-        function tile(label, value, accent) {
-          return '<div class="modal-summary-tile' + (accent ? ' accent' : '') + '">'
-            +    '<div class="modal-summary-label">' + label + '</div>'
-            +    '<div class="modal-summary-value">' + value + '</div>'
-            +  '</div>';
-        }
       }
 
       function svgChart(samples, idx, color) {
@@ -371,9 +352,9 @@
                + '<text x="' + (W/2) + '" y="' + (H/2) + '" text-anchor="middle" class="chart-label">no data</text>'
                + '</svg>';
         }
-        var n = valid.length;
-        var xs = valid.map(function (s) { return +s[0]; });
-        var ys = valid.map(function (s) { return +s[idx]; });
+        var n    = valid.length;
+        var xs   = valid.map(function (s) { return +s[0]; });
+        var ys   = valid.map(function (s) { return +s[idx]; });
         var xMin = xs[0], xMax = xs[n - 1];
         var yMin = Math.min.apply(null, ys);
         var yMax = Math.max.apply(null, ys);
@@ -388,46 +369,35 @@
 
         var d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
         for (var i = 0; i < pts.length - 1; i++) {
-          var p0 = pts[i - 1] || pts[i];
-          var p1 = pts[i];
-          var p2 = pts[i + 1];
-          var p3 = pts[i + 2] || p2;
-          var cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-          var cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-          var cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-          var cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+          var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+          var cp1x = p1[0] + (p2[0] - p0[0]) / 6, cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+          var cp2x = p2[0] - (p3[0] - p1[0]) / 6, cp2y = p2[1] - (p3[1] - p1[1]) / 6;
           d += ' C' + cp1x.toFixed(1) + ',' + cp1y.toFixed(1)
-             + ' '  + cp2x.toFixed(1) + ',' + cp2y.toFixed(1)
-             + ' '  + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
+             + ' ' + cp2x.toFixed(1) + ',' + cp2y.toFixed(1)
+             + ' ' + p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
         }
 
-        var fillD = d + ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + (H - padB)
-                      + ' L' + pts[0][0].toFixed(1) + ',' + (H - padB) + ' Z';
-
+        var fillD = d + ' L' + pts[n-1][0].toFixed(1) + ',' + (H-padB)
+                      + ' L' + pts[0][0].toFixed(1)   + ',' + (H-padB) + ' Z';
         var gradId = 'grad_' + idx + '_' + Math.floor(Math.random() * 1e6);
-        var ticksY = 3;
         var yTicks = '';
-        for (var k = 0; k <= ticksY; k++) {
-          var v  = yMin + (yMax - yMin) * (k / ticksY);
+        for (var k = 0; k <= 3; k++) {
+          var v  = yMin + (yMax - yMin) * (k / 3);
           var yp = sy(v).toFixed(1);
-          yTicks += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yp + '" y2="' + yp
-                  + '" stroke="#1a1a1a" stroke-width="1"/>'
-                  + '<text x="' + (padL - 5) + '" y="' + (parseFloat(yp) + 3)
-                  + '" text-anchor="end" class="chart-label">' + Math.round(v) + '</text>';
+          yTicks += '<line x1="' + padL + '" x2="' + (W-padR) + '" y1="' + yp + '" y2="' + yp + '" stroke="#1a1a1a" stroke-width="1"/>'
+                  + '<text x="' + (padL-5) + '" y="' + (parseFloat(yp)+3) + '" text-anchor="end" class="chart-label">' + Math.round(v) + '</text>';
         }
 
         return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart-svg" preserveAspectRatio="none">'
              + '<defs><linearGradient id="' + gradId + '" x1="0" x2="0" y1="0" y2="1">'
-             +   '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.5"/>'
-             +   '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
+             + '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.5"/>'
+             + '<stop offset="100%" stop-color="' + color + '" stop-opacity="0"/>'
              + '</linearGradient></defs>'
              + yTicks
              + '<path d="' + fillD + '" fill="url(#' + gradId + ')"/>'
-             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2"'
-             +       ' stroke-linejoin="round" stroke-linecap="round"/>'
-             + '<text x="' + (W - padR) + '" y="' + (H - 6) + '" text-anchor="end" class="chart-label">'
-             +   fmtDuration(xMax) + '</text>'
-             + '<text x="' + padL + '" y="' + (H - 6) + '" class="chart-label">0:00</text>'
+             + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+             + '<text x="' + (W-padR) + '" y="' + (H-6) + '" text-anchor="end" class="chart-label">' + fmtDuration(xMax) + '</text>'
+             + '<text x="' + padL + '" y="' + (H-6) + '" class="chart-label">0:00</text>'
              + '</svg>';
       }
 
@@ -435,9 +405,7 @@
         var now = new Date();
         var startOfWeek = new Date(now);
         startOfWeek.setHours(0,0,0,0);
-        var day = (startOfWeek.getDay() + 6) % 7;
-        startOfWeek.setDate(startOfWeek.getDate() - day);
-
+        startOfWeek.setDate(startOfWeek.getDate() - (startOfWeek.getDay() + 6) % 7);
         var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         var startOfYear  = new Date(now.getFullYear(), 0, 1);
 
@@ -449,23 +417,20 @@
 
         rows.forEach(function (w) {
           var d = new Date(w.workout_date);
-          var dist = w.distance_m || 0;
-          var dur  = w.duration_sec || 0;
+          var dist = w.distance_m || 0, dur = w.duration_sec || 0;
           if (d >= startOfWeek)  { buckets.week.dist  += dist; buckets.week.dur  += dur; buckets.week.count++;  }
           if (d >= startOfMonth) { buckets.month.dist += dist; buckets.month.dur += dur; buckets.month.count++; }
           if (d >= startOfYear)  { buckets.year.dist  += dist; buckets.year.dur  += dur; buckets.year.count++;  }
         });
 
         function block(label, b) {
-          return ''
-            + '<div class="summary-block">'
-            +   '<div class="summary-label">' + label + '</div>'
-            +   '<div class="summary-stats">'
-            +     '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
-            +     '<span>' + fmtDuration(b.dur) + '</span>'
-            +     '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
-            +   '</div>'
-            + '</div>';
+          return '<div class="summary-block">'
+            + '<div class="summary-label">' + label + '</div>'
+            + '<div class="summary-stats">'
+            + '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
+            + '<span>' + fmtDuration(b.dur) + '</span>'
+            + '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
+            + '</div></div>';
         }
 
         function encouragement(week) {
@@ -476,27 +441,21 @@
           return 'Excellent consistency.';
         }
 
-        summaryEl.innerHTML = ''
-          + '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
+        summaryEl.innerHTML = '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
           + '<div class="summary-container">'
-          +   block('This week',  buckets.week)
-          +   block('This month', buckets.month)
-          +   block('This year',  buckets.year)
+          + block('This week',  buckets.week)
+          + block('This month', buckets.month)
+          + block('This year',  buckets.year)
           + '</div>';
       }
 
       function load() {
         if (!hToken) {
-          if (inIframe) {
-            setStatus('Waiting for session...');
-          } else {
-            window.location.href = 'login.html';
-          }
+          if (inIframe) { setStatus('Waiting for session...'); }
+          else { window.location.href = 'login.html'; }
           return;
         }
-
         setStatus('Loading…');
-
         fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/list_workouts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
