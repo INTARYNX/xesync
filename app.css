@@ -157,6 +157,8 @@ input:focus { border-color: #555; }
   height: 56px;
   flex-shrink: 0;
   align-items: stretch;
+  position: relative;
+  z-index: 300;
 }
 #topbar.visible { display: flex; }
 .tbar-btn {
@@ -225,7 +227,10 @@ input:focus { border-color: #555; }
 /* Save dialog + offline choice */
 .ftms-overlay {
   position: fixed;
-  inset: 0;
+  top: 56px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: #000;
   display: none;
   flex-direction: column;
