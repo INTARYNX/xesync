@@ -1,10 +1,19 @@
 @font-face {
-  font-family: "DotGothic16";
-  src: url("DotGothic16-Regular.ttf") format("truetype");
+  font-family: "SpaceGrotesk";
+  src: url("SpaceGrotesk-Regular.ttf") format("truetype");
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+}
+
 body {
-  font-family: "DotGothic16", monospace;
+  font-family: "SpaceGrotesk", monospace;
   background: #000;
   color: #fff;
   height: 100vh;
@@ -73,7 +82,7 @@ input:focus { border-color: #555; }
   text-align: center;
 }
 
-/* Scan */
+/* Scan screen */
 #scan-idle, #scan-active { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; flex: 1; }
 #scan-active { display: none; }
 
@@ -128,7 +137,7 @@ input:focus { border-color: #555; }
 #screen-rowing { align-items: stretch; justify-content: flex-start; }
 #screen-rowing #main-container { height: 100%; }
 
-/* Overlays sur l'écran rowing */
+/* Overlays on rowing screen */
 .rowing-overlay {
   display: none;
   position: absolute;
@@ -179,13 +188,13 @@ input:focus { border-color: #555; }
   margin-bottom: 28px;
 }
 
-/* Status banner (FTMS state messages) */
+/* Status banner (FTMS state) */
 #ftmsBanner {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-family: "DotGothic16", monospace;
+  font-family: "SpaceGrotesk", monospace;
   font-size: 1.6em;
   font-weight: bold;
   letter-spacing: 0.15em;
@@ -202,7 +211,7 @@ input:focus { border-color: #555; }
 }
 #ftmsBanner.visible { opacity: 1; }
 
-/* Save dialog + offline choice — shared overlay style */
+/* Save dialog + offline choice */
 .ftms-overlay {
   position: fixed;
   inset: 0;
@@ -212,7 +221,7 @@ input:focus { border-color: #555; }
   justify-content: center;
   align-items: center;
   z-index: 150;
-  font-family: "DotGothic16", monospace;
+  font-family: "SpaceGrotesk", monospace;
   overflow-y: auto;
   padding: 12px;
 }
@@ -277,13 +286,13 @@ input:focus { border-color: #555; }
   font-weight: bold;
   letter-spacing: 0.1em;
   cursor: pointer;
-  font-family: "DotGothic16", monospace;
+  font-family: "SpaceGrotesk", monospace;
   -webkit-tap-highlight-color: transparent;
 }
 .ftms-btn.primary  { color: #4CAF50; border-color: #4CAF50; }
 .ftms-btn.secondary { color: #555;   border-color: #222; }
 
-/* Landscape with short viewport — compact everything */
+/* Landscape short viewport */
 @media (max-height: 500px) {
   .ftms-overlay {
     justify-content: flex-start;
