@@ -2,7 +2,7 @@ tools/
 plsql/
 dist/
 dev/
-DotGothic16-Regular.ttf
+SpaceGrotesk-Regular.ttf
 deploy.config.ps1
 web.cmd
 tunnel.cmd

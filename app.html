@@ -6,38 +6,6 @@
   <title>XeSync</title>
   <link rel="stylesheet" href="app.css">
   <script src="config.js"></script>
-  <style>
-    /* Boot splash — hides the login screen until AI2 either delivers an
-       autoLogin token (and we've validated/failed it) or we time out waiting. */
-    #boot-splash {
-      position: fixed;
-      inset: 0;
-      background: #000;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      transition: opacity 0.25s ease;
-    }
-    #boot-splash.hidden { opacity: 0; pointer-events: none; }
-    .boot-logo {
-      font-family: "DotGothic16", monospace;
-      font-size: 2em;
-      color: #fff;
-      letter-spacing: 0.3em;
-      margin-bottom: 24px;
-    }
-    .boot-spinner {
-      width: 32px;
-      height: 32px;
-      border: 2px solid #222;
-      border-top-color: #4CAF50;
-      border-radius: 50%;
-      animation: boot-spin 0.9s linear infinite;
-    }
-    @keyframes boot-spin { to { transform: rotate(360deg); } }
-  </style>
 </head>
 <body>
 
@@ -139,9 +107,6 @@
     var inDebugMode = false;
     var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
 
-    // Boot splash management — hide as soon as either:
-    //  (1) we receive an autoLogin message and finish validating, or
-    //  (2) 1.5s pass with no autoLogin attempt (offline / browser / new user).
     var bootSplashTimer = setTimeout(hideBootSplash, 1500);
 
     function hideBootSplash() {
@@ -174,7 +139,6 @@
         var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
         document.getElementById('tbar-scan-btn').style.display = onSecondary ? 'none' : '';
         document.getElementById('tbar-debug-btn').style.display = (debugMenu && id !== 'screen-rowing') ? '' : 'none';
-        // ROW AGAIN + DISCONNECT only on home, when BLE is connected
         var showRowerCtrls = (id === 'screen-home' && bleConnected) ? '' : 'none';
         document.getElementById('tbar-row-btn').style.display = showRowerCtrls;
         document.getElementById('tbar-disconnect-btn').style.display = showRowerCtrls;
@@ -233,14 +197,12 @@
       }
     }
 
-    // App Inventor calls: WebViewer.RunJavaScript("handleAppResponse(JSON.stringify({...}))")
     function handleAppResponse(json) {
       if (!json) return;
       lastWebViewString = json;
       var msg;
       try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
       catch(e) {
-        // Not JSON — treat as raw FTMS bytes if it looks like numbers
         if (typeof json === 'string' && /^\s*\d/.test(json)) {
           ingestData(json.trim());
         }
@@ -278,12 +240,10 @@
 
     // ── LOGIN ─────────────────────────────────────────────
     function doAutoLogin(msg) {
-      // Cancel the splash auto-hide while we validate
       if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
 
       console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
       if (!msg.token) {
-        // Empty token = AI2 telling us there's no stored session. Just show login.
         show('screen-login');
         hideBootSplash();
         return;
@@ -557,7 +517,6 @@
       show('screen-rowing');
       initRowing();
       initFtmsTracking();
-      // In debug mode, restart the simulator from t=0 for a fresh session.
       if (inDebugMode) {
         DebugSim.reset();
         DebugSim.start();
@@ -572,7 +531,6 @@
         sendToApp('disconnect', {});
       }
       bleConnected = false;
-      // Refresh the top bar so the buttons hide
       show('screen-home');
     }
 
