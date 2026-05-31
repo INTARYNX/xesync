@@ -12,13 +12,7 @@ var RowingAnimation = (function() {
     var loadingEl = null;
     var shaderReadySent = false;
 
-    // ftms_integration passes speed = (500/paceSeconds) * 0.8
-    // Fast rowing (90s/500m) ≈ 4.4, normal (120s) ≈ 3.3, slow (180s) ≈ 2.2
     var SPEED_NORMALIZE = 5.0;
-
-    // Wrap values to keep float precision good on mobile GPUs.
-    // TIME_WRAP must match the day-cycle period in the shader so the
-    // wrap is seamless (sky/sun/clouds don't jump on reset).
     var TIME_WRAP = 300.0;
     var FLOW_WRAP = 1000.0;
 
@@ -135,6 +129,8 @@ var RowingAnimation = (function() {
         lastT = t0;
         flow = 0;
         animPhase = 0;
+        currentSpeed = 0;
+        currentSpm = 0;
         shaderReadySent = false;
         loadingEl = document.getElementById('gl-loading');
 

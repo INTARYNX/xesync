@@ -1,539 +1,595 @@
-/**
- * FTMS Integration — session tracking + display sync
- *
- * Public API (called from app.html):
- *   initFtmsTracking()  — call when entering rowing screen
- *   ingestData(csv)     — call for each FTMS packet (20 comma-separated bytes)
- *
- * Phases:
- *   IDLE   — no rowing yet, waiting for first stroke
- *   ACTIVE — rowing in progress
- *   PAUSED — rower stopped for >5s. Clock is frozen, pause-aware dialog
- *            is shown. Resuming (spm>0) returns to ACTIVE without losing
- *            the session. Save/Exit ends the session.
- */
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>XeSync</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="config.js"></script>
+</head>
+<body>
 
-(function () {
-  'use strict';
+  <!-- ── TOP BAR ──────────────────────────────────────── -->
+  <div id="topbar" class="visible">
+    <button class="tbar-btn danger" onclick="doExit()">EXIT</button>
+    <span style="flex:1"></span>
+    <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
+    <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
+    <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
+    <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
+    <div id="tbar-user"></div>
+  </div>
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Config
-  // ─────────────────────────────────────────────────────────────────────
-  var INACTIVITY_MS    = 5000;
-  var INACTIVITY_TICK  = 500;
-  var INITIAL_PACE     = 150;
-  var PACE_WINDOW_MS   = 30000;
-  var DEBUG            = false;
+  <!-- ── BOOT SPLASH ───────────────────────────────────── -->
+  <div id="boot-splash">
+    <div class="boot-logo">XESYNC</div>
+    <div class="boot-spinner"></div>
+  </div>
 
-  // ─────────────────────────────────────────────────────────────────────
-  // State
-  // ─────────────────────────────────────────────────────────────────────
-  var phase = 'IDLE';
+  <!-- ── LOGIN ─────────────────────────────────────────── -->
+  <div id="screen-login" class="screen active" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+    <h1>XESYNC</h1>
+    <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="password" placeholder="password">
+    <button class="btn primary" onclick="doLogin()">LOGIN</button>
+    <button class="btn" onclick="show('screen-register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
+    <div class="status-msg" id="login-status"></div>
+  </div>
 
-  var session = null;
-  var lastPacket = null;
-  var lastActiveAt = 0;
-  var inactivityTimerId = null;
+  <!-- ── REGISTER ─────────────────────────────────────── -->
+  <div id="screen-register" class="screen" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+    <h1>CREATE ACCOUNT</h1>
+    <input type="text"     id="reg-username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="email"    id="reg-email"    placeholder="email"    autocomplete="off" autocorrect="off" autocapitalize="off">
+    <input type="password" id="reg-password" placeholder="password (min 8 chars)">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.8em;color:#888;max-width:320px;margin:10px 0;line-height:1.4;">
+      <input type="checkbox" id="reg-consent" style="width:auto;margin-top:3px;">
+      <span>I agree to the privacy policy and consent to my data being stored to provide the service.</span>
+    </label>
+    <button class="btn primary" onclick="doRegister()">CREATE</button>
+    <button class="btn" onclick="show('screen-login')" style="margin-top:10px;opacity:0.7;">BACK</button>
+    <div class="status-msg" id="register-status"></div>
+  </div>
 
-  function resetSession() {
-    session = {
-      startedAt:        null,
-      totalPausedMs:    0,
-      pausedAt:         null,
-      distOffset:       0,
-      strokeOffset:     0,
-      calOffset:        0,
-      rawDist:          0,
-      rawStrokes:       0,
-      rawCals:          0,
-      paceSeconds:      INITIAL_PACE,
-	  paceHistory:      [],
-      samples:          []
-    };
-  }
+  <!-- ── HOME ─────────────────────────────────────────── -->
+  <div id="screen-home" class="screen">
+    <iframe id="home-frame" src="about:blank"></iframe>
+  </div>
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Parsing — Xebex FTMS: 20 bytes, big = byte[hi]*255 + byte[lo]
-  // ─────────────────────────────────────────────────────────────────────
-  function parsePacket(csv) {
-    if (!csv) return null;
-    var b = csv.split(',').map(function (s) { return parseInt(s, 10); });
-    if (b.length < 20 || b.some(isNaN)) return null;
-    var u16 = function (hi, lo) { return b[hi] * 255 + b[lo]; };
-    return {
-      t:         Date.now(),
-      spm:       b[2] * 0.5,
-      strokes:   u16(4, 3),
-      distance:  u16(6, 5),
-      pace:      u16(9, 8),
-      watts:     u16(11, 10),
-      cals:      u16(13, 12),
-      hr:        b[16],
-      elapsed:   u16(19, 18)
-    };
-  }
+  <!-- ── SCAN ──────────────────────────────────────────── -->
+  <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
+    <div id="scan-idle">
+      <h1 style="opacity:0.4;">XESYNC</h1>
+    </div>
+    <div id="scan-active">
+      <div id="pulse-ring"></div>
+      <div id="scan-label">SCANNING...</div>
+      <button class="btn danger" onclick="stopScan()" style="margin-top:16px;">STOP</button>
+      <div id="device-list"></div>
+    </div>
+  </div>
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Session math
-  // ─────────────────────────────────────────────────────────────────────
-  function applyResetIfNeeded(p) {
-    if (p.distance < session.rawDist)    session.distOffset   += session.rawDist;
-    if (p.strokes  < session.rawStrokes) session.strokeOffset += session.rawStrokes;
-    if (p.cals     < session.rawCals)    session.calOffset    += session.rawCals;
-    session.rawDist    = p.distance;
-    session.rawStrokes = p.strokes;
-    session.rawCals    = p.cals;
-  }
+  <!-- ── CONNECTING ────────────────────────────────────── -->
+  <div id="screen-connecting" class="screen">
+    <div class="big-label" id="connecting-label">CONNECTING...</div>
+  </div>
 
-  function totalDistance() { return session.distOffset   + session.rawDist; }
-  function totalStrokes()  { return session.strokeOffset + session.rawStrokes; }
-  function totalCals()     { return session.calOffset    + session.rawCals; }
+  <!-- ── ROWING ─────────────────────────────────────────── -->
+  <div id="screen-rowing" class="screen" style="position:relative;">
+    <!-- ROWING_DISPLAY -->
+    <div id="loading-overlay" class="rowing-overlay visible">
+      <div class="big-label">LOADING...</div>
+    </div>
+    <div id="reconnect-overlay" class="rowing-overlay" style="background:rgba(0,0,0,0.85);">
+      <div class="big-label">RECONNECTING...</div>
+      <button class="btn danger" onclick="doGiveUp()">STOP</button>
+    </div>
+  </div>
 
-  function sessionSeconds() {
-    if (!session || !session.startedAt) return 0;
-    var now = Date.now();
-    var pausedMs = session.totalPausedMs;
-    if (session.pausedAt != null) pausedMs += (now - session.pausedAt);
-    return (now - session.startedAt - pausedMs) / 1000;
-  }
+  <!-- ── REGISTER SUCCESS ──────────────────────────────── -->
+  <div id="register-success" class="ftms-overlay">
+    <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
+    <div class="ftms-overlay-subtitle">a verification link has been sent to your inbox</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn primary" onclick="hideRegisterSuccess()">GO TO LOGIN</button>
+    </div>
+  </div>
 
-  function updatePace(prev, curr) {
-    var now = curr.t;
-    var currentTotalDist = totalDistance();
+  <!-- ── NOT CONNECTED ─────────────────────────────────── -->
+  <div id="not-connected" class="ftms-overlay">
+    <div class="ftms-overlay-title">NOT CONNECTED</div>
+    <div class="ftms-overlay-subtitle">your workouts aren't available offline</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn primary" onclick="hideNotConnected()">OK</button>
+    </div>
+  </div>
 
-    session.paceHistory.push({ t: now, dist: currentTotalDist });
+  <!-- ── EXIT CONFIRM ───────────────────────────────────── -->
+  <div id="exit-confirm" class="ftms-overlay">
+    <div class="ftms-overlay-title">EXIT</div>
+    <div class="ftms-overlay-subtitle">what would you like to do?</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn"           onclick="doLogoff()">LOG OFF</button>
+      <button class="ftms-btn primary"   onclick="doQuit()">QUIT APP</button>
+      <button class="ftms-btn secondary" onclick="hideExitConfirm()">CANCEL</button>
+    </div>
+  </div>
 
-    var cutoff = now - PACE_WINDOW_MS;
-    while (session.paceHistory.length > 0 && session.paceHistory[0].t < cutoff) {
-      session.paceHistory.shift();
+  <script>
+    var appToken = null;
+    var bleConnected = false;
+    var inDebugMode = false;
+    var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+    var bootSplashTimer = setTimeout(hideBootSplash, 1500);
+
+    function hideBootSplash() {
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+      var s = document.getElementById('boot-splash');
+      if (!s) return;
+      s.classList.add('hidden');
+      setTimeout(function() { if (s.parentNode) s.parentNode.removeChild(s); }, 300);
     }
 
-    if (session.paceHistory.length < 2) return;
-
-    var oldestPoint = session.paceHistory[0];
-    var dDist = currentTotalDist - oldestPoint.dist;
-    var dTime = (now - oldestPoint.t) / 1000;
-
-    if (dDist > 0 && dTime > 0.5) {
-      var averagePace = (dTime / dDist) * 500;
-      if (isFinite(averagePace) && averagePace > 0) {
-        session.paceSeconds = averagePace;
-      }
-    }
-  }
-
-  function recordSample(p) {
-    var now = sessionSeconds();
-    var last = session.samples.length ? session.samples[session.samples.length - 1] : null;
-    if (last && now - last.time < 1.0) return;
-    session.samples.push({
-      time:     now,
-      distance: totalDistance(),
-      strokes:  totalStrokes(),
-      spm:      p.spm,
-      watts:    p.watts,
-      hr:       p.hr === 255 ? null : p.hr,
-      pace:     session.paceSeconds
+    document.addEventListener('DOMContentLoaded', function() {
+      if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
     });
-  }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Display
-  // ─────────────────────────────────────────────────────────────────────
-  function fmtTime(s) {
-    s = Math.max(0, Math.round(s));
-    var m = Math.floor(s / 60);
-    var r = s % 60;
-    return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
-  }
+    // ── SCREENS ───────────────────────────────────────────
+    var SCREENS_NO_BAR = { 'screen-rowing': true };
 
-  function setText(id, value) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = value;
-  }
-
-  function paceToAnimSpeed(paceSec) {
-    if (!paceSec || paceSec <= 0) return 0;
-    return (500 / paceSec) * 0.8;
-  }
-
-  function render() {
-    if (!lastPacket) return;
-    setText('heartrate',   lastPacket.hr === 255 ? '-' : lastPacket.hr);
-    setText('distance',    totalDistance());
-    setText('watts',       Math.round(lastPacket.watts));
-    setText('pace',        fmtTime(session.paceSeconds));
-    setText('spm',         Math.round(lastPacket.spm));
-    setText('cals',        totalCals());
-    setText('strokes',     totalStrokes());
-    setText('elapsedtime', fmtTime(sessionSeconds()));
-    if (typeof setConsoleSpeedAndSpm === 'function') {
-      setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds), lastPacket.spm);
-    }
-  }
-
-  function renderIdle() {
-    setText('heartrate', '-');
-    setText('distance',  '0');
-    setText('watts',     '0');
-    setText('pace',      '--:--');
-    setText('spm',       '0.0');
-    setText('cals',      '0');
-    setText('strokes',   '0');
-    setText('elapsedtime', '00:00');
-    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Status banner
-  // ─────────────────────────────────────────────────────────────────────
-  function ensureBanner() {
-    var el = document.getElementById('ftmsBanner');
-    if (el) return el;
-    el = document.createElement('div');
-    el.id = 'ftmsBanner';
-    document.body.appendChild(el);
-    return el;
-  }
-  function showBanner(text) {
-    var el = ensureBanner();
-    el.textContent = text;
-    el.classList.add('visible');
-  }
-  function hideBanner() {
-    var el = document.getElementById('ftmsBanner');
-    if (el) el.classList.remove('visible');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Pause dialog
-  // ─────────────────────────────────────────────────────────────────────
-  function ensurePauseDialog() {
-    if (document.getElementById('pauseDialog')) return;
-    var html = ''
-      + '<div id="pauseDialog" class="ftms-overlay">'
-      +   '<div class="ftms-overlay-title">PAUSED</div>'
-      +   '<div class="ftms-overlay-subtitle">row again to continue</div>'
-      +   '<div class="ftms-summary-grid">'
-      +     tile('summaryTime',     'TIME',     '00:00')
-      +     tile('summaryDistance', 'DISTANCE', '0m')
-      +     tile('summaryStrokes',  'STROKES',  '0')
-      +     tile('summaryCalories', 'CALORIES', '0')
-      +   '</div>'
-      +   '<div class="ftms-actions">'
-      +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE</button>'
-      +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
-      +   '</div>'
-      + '</div>';
-    function tile(id, label, val) {
-      return '<div class="ftms-summary-tile">'
-        + '<div class="ftms-summary-label">' + label + '</div>'
-        + '<div id="' + id + '" class="ftms-summary-value">' + val + '</div>'
-        + '</div>';
-    }
-    document.body.insertAdjacentHTML('beforeend', html);
-  }
-  function showPauseDialog() {
-    ensurePauseDialog();
-    setText('summaryTime',     fmtTime(sessionSeconds()));
-    setText('summaryDistance', totalDistance() + 'm');
-    setText('summaryStrokes',  totalStrokes());
-    setText('summaryCalories', totalCals());
-    document.getElementById('pauseDialog').classList.add('visible');
-  }
-  function hidePauseDialog() {
-    var el = document.getElementById('pauseDialog');
-    if (el) el.classList.remove('visible');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Offline choice screen
-  // ─────────────────────────────────────────────────────────────────────
-  function ensureOfflineChoice() {
-    if (document.getElementById('offlineChoice')) return;
-    var html = ''
-      + '<div id="offlineChoice" class="ftms-overlay">'
-      +   '<div class="ftms-overlay-title">WORKOUT SAVED</div>'
-      +   '<div class="ftms-overlay-subtitle">stored offline</div>'
-      +   '<div class="ftms-actions">'
-      +     '<button class="ftms-btn primary" onclick="offlineChoiceRow()">ROW AGAIN</button>'
-      +     '<button class="ftms-btn"         onclick="offlineChoiceLogin()">GO TO LOGIN</button>'
-      +   '</div>'
-      + '</div>';
-    document.body.insertAdjacentHTML('beforeend', html);
-  }
-  function showOfflineChoice() {
-    ensureOfflineChoice();
-    document.getElementById('offlineChoice').classList.add('visible');
-  }
-  function hideOfflineChoice() {
-    var el = document.getElementById('offlineChoice');
-    if (el) el.classList.remove('visible');
-  }
-  function offlineChoiceRow() {
-    hideOfflineChoice();
-    goIdle();
-  }
-  function offlineChoiceLogin() {
-    hideOfflineChoice();
-    if (typeof doExit === 'function') doExit();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Phase transitions
-  // ─────────────────────────────────────────────────────────────────────
-  function goActive() {
-    if (phase === 'ACTIVE') return;
-    if (phase === 'PAUSED') {
-      if (session.pausedAt != null) {
-        session.totalPausedMs += (Date.now() - session.pausedAt);
-        session.pausedAt = null;
-      }
-      hidePauseDialog();
-      hideBanner();
-      phase = 'ACTIVE';
-      lastActiveAt = Date.now();
-      if (DEBUG) console.log('[FTMS] phase PAUSED → ACTIVE');
-      return;
-    }
-    resetSession();
-    session.startedAt = Date.now();
-    lastActiveAt = Date.now();
-    phase = 'ACTIVE';
-    hideBanner();
-    hidePauseDialog();
-    if (DEBUG) console.log('[FTMS] phase IDLE → ACTIVE');
-  }
-
-  function goPaused() {
-    if (phase !== 'ACTIVE') return;
-    session.pausedAt = Date.now();
-    phase = 'PAUSED';
-    if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
-    showPauseDialog();
-    if (DEBUG) console.log('[FTMS] phase ACTIVE → PAUSED');
-  }
-
-  function goIdle() {
-    phase = 'IDLE';
-    resetSession();
-    lastPacket = null;
-    renderIdle();
-    hidePauseDialog();
-    hideBanner();
-    if (DEBUG) console.log('[FTMS] phase → IDLE');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Inactivity watchdog
-  // ─────────────────────────────────────────────────────────────────────
-  function tickInactivity() {
-    if (phase !== 'ACTIVE') return;
-    if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Public API
-  // ─────────────────────────────────────────────────────────────────────
-  function ingestData(csv) {
-    if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
-      csv = decodeURIComponent(csv.slice(6));
-    }
-    var p = parsePacket(csv);
-    if (!p) return;
-
-    var prev = lastPacket;
-    lastPacket = p;
-
-    if (phase === 'IDLE') {
-      if (p.spm > 0) goActive(); else return;
-    }
-    else if (phase === 'PAUSED') {
-      if (p.spm > 0) goActive(); else return;
-    }
-
-    applyResetIfNeeded(p);
-    updatePace(prev, p);
-    if (p.spm > 0) {
-      lastActiveAt = Date.now();
-      recordSample(p);
-    }
-    render();
-  }
-
-  function initFtmsTracking() {
-    ensurePauseDialog();
-    if (inactivityTimerId) clearInterval(inactivityTimerId);
-    inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
-    goIdle();
-    showBanner('READY TO ROW !');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Save / exit
-  // ─────────────────────────────────────────────────────────────────────
-  function avg(arr, key) {
-    if (!arr.length) return 0;
-    var s = 0, n = 0;
-    for (var i = 0; i < arr.length; i++) {
-      if (arr[i][key] == null) continue;
-      s += arr[i][key];
-      n++;
-    }
-    return n ? s / n : 0;
-  }
-
-  function buildPayload() {
-    var s = session.samples;
-    return {
-      version: 1,
-      summary: {
-        duration: Math.round(sessionSeconds()),
-        distance: totalDistance(),
-        strokes:  totalStrokes(),
-        calories: totalCals(),
-        avgSpm:   Math.round(avg(s, 'spm')   * 10) / 10,
-        avgPace:  Math.round(avg(s, 'pace')),
-        avgWatts: Math.round(avg(s, 'watts')),
-        avgHr:    Math.round(avg(s, 'hr'))
-      },
-      samples: s.map(function (x) {
-        return [
-          Math.round(x.time * 10) / 10,
-          Math.round(x.distance),
-          x.strokes,
-          Math.round(x.spm * 10) / 10,
-          Math.round(x.watts),
-          x.hr == null ? null : Math.round(x.hr),
-          Math.round(x.pace)
-        ];
-      })
-    };
-  }
-
-  function workoutTag() {
-    var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n; };
-    return 'workout_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
-      + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
-  }
-
-  function saveWorkout() {
-    hidePauseDialog();
-    var payload = buildPayload();
-    var token = typeof appToken !== 'undefined' ? appToken : null;
-
-    var goHome = function () {
-      hideBanner();
-      goIdle();
-      if (typeof showHome === 'function') showHome();
-    };
-
-    showBanner('SAVING...');
-
-    if (!token) {
-      var tag = workoutTag();
-      var msg = JSON.stringify({
-        action:  'saveData',
-        workout: tag,
-        data:    payload
+    function show(id) {
+      document.querySelectorAll('.screen').forEach(function(s) {
+        s.classList.remove('active');
       });
-      var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
-        ? AppInventor
-        : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
-          ? window.AppInventor
-          : null;
-      if (ai) {
-        showBanner('SENT TO APP');
-        ai.setWebViewString(msg);
-        setTimeout(function () {
-          hideBanner();
-          phase = 'IDLE';
-          showOfflineChoice();
-        }, 1500);
+      document.getElementById(id).classList.add('active');
+
+      var bar = document.getElementById('topbar');
+      if (SCREENS_NO_BAR[id]) {
+        bar.classList.remove('visible');
       } else {
-        showBanner('NO APP BRIDGE (browser mode)');
-        setTimeout(function () {
-          hideBanner();
-          phase = 'IDLE';
-          showOfflineChoice();
-        }, 2000);
+        bar.classList.add('visible');
+        var onSecondary = id === 'screen-connecting' || id === 'screen-rowing';
+        var scanning = document.getElementById('scan-active').style.display === 'flex';
+        // SCAN FOR ROWER: available when not connected, not mid-scan, not on a secondary flow screen
+        document.getElementById('tbar-scan-btn').style.display = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
+        document.getElementById('tbar-debug-btn').style.display = (debugMenu && !onSecondary) ? '' : 'none';
+        // ROW AGAIN + DISCONNECT: available whenever connected and not on the rowing screen itself
+        var connectedCtrls = (bleConnected && id !== 'screen-rowing') ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = connectedCtrls;
+        document.getElementById('tbar-disconnect-btn').style.display = connectedCtrls;
       }
-      return;
     }
 
-    var tag = workoutTag();
-    var body = JSON.stringify({ token: token, workout: tag, data: payload });
+    function setUserBadge(username) {
+      var el = document.getElementById('tbar-user');
+      if (!username) { el.innerHTML = ''; return; }
+      var initials = username.slice(0, 2).toUpperCase();
+      el.innerHTML = '<div class="tbar-avatar">' + initials + '</div>';
+    }
 
-    var timeout = new Promise(function (_, reject) {
-      setTimeout(function () { reject(new Error('timeout')); }, 10000);
+    function debugMode() {
+      bleConnected = true;
+      inDebugMode = true;
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      DebugSim.reset();
+      DebugSim.start();
+    }
+
+    function doExit() {
+      var onLogin = document.getElementById('screen-login').classList.contains('active');
+      if (onLogin) { sendToApp('exit', {}); return; }
+      document.getElementById('exit-confirm').classList.add('visible');
+    }
+
+    function hideExitConfirm() {
+      document.getElementById('exit-confirm').classList.remove('visible');
+    }
+
+    function hideRegisterSuccess() {
+      document.getElementById('register-success').classList.remove('visible');
+      show('screen-login');
+    }
+
+    function doLogoff() {
+      hideExitConfirm();
+      appToken = null;
+      bleConnected = false;
+      inDebugMode = false;
+      DebugSim.stop();
+      setUserBadge('');
+      document.getElementById('password').value = '';
+      show('screen-login');
+    }
+
+    function doQuit() {
+      hideExitConfirm();
+      sendToApp('exit', {});
+    }
+
+    // ── APP INVENTOR BRIDGE ───────────────────────────────
+    function sendToApp(action, data) {
+      var payload = JSON.stringify(Object.assign({ action: action }, data));
+      var ai = window.AppInventor || (typeof AppInventor !== 'undefined' ? AppInventor : null);
+      if (ai && ai.setWebViewString) {
+        ai.setWebViewString(payload);
+      } else {
+        console.log('[→ App]', payload);
+      }
+    }
+
+    function handleAppResponse(json) {
+      if (!json) return;
+      var msg;
+      try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch(e) {
+        if (typeof json === 'string' && /^\s*\d/.test(json)) ingestData(json.trim());
+        return;
+      }
+      switch (msg.action) {
+        case 'autoLogin':      doAutoLogin(msg);      break;
+        case 'scanResult':     onScanResult(msg);     break;
+        case 'connectResult':  onConnectResult(msg);  break;
+        case 'disconnected':   onDisconnected();      break;
+        case 'reconnected':    onReconnected();       break;
+        case 'ftmsData':       onFtmsData(msg);       break;
+        case 'saveAck':        onSaveAck();           break;
+        case 'uploadWorkout':  onUploadWorkout(msg);  break;
+        case 'tagCleared':     onTagCleared(msg);     break;
+        case 'goHome':         showHome();            break;
+        default: console.warn('Unknown action:', msg.action);
+      }
+    }
+    window.handleAppResponse = handleAppResponse;
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'shaderReady') {
+        document.getElementById('loading-overlay').classList.remove('visible');
+      }
+      if (e.data && e.data.type === 'tokenExpired') {
+        appToken = null;
+        setUserBadge('');
+        setLoginStatus('Session expired. Please log in again.');
+        show('screen-login');
+      }
     });
 
-    Promise.race([
+    // ── LOGIN ─────────────────────────────────────────────
+    function doAutoLogin(msg) {
+      if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
+      console.log('[autoLogin] received token:', msg.token ? msg.token.slice(0,16) + '...' : '(none)');
+      if (!msg.token) { show('screen-login'); hideBootSplash(); return; }
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: msg.token })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        console.log('[autoLogin] validate response:', data);
+        if (data && data.status === 'success') {
+          appToken = msg.token;
+          setUserBadge(data.username);
+          setLoginStatus('');
+          showHome();
+          hideBootSplash();
+        } else {
+          setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
+          setUserBadge('');
+          show('screen-login');
+          hideBootSplash();
+        }
+      })
+      .catch(function(e) {
+        console.warn('[autoLogin] error:', e);
+        setLoginStatus('Network error: ' + e.message);
+        hideBootSplash();
+        goOffline();
+      });
+    }
+
+    function doLogin() {
+      var u = document.getElementById('username').value.trim();
+      var p = document.getElementById('password').value;
+      if (!u || !p) { setLoginStatus('Username and password required'); return; }
+      setLoginStatus('');
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+      fetchLogin(u, p);
+    }
+
+    function fetchLogin(u, p) {
+      var btn = document.querySelector('#screen-login .btn');
+      btn.disabled = true;
+      btn.textContent = 'LOGGING IN...';
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success' && data.token) {
+          appToken = data.token;
+          setUserBadge(u);
+          sendToApp('loginResult', { success: true, token: data.token, username: u });
+          showHome();
+        } else {
+          var err = (data && data.error) || 'Login failed';
+          setLoginStatus(err);
+          sendToApp('loginResult', { success: false, error: err });
+        }
+      })
+      .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = 'LOGIN';
+        console.error(e);
+        goOffline();
+      });
+    }
+
+    function setLoginStatus(msg) {
+      document.getElementById('login-status').textContent = msg;
+    }
+
+    function setRegisterStatus(msg, ok) {
+      var el = document.getElementById('register-status');
+      el.textContent = msg;
+      el.style.color = ok ? '#00A2E8' : '#f44336';
+    }
+
+    function doRegister() {
+      var u = document.getElementById('reg-username').value.trim();
+      var e = document.getElementById('reg-email').value.trim();
+      var p = document.getElementById('reg-password').value;
+      var consent = document.getElementById('reg-consent').checked;
+      if (!u || !e || !p) { setRegisterStatus('All fields required'); return; }
+      if (!consent) { setRegisterStatus('You must accept the privacy policy to continue'); return; }
+      setRegisterStatus('');
+      var btn = document.querySelector('#screen-register .btn.primary');
+      btn.disabled = true;
+      btn.textContent = 'CREATING...';
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, email: e, password: p })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        var data = Array.isArray(arr) ? arr[0] : arr;
+        if (data && data.status === 'success') {
+          document.getElementById('reg-password').value = '';
+          document.getElementById('register-success').classList.add('visible');
+        } else {
+          setRegisterStatus((data && data.error) || 'Registration failed');
+        }
+      })
+      .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'CREATE';
+        setRegisterStatus('Network error: ' + err.message);
+      });
+    }
+
+    function stopScan() {
+      sendToApp('stopScan', {});
+      if (appToken) {
+        showHome();
+      } else {
+        document.getElementById('scan-idle').style.display = 'flex';
+        document.getElementById('scan-active').style.display = 'none';
+        show('screen-scan');
+      }
+    }
+
+    function showNotConnected() {
+      document.getElementById('not-connected').classList.add('visible');
+    }
+    function hideNotConnected() {
+      document.getElementById('not-connected').classList.remove('visible');
+    }
+
+    function goScanWithoutLogin() {
+      document.getElementById('scan-idle').style.display = 'flex';
+      document.getElementById('scan-active').style.display = 'none';
+      show('screen-scan');
+    }
+
+    function startScan() {
+      show('screen-scan');
+      doScan();
+    }
+
+    function goOffline() {
+      sendToApp('loginResult', { success: false, offline: true });
+      show('screen-scan');
+      showOfflineBanner();
+    }
+
+    function showOfflineBanner() {
+      var existing = document.getElementById('offline-banner');
+      if (existing) return;
+      var banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1000;color:#886;' +
+        'font-size:11px;padding:6px 12px;text-align:center;border-top:1px solid #332200;z-index:50;';
+      banner.textContent = 'OFFLINE — workouts will be uploaded on next login';
+      document.body.appendChild(banner);
+    }
+
+    // ── HOME ──────────────────────────────────────────────
+    function showHome() {
+      var iframe = document.getElementById('home-frame');
+      var sendToken = function() {
+        iframe.contentWindow.postMessage({ type: 'token', token: appToken }, '*');
+      };
+      if (iframe.src && iframe.src !== 'about:blank' && iframe.src.indexOf(XESYNC_CONFIG.apexHomeUrl) === 0) {
+        sendToken();
+      } else {
+        iframe.onload = sendToken;
+        iframe.src = XESYNC_CONFIG.apexHomeUrl;
+      }
+      show('screen-home');
+    }
+
+    // ── SCAN ──────────────────────────────────────────────
+    function doScan() {
+      document.getElementById('device-list').innerHTML = '';
+      document.getElementById('pulse-ring').style.display = '';
+      document.getElementById('scan-label').textContent = 'SCANNING...';
+      document.getElementById('scan-idle').style.display = 'none';
+      document.getElementById('scan-active').style.display = 'flex';
+      sendToApp('scan', {});
+    }
+
+    function onScanResult(msg) {
+      document.getElementById('pulse-ring').style.display = 'none';
+      document.getElementById('scan-label').textContent = 'SELECT ROWER';
+      var list = document.getElementById('device-list');
+      list.innerHTML = '';
+      var seen = {};
+      var devices = (msg.devices || []).reduce(function(acc, d) {
+        var parts = (d.id || '').trim().split(/\s+/);
+        var mac = parts[0];
+        if (!seen[mac]) { seen[mac] = true; acc.push({ id: mac, name: parts.slice(1).join(' ') || mac }); }
+        return acc;
+      }, []);
+      if (devices.length === 0) {
+        list.innerHTML = '<div class="empty-msg">No rower found</div>';
+        return;
+      }
+      devices.forEach(function(d) {
+        var item = document.createElement('div');
+        item.className = 'device-item';
+        item.innerHTML = '<span>' + escHtml(d.name) + '</span>' +
+                         '<span class="device-rssi">' + escHtml(d.id) + '</span>';
+        item.onclick = function() { doConnect(d); };
+        list.appendChild(item);
+      });
+    }
+
+    // ── CONNECT ───────────────────────────────────────────
+    function doConnect(device) {
+      document.getElementById('connecting-label').textContent = 'CONNECTING...';
+      show('screen-connecting');
+      sendToApp('connect', { deviceId: device.id, deviceName: device.name });
+    }
+
+    function onConnectResult(msg) {
+      if (msg.success) {
+        bleConnected = true;
+        document.getElementById('loading-overlay').classList.add('visible');
+        show('screen-rowing');
+        initRowing();
+        initFtmsTracking();
+      } else {
+        document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
+        setTimeout(function() { show('screen-scan'); }, 2000);
+      }
+    }
+
+    function onDisconnected() {
+      document.getElementById('reconnect-overlay').classList.add('visible');
+      sendToApp('reconnect', {});
+    }
+
+    function onReconnected() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+    }
+
+    function onSaveAck() { showHome(); }
+
+    function onTagCleared(msg) {
+      console.log('[upload] tag cleared by AI2:', msg.workout);
+    }
+
+    function onUploadWorkout(msg) {
       fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: body
-      }).then(function (r) {
-        return r.text().then(function (txt) {
-          return { ok: r.ok, status: r.status, txt: txt };
-        });
-      }),
-      timeout
-    ])
-    .then(function (resp) {
-      if (!resp.ok) {
-        showBanner('HTTP ' + resp.status + ': ' + (resp.txt || '').slice(0, 80));
-        setTimeout(function () { hideBanner(); goHome(); }, 4000);
-        return;
-      }
-      var json;
-      try { json = JSON.parse(resp.txt); }
-      catch (e) {
-        showBanner('BAD JSON: ' + (resp.txt || '').slice(0, 80));
-        setTimeout(function () { hideBanner(); goHome(); }, 4000);
-        return;
-      }
-      var row = Array.isArray(json) ? json[0] : json;
-      if (row && row.status === 'success') {
-        showBanner('SAVED ✓');
-        setTimeout(function () { hideBanner(); goHome(); }, 1000);
-      } else {
-        showBanner('SAVE FAIL: ' + ((row && (row.error || row.status)) || resp.txt).toString().slice(0, 80));
-        setTimeout(function () { hideBanner(); goHome(); }, 4000);
-      }
-    })
-    .catch(function (err) {
-      showBanner('NET ERROR: ' + err.message);
-      setTimeout(function () { hideBanner(); goHome(); }, 4000);
-    });
-  }
-
-  function exitSession() {
-    hidePauseDialog();
-    hideBanner();
-    goIdle();
-    var token = typeof appToken !== 'undefined' ? appToken : null;
-    var ai = (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
-      ? AppInventor
-      : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
-        ? window.AppInventor : null;
-    var online = !!ai || window.location.protocol !== 'file:';
-    if (token) {
-      if (typeof showHome === 'function') showHome();
-    } else if (online) {
-      if (typeof show === 'function') show('screen-login');
-    } else {
-      if (typeof showOfflineChoice === 'function') showOfflineChoice();
+        body: JSON.stringify({ token: msg.token, workout: msg.workout, data: msg.data })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(arr) {
+        var row = Array.isArray(arr) ? arr[0] : arr;
+        if (row && row.status === 'success') sendToApp('uploadAck', { workout: msg.workout });
+      })
+      .catch(function() {});
     }
-  }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // Exports
-  // ─────────────────────────────────────────────────────────────────────
-  window.initFtmsTracking   = initFtmsTracking;
-  window.ingestData         = ingestData;
-  window.saveWorkout        = saveWorkout;
-  window.exitSession        = exitSession;
-  window.offlineChoiceRow   = offlineChoiceRow;
-  window.offlineChoiceLogin = offlineChoiceLogin;
-})();
+    function doGiveUp() {
+      document.getElementById('reconnect-overlay').classList.remove('visible');
+      sendToApp('disconnect', {});
+      bleConnected = false;
+      goScanWithoutLogin();
+    }
+
+    function resumeRowing() {
+      document.getElementById('loading-overlay').classList.add('visible');
+      show('screen-rowing');
+      initRowing();
+      initFtmsTracking();
+      if (inDebugMode) { DebugSim.reset(); DebugSim.start(); }
+    }
+
+    function disconnectRower() {
+      if (inDebugMode) { DebugSim.stop(); inDebugMode = false; }
+      else { sendToApp('disconnect', {}); }
+      bleConnected = false;
+      if (appToken) {
+        showHome();
+      } else {
+        show('screen-login');
+      }
+    }
+
+    function onFtmsData(msg) {
+      console.log('[FTMS]', msg.data);
+      ingestData(msg.data);
+      if (XESYNC_CONFIG.logRawData) sendRawData(msg.data);
+    }
+
+    function sendRawData(data) {
+      var d = new Date();
+      var p = function(n, w) { return String(n).padStart(w || 2, '0'); };
+      var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
+                    p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
+                    p(d.getMilliseconds(), 3);
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/log_rawdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr, data: data })
+      })
+      .then(function(r) { return r.text().then(function(t) { console.log('[FTMS raw]', r.status, t); }); })
+      .catch(function(e) { console.warn('[FTMS raw] fetch error:', e.message); });
+    }
+
+    window.addEventListener('hashchange', function() {
+      if (window.location.hash.indexOf('#data=') === 0) ingestData(null);
+    });
+
+    // ── UTILS ─────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+  </script>
+  <script src="debug_sim.js"></script>
+</body>
+</html>

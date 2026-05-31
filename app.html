@@ -59,7 +59,7 @@
   <!-- ── SCAN ──────────────────────────────────────────── -->
   <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;">
     <div id="scan-idle">
-      <button class="btn primary" onclick="doScan()" style="font-size:1.6em;padding:20px 40px;letter-spacing:0.2em;max-width:none;">SCAN</button>
+      <h1 style="opacity:0.4;">XESYNC</h1>
     </div>
     <div id="scan-active">
       <div id="pulse-ring"></div>
@@ -86,18 +86,21 @@
     </div>
   </div>
 
-  <!-- ── OFFLINE HOME ──────────────────────────────────── -->
-  <div id="screen-offline" class="screen">
-    <div class="big-label">OFFLINE MODE</div>
-    <button class="btn primary" onclick="resumeRowing()">ROW AGAIN</button>
-  </div>
-
   <!-- ── REGISTER SUCCESS ──────────────────────────────── -->
   <div id="register-success" class="ftms-overlay">
     <div class="ftms-overlay-title">CHECK YOUR EMAIL</div>
     <div class="ftms-overlay-subtitle">a verification link has been sent to your inbox</div>
     <div class="ftms-actions">
       <button class="ftms-btn primary" onclick="hideRegisterSuccess()">GO TO LOGIN</button>
+    </div>
+  </div>
+
+  <!-- ── NOT CONNECTED ─────────────────────────────────── -->
+  <div id="not-connected" class="ftms-overlay">
+    <div class="ftms-overlay-title">NOT CONNECTED</div>
+    <div class="ftms-overlay-subtitle">your workouts aren't available offline</div>
+    <div class="ftms-actions">
+      <button class="ftms-btn primary" onclick="hideNotConnected()">OK</button>
     </div>
   </div>
 
@@ -114,11 +117,8 @@
 
   <script>
     var appToken = null;
-    var appUsername = null;
-    var lastWebViewString = '';
     var bleConnected = false;
     var inDebugMode = false;
-    var isOffline = false;
     var debugMenu = new URLSearchParams(window.location.search).get('debug') === 'true';
 
     var bootSplashTimer = setTimeout(hideBootSplash, 1500);
@@ -149,22 +149,15 @@
         bar.classList.remove('visible');
       } else {
         bar.classList.add('visible');
-        var onSecondary = id === 'screen-scan' || id === 'screen-connecting' || id === 'screen-rowing';
-        document.getElementById('tbar-scan-btn').style.display = (!onSecondary && !bleConnected) ? '' : 'none';
+        var onSecondary = id === 'screen-connecting' || id === 'screen-rowing';
+        var scanning = document.getElementById('scan-active').style.display === 'flex';
+        // SCAN FOR ROWER: available when not connected, not mid-scan, not on a secondary flow screen
+        document.getElementById('tbar-scan-btn').style.display = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
         document.getElementById('tbar-debug-btn').style.display = (debugMenu && !onSecondary) ? '' : 'none';
-        document.getElementById('tbar-row-btn').style.display = (bleConnected && id === 'screen-home') ? '' : 'none';
-        document.getElementById('tbar-disconnect-btn').style.display = (bleConnected && id === 'screen-home') ? '' : 'none';
-      }
-    }
-
-    // Where to go when a rowing session ends but BLE stays connected.
-    function returnFromSession() {
-      if (appToken) {
-        showHome();
-      } else if (isOffline) {
-        show('screen-offline');
-      } else {
-        show('screen-login');
+        // ROW AGAIN + DISCONNECT: available whenever connected and not on the rowing screen itself
+        var connectedCtrls = (bleConnected && id !== 'screen-rowing') ? '' : 'none';
+        document.getElementById('tbar-row-btn').style.display = connectedCtrls;
+        document.getElementById('tbar-disconnect-btn').style.display = connectedCtrls;
       }
     }
 
@@ -204,7 +197,6 @@
     function doLogoff() {
       hideExitConfirm();
       appToken = null;
-      appUsername = null;
       bleConnected = false;
       inDebugMode = false;
       DebugSim.stop();
@@ -231,7 +223,6 @@
 
     function handleAppResponse(json) {
       if (!json) return;
-      lastWebViewString = json;
       var msg;
       try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
       catch(e) {
@@ -260,7 +251,6 @@
       }
       if (e.data && e.data.type === 'tokenExpired') {
         appToken = null;
-        appUsername = null;
         setUserBadge('');
         setLoginStatus('Session expired. Please log in again.');
         show('screen-login');
@@ -283,7 +273,6 @@
         console.log('[autoLogin] validate response:', data);
         if (data && data.status === 'success') {
           appToken = msg.token;
-          appUsername = data.username;
           setUserBadge(data.username);
           setLoginStatus('');
           showHome();
@@ -333,8 +322,6 @@
         var data = Array.isArray(arr) ? arr[0] : arr;
         if (data && data.status === 'success' && data.token) {
           appToken = data.token;
-          appUsername = u;
-          isOffline = false;
           setUserBadge(u);
           sendToApp('loginResult', { success: true, token: data.token, username: u });
           showHome();
@@ -408,6 +395,13 @@
       }
     }
 
+    function showNotConnected() {
+      document.getElementById('not-connected').classList.add('visible');
+    }
+    function hideNotConnected() {
+      document.getElementById('not-connected').classList.remove('visible');
+    }
+
     function goScanWithoutLogin() {
       document.getElementById('scan-idle').style.display = 'flex';
       document.getElementById('scan-active').style.display = 'none';
@@ -420,7 +414,6 @@
     }
 
     function goOffline() {
-      isOffline = true;
       sendToApp('loginResult', { success: false, offline: true });
       show('screen-scan');
       showOfflineBanner();
