@@ -291,6 +291,7 @@
       };
 
       function doDeleteAccount(pwd, msg) {
+        fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/delete_account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: hToken, password: pwd })
