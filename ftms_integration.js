@@ -268,9 +268,9 @@
     if (el) el.classList.remove('visible');
   }
   function postWorkoutWorkouts() {
-    hidePostWorkout();
     var token = typeof appToken !== 'undefined' ? appToken : null;
     if (token && typeof showHome === 'function') {
+      hidePostWorkout();
       showHome();
     } else if (typeof showNotConnected === 'function') {
       showNotConnected();
@@ -477,11 +477,13 @@
   }
 
   function leaveRowingScreen() {
-    var rowing = document.getElementById('screen-rowing');
-    if (rowing) rowing.classList.remove('active');
-    var bar = document.getElementById('topbar');
-    if (bar) bar.classList.add('visible');
-    document.body.classList.add('with-bar');
+    if (typeof showPostWorkoutScreen === 'function') {
+      showPostWorkoutScreen();
+    } else {
+      var rowing = document.getElementById('screen-rowing');
+      if (rowing) rowing.classList.remove('active');
+      document.body.classList.add('with-bar');
+    }
   }
 
   function exitSession() {
