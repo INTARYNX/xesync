@@ -4,6 +4,12 @@
  * Public API (called from app.html):
  *   initFtmsTracking()  — call when entering rowing screen
  *   ingestData(csv)     — call for each FTMS packet (20 comma-separated bytes)
+ *   saveWorkout()       — save and end session
+ *   exitSession()       — discard and end session
+ *
+ * Callback (must be set by app.html):
+ *   window.onWorkoutComplete(savedState)
+ *     savedState: 'online' | 'offline' | null (not saved)
  */
 
 (function () {
@@ -12,11 +18,10 @@
   // ─────────────────────────────────────────────────────────────────────
   // Config
   // ─────────────────────────────────────────────────────────────────────
-  var INACTIVITY_MS    = 5000;
-  var INACTIVITY_TICK  = 500;
-  var INITIAL_PACE     = 150;
-  var PACE_WINDOW_MS   = 30000;
-  var DEBUG            = false;
+  var INACTIVITY_MS   = 5000;
+  var INACTIVITY_TICK = 500;
+  var INITIAL_PACE    = 150;
+  var PACE_WINDOW_MS  = 30000;
 
   // ─────────────────────────────────────────────────────────────────────
   // State
@@ -158,13 +163,13 @@
   }
 
   function renderIdle() {
-    setText('heartrate', '-');
-    setText('distance',  '0');
-    setText('watts',     '0');
-    setText('pace',      '--:--');
-    setText('spm',       '0.0');
-    setText('cals',      '0');
-    setText('strokes',   '0');
+    setText('heartrate',   '-');
+    setText('distance',    '0');
+    setText('watts',       '0');
+    setText('pace',        '--:--');
+    setText('spm',         '0.0');
+    setText('cals',        '0');
+    setText('strokes',     '0');
     setText('elapsedtime', '00:00');
     if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
   }
@@ -193,6 +198,13 @@
   // ─────────────────────────────────────────────────────────────────────
   // Pause dialog — SAVE or EXIT SESSION
   // ─────────────────────────────────────────────────────────────────────
+  function tile(id, label, val) {
+    return '<div class="ftms-summary-tile">'
+      + '<div class="ftms-summary-label">' + label + '</div>'
+      + '<div id="' + id + '" class="ftms-summary-value">' + val + '</div>'
+      + '</div>';
+  }
+
   function ensurePauseDialog() {
     if (document.getElementById('pauseDialog')) return;
     var html = ''
@@ -210,14 +222,9 @@
       +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
       +   '</div>'
       + '</div>';
-    function tile(id, label, val) {
-      return '<div class="ftms-summary-tile">'
-        + '<div class="ftms-summary-label">' + label + '</div>'
-        + '<div id="' + id + '" class="ftms-summary-value">' + val + '</div>'
-        + '</div>';
-    }
     document.body.insertAdjacentHTML('beforeend', html);
   }
+
   function showPauseDialog() {
     ensurePauseDialog();
     setText('summaryTime',     fmtTime(sessionSeconds()));
@@ -226,62 +233,10 @@
     setText('summaryCalories', totalCals());
     document.getElementById('pauseDialog').classList.add('visible');
   }
+
   function hidePauseDialog() {
     var el = document.getElementById('pauseDialog');
     if (el) el.classList.remove('visible');
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Post-workout screen (shown after SAVE or EXIT, online or offline)
-  // ─────────────────────────────────────────────────────────────────────
-  function ensurePostWorkout() {
-    if (document.getElementById('postWorkout')) return;
-    var html = ''
-      + '<div id="postWorkout" class="ftms-overlay">'
-      +   '<div id="pwTitle" class="ftms-overlay-title">WORKOUT ENDED</div>'
-      +   '<div id="pwSubtitle" class="ftms-overlay-subtitle"></div>'
-      +   '<div class="ftms-actions">'
-      +     '<button id="pwWorkoutsBtn" class="ftms-btn primary" onclick="postWorkoutWorkouts()">WORKOUTS</button>'
-      +     '<button class="ftms-btn"         onclick="postWorkoutLogin()">LOGIN</button>'
-      +   '</div>'
-      + '</div>';
-    document.body.insertAdjacentHTML('beforeend', html);
-  }
-  function showPostWorkout(savedState) {
-    ensurePostWorkout();
-    var title = document.getElementById('pwTitle');
-    var sub   = document.getElementById('pwSubtitle');
-    var token = typeof appToken !== 'undefined' ? appToken : null;
-    var workoutsBtn = document.getElementById('pwWorkoutsBtn');
-    if (workoutsBtn) workoutsBtn.style.display = token ? '' : 'none';
-    if (savedState === 'online') {
-      title.textContent = 'WORKOUT SAVED';
-      sub.textContent = 'synced to your account';
-    } else if (savedState === 'offline') {
-      title.textContent = 'WORKOUT SAVED';
-      sub.textContent = 'stored offline, will sync on next login';
-    } else {
-      title.textContent = 'WORKOUT ENDED';
-      sub.textContent = 'not saved';
-    }
-    document.getElementById('postWorkout').classList.add('visible');
-  }
-  function hidePostWorkout() {
-    var el = document.getElementById('postWorkout');
-    if (el) el.classList.remove('visible');
-  }
-  function postWorkoutWorkouts() {
-    hidePostWorkout();
-    var token = typeof appToken !== 'undefined' ? appToken : null;
-    if (token && typeof showHome === 'function') {
-      showHome();
-    } else if (typeof show === 'function') {
-      show('screen-login');
-    }
-  }
-  function postWorkoutLogin() {
-    hidePostWorkout();
-    if (typeof show === 'function') show('screen-login');
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -300,8 +255,8 @@
       lastActiveAt = Date.now();
       return;
     }
+    // Fresh start — capture rower baseline so counters always start from 0
     resetSession();
-    // Capture rower's current state as baseline so we always start from 0
     if (lastPacket) {
       session.distOffset   = -lastPacket.distance;
       session.strokeOffset = -lastPacket.strokes;
@@ -342,9 +297,21 @@
     if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
   }
 
+  function stopWatchdog() {
+    if (inactivityTimerId) { clearInterval(inactivityTimerId); inactivityTimerId = null; }
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // Public API
   // ─────────────────────────────────────────────────────────────────────
+  function initFtmsTracking() {
+    ensurePauseDialog();
+    stopWatchdog();
+    inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
+    goIdle();
+    showBanner('READY TO ROW !');
+  }
+
   function ingestData(csv) {
     if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
       csv = decodeURIComponent(csv.slice(6));
@@ -371,24 +338,15 @@
     render();
   }
 
-  function initFtmsTracking() {
-    ensurePauseDialog();
-    if (inactivityTimerId) clearInterval(inactivityTimerId);
-    inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
-    goIdle();
-    showBanner('READY TO ROW !');
-  }
-
   // ─────────────────────────────────────────────────────────────────────
-  // Save / exit
+  // Save / exit — notify app.html via onWorkoutComplete(savedState)
   // ─────────────────────────────────────────────────────────────────────
   function avg(arr, key) {
     if (!arr.length) return 0;
     var s = 0, n = 0;
     for (var i = 0; i < arr.length; i++) {
       if (arr[i][key] == null) continue;
-      s += arr[i][key];
-      n++;
+      s += arr[i][key]; n++;
     }
     return n ? s / n : 0;
   }
@@ -434,8 +392,16 @@
         ? window.AppInventor : null;
   }
 
+  function notifyComplete(savedState) {
+    if (typeof window.onWorkoutComplete === 'function') {
+      window.onWorkoutComplete(savedState);
+    }
+  }
+
   function saveWorkout() {
     hidePauseDialog();
+    stopWatchdog();
+    phase = 'IDLE';
     var payload = buildPayload();
     var token = typeof appToken !== 'undefined' ? appToken : null;
 
@@ -449,9 +415,7 @@
       }
       setTimeout(function () {
         hideBanner();
-        phase = 'IDLE';
-        leaveRowingScreen();
-        showPostWorkout('offline');
+        notifyComplete('offline');
       }, 1200);
       return;
     }
@@ -473,47 +437,32 @@
     ])
     .then(function (resp) {
       hideBanner();
-      phase = 'IDLE';
-      leaveRowingScreen();
-      if (!resp.ok) { showPostWorkout('offline'); return; }
+      if (!resp.ok) { notifyComplete('offline'); return; }
       var json;
-      try { json = JSON.parse(resp.txt); } catch (e) { showPostWorkout('offline'); return; }
+      try { json = JSON.parse(resp.txt); } catch (e) { notifyComplete('offline'); return; }
       var row = Array.isArray(json) ? json[0] : json;
-      showPostWorkout(row && row.status === 'success' ? 'online' : 'offline');
+      notifyComplete(row && row.status === 'success' ? 'online' : 'offline');
     })
     .catch(function () {
       hideBanner();
-      phase = 'IDLE';
-      leaveRowingScreen();
-      showPostWorkout('offline');
+      notifyComplete('offline');
     });
-  }
-
-  function leaveRowingScreen() {
-    if (typeof showPostWorkoutScreen === 'function') {
-      showPostWorkoutScreen();
-    } else {
-      var rowing = document.getElementById('screen-rowing');
-      if (rowing) rowing.classList.remove('active');
-      document.body.classList.add('with-bar');
-    }
   }
 
   function exitSession() {
     hidePauseDialog();
     hideBanner();
+    stopWatchdog();
     phase = 'IDLE';
-    leaveRowingScreen();
-    showPostWorkout(null);
+    notifyComplete(null);
   }
 
   // ─────────────────────────────────────────────────────────────────────
   // Exports
   // ─────────────────────────────────────────────────────────────────────
-  window.initFtmsTracking    = initFtmsTracking;
-  window.ingestData          = ingestData;
-  window.saveWorkout         = saveWorkout;
-  window.exitSession         = exitSession;
-  window.postWorkoutWorkouts = postWorkoutWorkouts;
-  window.postWorkoutLogin    = postWorkoutLogin;
+  window.initFtmsTracking = initFtmsTracking;
+  window.ingestData       = ingestData;
+  window.saveWorkout      = saveWorkout;
+  window.exitSession      = exitSession;
+
 })();
