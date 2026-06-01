@@ -35,7 +35,7 @@ function show(id) {
     bar.classList.add('visible');
     document.body.classList.add('with-bar');
     var offlineBanner = document.getElementById('offline-banner');
-    if (offlineBanner) offlineBanner.style.display = '';
+    if (offlineBanner) offlineBanner.style.display = (id === 'screen-login' || id === 'screen-register') ? 'none' : '';
     var onSecondary = id === 'screen-connecting';
     var scanning = document.getElementById('scan-active').style.display === 'flex';
     document.getElementById('tbar-scan-btn').style.display       = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
