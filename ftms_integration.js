@@ -268,12 +268,12 @@
     if (el) el.classList.remove('visible');
   }
   function postWorkoutWorkouts() {
+    hidePostWorkout();
     var token = typeof appToken !== 'undefined' ? appToken : null;
     if (token && typeof showHome === 'function') {
-      hidePostWorkout();
       showHome();
-    } else if (typeof showNotConnected === 'function') {
-      showNotConnected();
+    } else if (typeof show === 'function') {
+      show('screen-login');
     }
   }
   function postWorkoutLogin() {
