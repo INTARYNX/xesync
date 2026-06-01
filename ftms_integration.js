@@ -424,6 +424,10 @@
         ? window.AppInventor : null;
   }
 
+  function notifyLeave() {
+    if (typeof window.onLeaveRowing === 'function') window.onLeaveRowing();
+  }
+
   function notifyComplete(savedState) {
     if (typeof window.onWorkoutComplete === 'function') {
       window.onWorkoutComplete(savedState);
@@ -434,6 +438,7 @@
     hidePauseDialog();
     stopWatchdog();
     phase = 'IDLE';
+    notifyLeave();
     var payload = buildPayload();
     var token = typeof appToken !== 'undefined' ? appToken : null;
 
@@ -487,6 +492,7 @@
     hideBanner();
     stopWatchdog();
     phase = 'IDLE';
+    notifyLeave();
     notifyComplete(null);
   }
 

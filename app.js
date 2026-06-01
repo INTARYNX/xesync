@@ -462,12 +462,14 @@ function onUploadWorkout(msg) {
   .catch(function() {});
 }
 
-// ── Post Workout ──────────────────────────────────────
-// Called by ftms_integration.js via window.onWorkoutComplete(savedState)
-window.onWorkoutComplete = function(savedState) {
+// Called immediately when save/exit is triggered — hides rowing screen before async ops
+window.onLeaveRowing = function() {
   show('screen-connecting');
   document.getElementById('connecting-label').textContent = '';
+};
 
+// Called by ftms_integration.js via window.onWorkoutComplete(savedState)
+window.onWorkoutComplete = function(savedState) {
   var title    = document.getElementById('pw-title');
   var subtitle = document.getElementById('pw-subtitle');
   var wBtn     = document.getElementById('pw-workouts-btn');
