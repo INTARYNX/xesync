@@ -16,6 +16,7 @@ function hideBootSplash() {
 
 document.addEventListener('DOMContentLoaded', function() {
   if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+  if (new URLSearchParams(window.location.search).get('offline') === 'true') goOffline();
 });
 
 // ── Screens ───────────────────────────────────────────

@@ -16,9 +16,10 @@
 var DebugSim = (function () {
   'use strict';
 
-  var SESSION_SECONDS = 30;
-  var WARMUP_END      = 5;
-  var EFFORT_END      = 25;
+  var DEBUG_MODE      = new URLSearchParams(window.location.search).get('debug') === 'true';
+  var SESSION_SECONDS = DEBUG_MODE ? 10 : 30;
+  var WARMUP_END      = DEBUG_MODE ?  2 :  5;
+  var EFFORT_END      = DEBUG_MODE ?  8 : 25;
   var TICK_MS         = 500;
   var TAIL_IDLE_MS    = 8000;   // emit spm=0 for this long after session end
 
