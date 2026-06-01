@@ -241,7 +241,7 @@
       +   '<div id="pwTitle" class="ftms-overlay-title">WORKOUT ENDED</div>'
       +   '<div id="pwSubtitle" class="ftms-overlay-subtitle"></div>'
       +   '<div class="ftms-actions">'
-      +     '<button class="ftms-btn primary" onclick="postWorkoutWorkouts()">WORKOUTS</button>'
+      +     '<button id="pwWorkoutsBtn" class="ftms-btn primary" onclick="postWorkoutWorkouts()">WORKOUTS</button>'
       +     '<button class="ftms-btn"         onclick="postWorkoutLogin()">LOGIN</button>'
       +   '</div>'
       + '</div>';
@@ -251,6 +251,9 @@
     ensurePostWorkout();
     var title = document.getElementById('pwTitle');
     var sub   = document.getElementById('pwSubtitle');
+    var token = typeof appToken !== 'undefined' ? appToken : null;
+    var workoutsBtn = document.getElementById('pwWorkoutsBtn');
+    if (workoutsBtn) workoutsBtn.style.display = token ? '' : 'none';
     if (savedState === 'online') {
       title.textContent = 'WORKOUT SAVED';
       sub.textContent = 'synced to your account';

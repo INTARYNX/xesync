@@ -151,7 +151,9 @@
       } else {
         bar.classList.add('visible');
         document.body.classList.add('with-bar');
-        var onSecondary = id === 'screen-connecting' || id === 'screen-rowing';
+        var offlineBanner = document.getElementById('offline-banner');
+      if (offlineBanner) offlineBanner.style.display = (id === 'screen-rowing') ? 'none' : '';
+      var onSecondary = id === 'screen-connecting' || id === 'screen-rowing';
         var scanning = document.getElementById('scan-active').style.display === 'flex';
         // SCAN FOR ROWER: available when not connected, not mid-scan, not on a secondary flow screen
         document.getElementById('tbar-scan-btn').style.display = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
