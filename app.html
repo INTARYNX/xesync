@@ -63,8 +63,9 @@
   <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;overflow-y:auto;padding-bottom:40px;">
     <div id="scan-idle">
       <h1 style="opacity:0.4;">XESYNC</h1>
-      <div id="scan-offline-notice" style="display:none;font-size:0.85em;color:#886;letter-spacing:0.1em;text-align:center;margin-top:16px;padding:10px;border:1px solid #332200;background:#1a1000;max-width:320px;">
-        OFFLINE — workouts will be uploaded on next login
+      <div id="scan-offline-msg" style="display:none;text-align:center;margin-top:24px;">
+        <div style="font-size:0.9em;color:#666;letter-spacing:0.1em;margin-bottom:20px;">CONNECT TO INTERNET AND LOGIN</div>
+        <button class="btn primary" onclick="show('screen-login')">LOGIN</button>
       </div>
     </div>
     <div id="scan-active">

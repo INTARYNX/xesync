@@ -50,8 +50,6 @@ function show(id) {
     document.body.classList.add('with-bar');
     var offlineNotice = document.getElementById('offline-notice');
     if (offlineNotice) offlineNotice.style.display = (isOffline && id === 'screen-login') ? '' : 'none';
-    var scanOffline = document.getElementById('scan-offline-notice');
-    if (scanOffline) scanOffline.style.display = (isOffline && id === 'screen-scan') ? '' : 'none';
     var onSecondary = id === 'screen-connecting';
     var scanning = document.getElementById('scan-active').style.display === 'flex';
     document.getElementById('tbar-scan-btn').style.display       = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
@@ -280,6 +278,8 @@ function doRegister() {
 function goOffline() {
   isOffline = true;
   sendToApp('loginResult', { success: false, offline: true });
+  var msg = document.getElementById('scan-offline-msg');
+  if (msg) msg.style.display = '';
   show('screen-scan');
 }
 
