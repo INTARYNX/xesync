@@ -299,7 +299,11 @@ function showHome() {
 }
 
 // ── Scan ──────────────────────────────────────────────
+var previousScreen = null;
+
 function startScan() {
+  var active = document.querySelector('.screen.active');
+  previousScreen = active ? active.id : null;
   show('screen-scan');
   doScan();
 }
@@ -317,7 +321,15 @@ function stopScan() {
   sendToApp('stopScan', {});
   document.getElementById('scan-idle').style.display = 'flex';
   document.getElementById('scan-active').style.display = 'none';
-  if (appToken) { showHome(); } else { show('screen-scan'); }
+  if (previousScreen && previousScreen !== 'screen-scan') {
+    if (previousScreen === 'screen-home') { showHome(); }
+    else { show(previousScreen); }
+  } else if (appToken) {
+    showHome();
+  } else {
+    show('screen-scan');
+  }
+  previousScreen = null;
 }
 
 function goScanWithoutLogin() {
