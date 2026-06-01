@@ -2,7 +2,20 @@
 var appToken    = null;
 var bleConnected = false;
 var inDebugMode  = false;
+var isOffline    = !navigator.onLine;
 var debugMenu    = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+window.addEventListener('online',  function() {
+  isOffline = false;
+  // Refresh current screen to update notices
+  var active = document.querySelector('.screen.active');
+  if (active) show(active.id);
+});
+window.addEventListener('offline', function() {
+  isOffline = true;
+  var active = document.querySelector('.screen.active');
+  if (active) show(active.id);
+});
 
 var bootSplashTimer = setTimeout(hideBootSplash, 1500);
 
@@ -35,8 +48,10 @@ function show(id) {
   } else {
     bar.classList.add('visible');
     document.body.classList.add('with-bar');
-    var offlineBanner = document.getElementById('offline-banner');
-    if (offlineBanner) offlineBanner.style.display = (id === 'screen-login' || id === 'screen-register') ? 'none' : '';
+    var offlineNotice = document.getElementById('offline-notice');
+    if (offlineNotice) offlineNotice.style.display = (isOffline && id === 'screen-login') ? '' : 'none';
+    var scanOffline = document.getElementById('scan-offline-notice');
+    if (scanOffline) scanOffline.style.display = (isOffline && id === 'screen-scan') ? '' : 'none';
     var onSecondary = id === 'screen-connecting';
     var scanning = document.getElementById('scan-active').style.display === 'flex';
     document.getElementById('tbar-scan-btn').style.display       = (!onSecondary && !bleConnected && !scanning) ? '' : 'none';
@@ -263,20 +278,9 @@ function doRegister() {
 
 // ── Offline ───────────────────────────────────────────
 function goOffline() {
+  isOffline = true;
   sendToApp('loginResult', { success: false, offline: true });
   show('screen-scan');
-  showOfflineBanner();
-}
-
-function showOfflineBanner() {
-  var existing = document.getElementById('offline-banner');
-  if (existing) return;
-  var banner = document.createElement('div');
-  banner.id = 'offline-banner';
-  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1000;color:#886;' +
-    'font-size:11px;padding:6px 12px;text-align:center;border-top:1px solid #332200;z-index:50;';
-  banner.textContent = 'OFFLINE — workouts will be uploaded on next login';
-  document.body.appendChild(banner);
 }
 
 // ── Home ──────────────────────────────────────────────

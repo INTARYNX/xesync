@@ -29,6 +29,9 @@
   <!-- ── LOGIN ─────────────────────────────────────────── -->
   <div id="screen-login" class="screen active" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
     <h1>XESYNC</h1>
+    <div id="offline-notice" style="display:none;font-size:0.85em;color:#886;letter-spacing:0.1em;text-align:center;margin-bottom:16px;padding:10px;border:1px solid #332200;background:#1a1000;max-width:320px;">
+      CONNECT TO INTERNET TO LOG IN
+    </div>
     <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="password" placeholder="password">
     <button class="btn primary" onclick="doLogin()">LOGIN</button>
@@ -60,6 +63,9 @@
   <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;overflow-y:auto;padding-bottom:40px;">
     <div id="scan-idle">
       <h1 style="opacity:0.4;">XESYNC</h1>
+      <div id="scan-offline-notice" style="display:none;font-size:0.85em;color:#886;letter-spacing:0.1em;text-align:center;margin-top:16px;padding:10px;border:1px solid #332200;background:#1a1000;max-width:320px;">
+        OFFLINE — workouts will be uploaded on next login
+      </div>
     </div>
     <div id="scan-active">
       <div id="pulse-ring"></div>
