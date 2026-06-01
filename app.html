@@ -558,6 +558,7 @@
       if (inDebugMode) { DebugSim.stop(); inDebugMode = false; }
       else { sendToApp('disconnect', {}); }
       bleConnected = false;
+      document.getElementById('scan-active').style.display = 'none';
       if (appToken) {
         showHome();
       } else {

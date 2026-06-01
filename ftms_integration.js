@@ -301,6 +301,15 @@
       return;
     }
     resetSession();
+    // Capture rower's current state as baseline so we always start from 0
+    if (lastPacket) {
+      session.distOffset   = -lastPacket.distance;
+      session.strokeOffset = -lastPacket.strokes;
+      session.calOffset    = -lastPacket.cals;
+      session.rawDist      = lastPacket.distance;
+      session.rawStrokes   = lastPacket.strokes;
+      session.rawCals      = lastPacket.cals;
+    }
     session.startedAt = Date.now();
     lastActiveAt = Date.now();
     phase = 'ACTIVE';
@@ -344,12 +353,13 @@
     if (!p) return;
 
     var prev = lastPacket;
-    lastPacket = p;
 
     if (phase === 'IDLE') {
-      if (p.spm > 0) goActive(); else return;
+      if (p.spm > 0) { lastPacket = p; goActive(); } else return;
     } else if (phase === 'PAUSED') {
-      if (p.spm > 0) goActive(); else return;
+      if (p.spm > 0) { lastPacket = p; goActive(); } else return;
+    } else {
+      lastPacket = p;
     }
 
     applyResetIfNeeded(p);
