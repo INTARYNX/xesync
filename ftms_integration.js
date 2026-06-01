@@ -22,6 +22,30 @@
   var INACTIVITY_TICK = 500;
   var INITIAL_PACE    = 150;
   var PACE_WINDOW_MS  = 30000;
+  var DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Visual debug log (only active when ?debug=true)
+  // ─────────────────────────────────────────────────────────────────────
+  var dbgEl = null;
+  function dbg(msg) {
+    if (!DEBUG) return;
+    if (!dbgEl) {
+      dbgEl = document.createElement('div');
+      dbgEl.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:160px;overflow-y:auto;' +
+        'background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;font-family:monospace;' +
+        'padding:4px 6px;z-index:9999;pointer-events:none;';
+      document.body.appendChild(dbgEl);
+    }
+    var t = new Date();
+    var ts = (t.getMinutes()<10?'0':'')+t.getMinutes()+':'+(t.getSeconds()<10?'0':'')+t.getSeconds();
+    var line = document.createElement('div');
+    line.textContent = '[' + ts + '] ' + msg;
+    dbgEl.appendChild(line);
+    dbgEl.scrollTop = dbgEl.scrollHeight;
+    // Keep max 30 lines
+    while (dbgEl.children.length > 30) dbgEl.removeChild(dbgEl.firstChild);
+  }
 
   // ─────────────────────────────────────────────────────────────────────
   // State
@@ -253,6 +277,7 @@
       hideBanner();
       phase = 'ACTIVE';
       lastActiveAt = Date.now();
+      dbg('RESUMED');
       return;
     }
     // Fresh start — capture rower baseline so counters always start from 0
@@ -264,6 +289,9 @@
       session.rawDist      = lastPacket.distance;
       session.rawStrokes   = lastPacket.strokes;
       session.rawCals      = lastPacket.cals;
+      dbg('START baseline dist=' + lastPacket.distance + ' spm=' + lastPacket.spm);
+    } else {
+      dbg('START no baseline');
     }
     session.startedAt = Date.now();
     lastActiveAt = Date.now();
@@ -276,6 +304,7 @@
     if (phase !== 'ACTIVE') return;
     session.pausedAt = Date.now();
     phase = 'PAUSED';
+    dbg('PAUSED');
     if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
     showPauseDialog();
   }
@@ -287,6 +316,7 @@
     renderIdle();
     hidePauseDialog();
     hideBanner();
+    dbg('IDLE');
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -320,6 +350,8 @@
     if (!p) return;
 
     var prev = lastPacket;
+
+    dbg('pkt spm=' + p.spm + ' dist=' + p.distance + ' phase=' + phase);
 
     if (phase === 'IDLE') {
       if (p.spm > 0) { lastPacket = p; goActive(); } else return;
@@ -413,6 +445,7 @@
       if (ai) {
         ai.setWebViewString(JSON.stringify({ action: 'saveData', workout: tag, data: payload }));
       }
+      goIdle();
       setTimeout(function () {
         hideBanner();
         notifyComplete('offline');

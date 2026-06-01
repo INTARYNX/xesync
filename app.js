@@ -437,7 +437,7 @@ window.addEventListener('hashchange', function() {
 });
 
 // ── Upload / Save Ack ─────────────────────────────────
-function onSaveAck() { showHome(); }
+function onSaveAck() { if (appToken) { showHome(); } }
 
 function onTagCleared(msg) {
   console.log('[upload] tag cleared by AI2:', msg.workout);
