@@ -324,7 +324,18 @@
   // ─────────────────────────────────────────────────────────────────────
   function tickInactivity() {
     if (phase !== 'ACTIVE') return;
-    if (Date.now() - lastActiveAt > INACTIVITY_MS) goPaused();
+    var silent = Date.now() - lastActiveAt;
+    if (silent > INACTIVITY_MS) { goPaused(); return; }
+    // Progressively decay SPM and pace display toward zero after 1s of silence
+    if (silent > 1000 && lastPacket) {
+      var decay = 1 - (silent - 1000) / (INACTIVITY_MS - 1000);
+      decay = Math.max(0, decay);
+      setText('spm',  (Math.round(lastPacket.spm * decay * 10) / 10).toFixed(1));
+      setText('pace', decay > 0 ? fmtTime(session.paceSeconds / decay) : '--:--');
+      if (typeof setConsoleSpeedAndSpm === 'function') {
+        setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds) * decay, lastPacket.spm * decay);
+      }
+    }
   }
 
   function stopWatchdog() {
