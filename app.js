@@ -304,8 +304,8 @@ var previousScreen = null;
 function startScan() {
   var active = document.querySelector('.screen.active');
   previousScreen = active ? active.id : null;
-  show('screen-scan');
   doScan();
+  show('screen-scan');
 }
 
 function doScan() {

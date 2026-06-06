@@ -191,7 +191,7 @@
     setText('distance',    '0');
     setText('watts',       '0');
     setText('pace',        '--:--');
-    setText('spm',         '0.0');
+    setText('spm',         '0');
     setText('cals',        '0');
     setText('strokes',     '0');
     setText('elapsedtime', '00:00');
@@ -330,7 +330,7 @@
     if (silent > 1000 && lastPacket) {
       var decay = 1 - (silent - 1000) / (INACTIVITY_MS - 1000);
       decay = Math.max(0, decay);
-      setText('spm',  (Math.round(lastPacket.spm * decay * 10) / 10).toFixed(1));
+      setText('spm', Math.round(lastPacket.spm * decay));
       setText('pace', decay > 0 ? fmtTime(session.paceSeconds / decay) : '--:--');
       if (typeof setConsoleSpeedAndSpm === 'function') {
         setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds) * decay, lastPacket.spm * decay);
