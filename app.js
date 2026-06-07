@@ -366,6 +366,8 @@ function onScanResult(msg) {
 
 // ── Connect ───────────────────────────────────────────
 function doConnect(device) {
+  document.getElementById('scan-active').style.display = 'none';
+  document.getElementById('scan-idle').style.display = 'flex';
   document.getElementById('connecting-label').textContent = 'CONNECTING...';
   show('screen-connecting');
   sendToApp('connect', { deviceId: device.id, deviceName: device.name });
