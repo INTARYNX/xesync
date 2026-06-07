@@ -70,7 +70,18 @@ function setDisplay(id, visible, displayValue) {
 }
 
 // Convenience: change screen and re-render in one call.
+// Closing transient overlays here guarantees they never linger on top
+// of a new screen (this was the cause of the "scan does nothing" bug:
+// the post-workout overlay stayed on top of the scan screen).
 function goScreen(name) {
+  closeOverlays();
   ui.screen = name;
   render();
+}
+
+function closeOverlays() {
+  ['post-workout', 'exit-confirm', 'register-success', 'reconnect-overlay'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove('visible');
+  });
 }
