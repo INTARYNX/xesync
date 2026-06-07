@@ -259,6 +259,7 @@ function showHome() {
 var scanReturnScreen = null;
 
 function startScan() {
+  document.body.style.background = '#003300'; // PROOF: new code is running
   scanReturnScreen = ui.screen;
   ui.scanning = true;
   document.getElementById('device-list').innerHTML = '';
