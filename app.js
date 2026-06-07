@@ -40,11 +40,11 @@ function setUserBadge(username) {
 // -- Exit / logoff ---------------------------------------------------
 function doExit() {
   if (ui.screen === 'login') { sendToApp('exit', {}); return; }
-  document.getElementById('exit-confirm').classList.add('visible');
+  openOverlay('exitConfirm');
 }
 
 function hideExitConfirm() {
-  document.getElementById('exit-confirm').classList.remove('visible');
+  closeOverlay();
 }
 
 function doLogoff() {
@@ -66,7 +66,7 @@ function doQuit() {
 
 // -- Register --------------------------------------------------------
 function hideRegisterSuccess() {
-  document.getElementById('register-success').classList.remove('visible');
+  closeOverlay();
   goScreen('login');
 }
 
@@ -99,7 +99,7 @@ function doRegister() {
     var data = Array.isArray(arr) ? arr[0] : arr;
     if (data && data.status === 'success') {
       document.getElementById('reg-password').value = '';
-      document.getElementById('register-success').classList.add('visible');
+      openOverlay('registerSuccess');
     } else {
       setRegisterStatus((data && data.error) || 'Registration failed');
     }
@@ -342,16 +342,16 @@ function onConnectResult(msg) {
 }
 
 function onDisconnected() {
-  document.getElementById('reconnect-overlay').classList.add('visible');
+  openOverlay('reconnect');
   sendToApp('reconnect', {});
 }
 
 function onReconnected() {
-  document.getElementById('reconnect-overlay').classList.remove('visible');
+  closeOverlay();
 }
 
 function doGiveUp() {
-  document.getElementById('reconnect-overlay').classList.remove('visible');
+  closeOverlay();
   sendToApp('disconnect', {});
   ui.connected = false;
   ui.scanning = false;
@@ -451,11 +451,11 @@ window.onWorkoutComplete = function(savedState) {
     sub.textContent   = 'not saved';
   }
   document.getElementById('pw-workouts-btn').style.display = ui.token ? '' : 'none';
-  document.getElementById('post-workout').classList.add('visible');
+  openOverlay('postWorkout');
 };
 
 function hidePostWorkout() {
-  document.getElementById('post-workout').classList.remove('visible');
+  closeOverlay();
 }
 
 function postWorkoutGoWorkouts() {

@@ -1,14 +1,14 @@
 // =====================================================================
-// UI router - single source of truth for what is on screen.
+// UI router - single source of truth for everything on screen.
 //
-// All visual state lives in `ui`. To change the screen or any control,
-// mutate `ui` then call render(). render() is the ONLY function that
-// touches screen visibility, the topbar, and the scan sub-views.
-// Nothing else manipulates style.display for those elements.
+// All visual state lives in `ui`. To change anything, mutate `ui` then
+// call render(). render() is the ONLY function that decides what screen,
+// topbar, and overlay are visible. Nothing else toggles those elements.
 // =====================================================================
 
 var ui = {
   screen:    'login',   // login | register | home | scan | connecting | rowing
+  overlay:   null,      // null | postWorkout | exitConfirm | registerSuccess | reconnect
   scanning:  false,     // BLE scan in progress
   connected: false,     // BLE rower connected
   token:     null,      // app auth token (null = logged out)
@@ -16,7 +16,7 @@ var ui = {
   debug:     false      // debug menu enabled
 };
 
-// Map logical screen name -> DOM element id
+// Logical screen name -> DOM id
 var SCREEN_IDS = {
   login:      'screen-login',
   register:   'screen-register',
@@ -24,6 +24,14 @@ var SCREEN_IDS = {
   scan:       'screen-scan',
   connecting: 'screen-connecting',
   rowing:     'screen-rowing'
+};
+
+// Logical overlay name -> DOM id. Only one overlay shows at a time.
+var OVERLAY_IDS = {
+  postWorkout:     'post-workout',
+  exitConfirm:     'exit-confirm',
+  registerSuccess: 'register-success',
+  reconnect:       'reconnect-overlay'
 };
 
 // Screens that hide the top bar
@@ -37,13 +45,19 @@ function render() {
     if (el) el.classList.toggle('active', SCREEN_IDS[name] === activeId);
   });
 
-  // 2. Top bar visibility
+  // 2. Overlays - show the one named in ui.overlay, hide the rest
+  Object.keys(OVERLAY_IDS).forEach(function(name) {
+    var el = document.getElementById(OVERLAY_IDS[name]);
+    if (el) el.classList.toggle('visible', name === ui.overlay);
+  });
+
+  // 3. Top bar visibility
   var bar = document.getElementById('topbar');
   var showBar = !FULLSCREEN[ui.screen];
   bar.classList.toggle('visible', showBar);
   document.body.classList.toggle('with-bar', showBar);
 
-  // 3. Top bar buttons (only meaningful when bar is shown)
+  // 4. Top bar buttons
   if (showBar) {
     var onConnecting = ui.screen === 'connecting';
     setDisplay('tbar-scan-btn',       !onConnecting && !ui.connected && !ui.scanning);
@@ -52,36 +66,37 @@ function render() {
     setDisplay('tbar-disconnect-btn', ui.connected);
   }
 
-  // 4. Scan sub-views: idle (logo / offline prompt) vs active (scanning list)
+  // 5. Scan sub-views: idle (logo / offline prompt) vs active (scanning list)
   setDisplay('scan-idle',   !ui.scanning, 'flex');
   setDisplay('scan-active',  ui.scanning, 'flex');
 
-  // 5. Offline prompts
+  // 6. Offline prompts
   setDisplay('offline-notice',   ui.offline && ui.screen === 'login');
   setDisplay('scan-offline-msg', ui.offline);
 }
 
-// Helper: show/hide an element. `displayValue` is used when showing
-// (default ''), elements fall back to their stylesheet display.
+// Show/hide an element. `displayValue` used when showing (default '').
 function setDisplay(id, visible, displayValue) {
   var el = document.getElementById(id);
   if (!el) return;
   el.style.display = visible ? (displayValue || '') : 'none';
 }
 
-// Convenience: change screen and re-render in one call.
-// Closing transient overlays here guarantees they never linger on top
-// of a new screen (this was the cause of the "scan does nothing" bug:
-// the post-workout overlay stayed on top of the scan screen).
+// Change screen. Always clears any open overlay so it cannot linger
+// on top of the new screen.
 function goScreen(name) {
-  closeOverlays();
+  ui.overlay = null;
   ui.screen = name;
   render();
 }
 
-function closeOverlays() {
-  ['post-workout', 'exit-confirm', 'register-success', 'reconnect-overlay'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.classList.remove('visible');
-  });
+// Open / close an overlay without changing the screen behind it.
+function openOverlay(name) {
+  ui.overlay = name;
+  render();
+}
+
+function closeOverlay() {
+  ui.overlay = null;
+  render();
 }
