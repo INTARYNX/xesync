@@ -428,13 +428,6 @@
       + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
 
-  function getAppInventor() {
-    return (typeof AppInventor !== 'undefined' && AppInventor.setWebViewString)
-      ? AppInventor
-      : (typeof window.AppInventor !== 'undefined' && window.AppInventor.setWebViewString)
-        ? window.AppInventor : null;
-  }
-
   function notifyLeave() {
     if (typeof window.onLeaveRowing === 'function') window.onLeaveRowing();
   }
@@ -445,57 +438,27 @@
     }
   }
 
+  // ftms produces the payload and delegates persistence to the controller.
+  // The controller decides online/offline and reports back the result.
   function saveWorkout() {
     hidePauseDialog();
     stopWatchdog();
     phase = 'IDLE';
     notifyLeave();
     var payload = buildPayload();
-    var token = typeof appToken !== 'undefined' ? appToken : null;
+    var tag = workoutTag();
+    goIdle();
 
     showBanner('SAVING...');
-
-    if (!token) {
-      var tag = workoutTag();
-      var ai = getAppInventor();
-      if (ai) {
-        ai.setWebViewString(JSON.stringify({ action: 'saveData', workout: tag, data: payload }));
-      }
-      goIdle();
-      setTimeout(function () {
+    if (typeof window.onWorkoutSave === 'function') {
+      window.onWorkoutSave(tag, payload, function (savedState) {
         hideBanner();
-        notifyComplete('offline');
-      }, 1200);
-      return;
-    }
-
-    var body = JSON.stringify({ token: token, workout: workoutTag(), data: payload });
-    var timeout = new Promise(function (_, reject) {
-      setTimeout(function () { reject(new Error('timeout')); }, 10000);
-    });
-
-    Promise.race([
-      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/save_workout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body
-      }).then(function (r) {
-        return r.text().then(function (txt) { return { ok: r.ok, txt: txt }; });
-      }),
-      timeout
-    ])
-    .then(function (resp) {
-      hideBanner();
-      if (!resp.ok) { notifyComplete('offline'); return; }
-      var json;
-      try { json = JSON.parse(resp.txt); } catch (e) { notifyComplete('offline'); return; }
-      var row = Array.isArray(json) ? json[0] : json;
-      notifyComplete(row && row.status === 'success' ? 'online' : 'offline');
-    })
-    .catch(function () {
+        notifyComplete(savedState);
+      });
+    } else {
       hideBanner();
       notifyComplete('offline');
-    });
+    }
   }
 
   function exitSession() {
