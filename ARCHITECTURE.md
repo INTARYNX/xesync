@@ -1,4 +1,4 @@
-# XeSync - Architecture
+# XEsync - Architecture
 
 Single-page app embedded in an App Inventor WebViewer. Drives a Xebex
 rower over BLE (FTMS), tracks the workout, and saves it online or offline.
