@@ -29,6 +29,11 @@
   document.addEventListener('DOMContentLoaded', function () {
     render();
     if (params.get('offline') === 'true') goOffline();
+    // Strip stray spaces (common from mobile autocorrect) on blur
+    ['username', 'reg-username'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('blur', function () { el.value = el.value.trim(); });
+    });
   });
 
   window.addEventListener('online',  function () { ui.offline = false; render(); });
@@ -239,6 +244,18 @@ function doConnect(device) {
 }
 
 function onConnectResult(msg) {
+  // App Inventor sends connectResult:success even after an unplanned drop
+  // (its Connected event can't tell first-connect from reconnect). If the
+  // reconnect overlay is up, this is a reconnection: stop the retry timer
+  // and just resume the live session.
+  if (ui.overlay === 'reconnect') {
+    if (msg.success) {
+      stopReconnect();
+      closeOverlay();        // back to the live rowing screen, tracking intact
+    }
+    // a failure here is ignored: the retry timer keeps going until RECONNECT_MAX
+    return;
+  }
   if (msg.success) {
     ui.connected = true;
     enterRowing();
@@ -256,13 +273,53 @@ function enterRowing() {
   if (Debug.isOn()) Debug.startSim();
 }
 
+// --- Reconnect (driven by the web app) ------------------------------
+// On an unplanned drop App Inventor sends {"action":"disconnected"}.
+// The web app then drives the retries: it shows the RECONNECTING overlay
+// and sends {"action":"reconnect"} up to RECONNECT_MAX times, RECONNECT_DELAY
+// apart. App Inventor answers each reconnect by calling ConnectWithAddress;
+// its Connected event sends {"action":"connectResult","success":true}.
+//   - success arrives while overlay is up -> cancel timer, close overlay, resume
+//   - all attempts used up               -> give up, close overlay, mark disconnected
+var RECONNECT_MAX   = 3;
+var RECONNECT_DELAY = 5000;
+var reconnectTries  = 0;
+var reconnectTimer  = null;
+
 function onDisconnected() {
+  if (ui.overlay === 'reconnect') return;  // already reconnecting
+  reconnectTries = 0;
   openOverlay('reconnect');
-  Bridge.send('reconnect');
+  attemptReconnect();
 }
-function onReconnected() { closeOverlay(); }
+
+function attemptReconnect() {
+  reconnectTries++;
+  Bridge.send('reconnect');
+  reconnectTimer = setTimeout(function () {
+    if (reconnectTries >= RECONNECT_MAX) {
+      stopReconnect();
+      ui.connected = false;
+      closeOverlay();
+      // No more FTMS packets, so the inactivity watchdog has paused the
+      // session: the PAUSED dialog (SAVE / EXIT) is waiting for the user.
+    } else {
+      attemptReconnect();
+    }
+  }, RECONNECT_DELAY);
+}
+
+function stopReconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
+function onReconnected() {
+  stopReconnect();
+  closeOverlay();
+}
 
 function doGiveUp() {
+  stopReconnect();
   closeOverlay();
   Bridge.send('disconnect');
   ui.connected = false;

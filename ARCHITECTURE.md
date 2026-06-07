@@ -84,6 +84,36 @@ ftms.saveWorkout()
 `window.onLeaveRowing()` is called first so the rowing screen is hidden
 immediately, before any async save work runs.
 
+## Reconnect flow
+
+The web app drives reconnection; App Inventor only relays single attempts.
+
+On an unplanned BLE drop:
+
+```
+App Inventor  -> {"action":"disconnected"}
+controller    -> openOverlay('reconnect'), start retry loop
+                 loop (up to RECONNECT_MAX = 3, RECONNECT_DELAY = 5s apart):
+                   Bridge.send('reconnect')   // ask App Inventor to try once
+                   wait 5s
+                 success: App Inventor's Connected event sends
+                   {"action":"connectResult","success":true}
+                   -> stopReconnect(), closeOverlay(), session resumes
+                 exhausted: stopReconnect(), ui.connected = false, closeOverlay()
+                   -> no more FTMS packets, so the inactivity watchdog has
+                      already paused the session; the PAUSED dialog
+                      (SAVE / EXIT) is waiting for the user
+```
+
+The STOP button in the overlay calls `doGiveUp()` -> `stopReconnect()` and
+leaves the rower.
+
+App Inventor's only responsibilities: send `disconnected` on a drop, and
+call `ConnectWithAddress` on each `reconnect` message. It runs no timer of
+its own. Its existing `Connected` event already emits
+`connectResult success:true`, which the controller interprets as a
+reconnection when the reconnect overlay is up.
+
 ## Debug mode
 
 Add `?debug=true` to the URL. Enables the DEBUG top-bar button and lets
