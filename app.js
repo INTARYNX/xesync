@@ -435,9 +435,6 @@ window.onLeaveRowing = function() {
 };
 
 window.onWorkoutComplete = function(savedState) {
-  ui.connected = false;
-  ui.scanning = false;
-  inDebugMode = false;
   var title = document.getElementById('pw-title');
   var sub   = document.getElementById('pw-subtitle');
   if (savedState === 'online') {
