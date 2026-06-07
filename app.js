@@ -1,20 +1,12 @@
 // =====================================================================
-// XeSync app shell - screen navigation, login, BLE scan, workout flow
+// XeSync app shell - login, BLE scan, workout flow, App Inventor bridge.
+// All screen/topbar state goes through ui + render() (see ui.js).
 // =====================================================================
 
-// -- State -----------------------------------------------------------
-var appToken      = null;
-var bleConnected  = false;
-var inDebugMode   = false;
-var isOffline     = !navigator.onLine;
-var isScanning    = false;
-var currentScreen = null;
-var previousScreen = null;
-var debugMenu     = new URLSearchParams(window.location.search).get('debug') === 'true';
-
-var SCREENS_NO_BAR = { 'screen-rowing': true };
-
 // -- Boot ------------------------------------------------------------
+ui.offline = !navigator.onLine;
+ui.debug   = new URLSearchParams(window.location.search).get('debug') === 'true';
+
 var bootSplashTimer = setTimeout(hideBootSplash, 1500);
 
 function hideBootSplash() {
@@ -26,64 +18,28 @@ function hideBootSplash() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  if (debugMenu) document.getElementById('tbar-debug-btn').style.display = '';
+  render();
   if (new URLSearchParams(window.location.search).get('offline') === 'true') goOffline();
 });
 
-window.addEventListener('online', function() {
-  isOffline = false;
-  if (currentScreen) show(currentScreen);
-});
-window.addEventListener('offline', function() {
-  isOffline = true;
-  if (currentScreen) show(currentScreen);
-});
+window.addEventListener('online',  function() { ui.offline = false; render(); });
+window.addEventListener('offline', function() { ui.offline = true;  render(); });
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && currentScreen === 'screen-login') doLogin();
+  if (e.key === 'Enter' && ui.screen === 'login') doLogin();
 });
 
-// -- Screen navigation -----------------------------------------------
-function show(id) {
-  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
-  document.getElementById(id).classList.add('active');
-  currentScreen = id;
-
-  var bar = document.getElementById('topbar');
-  if (SCREENS_NO_BAR[id]) {
-    bar.classList.remove('visible');
-    document.body.classList.remove('with-bar');
-    return;
-  }
-  bar.classList.add('visible');
-  document.body.classList.add('with-bar');
-
-  var offlineNotice = document.getElementById('offline-notice');
-  if (offlineNotice) offlineNotice.style.display = (isOffline && id === 'screen-login') ? '' : 'none';
-
-  refreshTopbar();
-}
-
-// Update topbar buttons based on current state. Reads only state flags,
-// never the DOM, so it is always consistent.
-function refreshTopbar() {
-  var connecting = currentScreen === 'screen-connecting';
-  var showScan   = !connecting && !bleConnected && !isScanning;
-  document.getElementById('tbar-scan-btn').style.display       = showScan ? '' : 'none';
-  document.getElementById('tbar-debug-btn').style.display      = (debugMenu && !connecting) ? '' : 'none';
-  document.getElementById('tbar-row-btn').style.display        = bleConnected ? '' : 'none';
-  document.getElementById('tbar-disconnect-btn').style.display = bleConnected ? '' : 'none';
-}
-
+// -- User badge ------------------------------------------------------
 function setUserBadge(username) {
   var el = document.getElementById('tbar-user');
-  if (!username) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div class="tbar-avatar">' + username.slice(0, 2).toUpperCase() + '</div>';
+  el.innerHTML = username
+    ? '<div class="tbar-avatar">' + username.slice(0, 2).toUpperCase() + '</div>'
+    : '';
 }
 
 // -- Exit / logoff ---------------------------------------------------
 function doExit() {
-  if (currentScreen === 'screen-login') { sendToApp('exit', {}); return; }
+  if (ui.screen === 'login') { sendToApp('exit', {}); return; }
   document.getElementById('exit-confirm').classList.add('visible');
 }
 
@@ -93,14 +49,14 @@ function hideExitConfirm() {
 
 function doLogoff() {
   hideExitConfirm();
-  appToken = null;
-  bleConnected = false;
+  ui.token = null;
+  ui.connected = false;
+  ui.scanning = false;
   inDebugMode = false;
-  isScanning = false;
   DebugSim.stop();
   setUserBadge('');
   document.getElementById('password').value = '';
-  show('screen-login');
+  goScreen('login');
 }
 
 function doQuit() {
@@ -111,7 +67,7 @@ function doQuit() {
 // -- Register --------------------------------------------------------
 function hideRegisterSuccess() {
   document.getElementById('register-success').classList.remove('visible');
-  show('screen-login');
+  goScreen('login');
 }
 
 function setRegisterStatus(msg, ok) {
@@ -156,6 +112,8 @@ function doRegister() {
 }
 
 // -- App Inventor bridge ---------------------------------------------
+var inDebugMode = false;
+
 function sendToApp(action, data) {
   var payload = JSON.stringify(Object.assign({ action: action }, data));
   var ai = window.AppInventor || (typeof AppInventor !== 'undefined' ? AppInventor : null);
@@ -193,10 +151,10 @@ window.addEventListener('message', function(e) {
     document.getElementById('loading-overlay').classList.remove('visible');
   }
   if (e.data.type === 'tokenExpired') {
-    appToken = null;
+    ui.token = null;
     setUserBadge('');
     setLoginStatus('Session expired. Please log in again.');
-    show('screen-login');
+    goScreen('login');
   }
 });
 
@@ -207,7 +165,7 @@ function setLoginStatus(msg) {
 
 function doAutoLogin(msg) {
   if (bootSplashTimer) { clearTimeout(bootSplashTimer); bootSplashTimer = null; }
-  if (!msg.token) { show('screen-login'); hideBootSplash(); return; }
+  if (!msg.token) { goScreen('login'); hideBootSplash(); return; }
   fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/validate_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -217,14 +175,14 @@ function doAutoLogin(msg) {
   .then(function(arr) {
     var data = Array.isArray(arr) ? arr[0] : arr;
     if (data && data.status === 'success') {
-      appToken = msg.token;
+      ui.token = msg.token;
       setUserBadge(data.username);
       setLoginStatus('');
       showHome();
     } else {
       setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
       setUserBadge('');
-      show('screen-login');
+      goScreen('login');
     }
     hideBootSplash();
   })
@@ -257,7 +215,7 @@ function doLogin() {
     btn.textContent = 'LOGIN';
     var data = Array.isArray(arr) ? arr[0] : arr;
     if (data && data.status === 'success' && data.token) {
-      appToken = data.token;
+      ui.token = data.token;
       setUserBadge(u);
       sendToApp('loginResult', { success: true, token: data.token, username: u });
       showHome();
@@ -277,18 +235,16 @@ function doLogin() {
 
 // -- Offline ---------------------------------------------------------
 function goOffline() {
-  isOffline = true;
+  ui.offline = true;
   sendToApp('loginResult', { success: false, offline: true });
-  var msg = document.getElementById('scan-offline-msg');
-  if (msg) msg.style.display = '';
-  show('screen-scan');
+  goScreen('scan');
 }
 
 // -- Home ------------------------------------------------------------
 function showHome() {
   var iframe = document.getElementById('home-frame');
   var sendToken = function() {
-    iframe.contentWindow.postMessage({ type: 'token', token: appToken }, '*');
+    iframe.contentWindow.postMessage({ type: 'token', token: ui.token }, '*');
   };
   if (iframe.src && iframe.src !== 'about:blank' && iframe.src.indexOf(XESYNC_CONFIG.apexHomeUrl) === 0) {
     sendToken();
@@ -296,36 +252,33 @@ function showHome() {
     iframe.onload = sendToken;
     iframe.src = XESYNC_CONFIG.apexHomeUrl;
   }
-  show('screen-home');
+  goScreen('home');
 }
 
 // -- BLE scan --------------------------------------------------------
+var scanReturnScreen = null;
+
 function startScan() {
-  previousScreen = currentScreen;
-  isScanning = true;
+  scanReturnScreen = ui.screen;
+  ui.scanning = true;
   document.getElementById('device-list').innerHTML = '';
   document.getElementById('pulse-ring').style.display = '';
   document.getElementById('scan-label').textContent = 'SCANNING...';
-  document.getElementById('scan-idle').style.display = 'none';
-  document.getElementById('scan-active').style.display = 'flex';
-  show('screen-scan');
+  goScreen('scan');
   sendToApp('scan', {});
 }
 
 function stopScan() {
   sendToApp('stopScan', {});
-  isScanning = false;
-  document.getElementById('scan-idle').style.display = 'flex';
-  document.getElementById('scan-active').style.display = 'none';
-  // Return to where the scan was launched from
-  if (previousScreen && previousScreen !== 'screen-scan' && previousScreen !== 'screen-connecting') {
-    show(previousScreen);
-  } else if (appToken) {
+  ui.scanning = false;
+  if (scanReturnScreen && scanReturnScreen !== 'scan' && scanReturnScreen !== 'connecting') {
+    if (scanReturnScreen === 'home') showHome(); else goScreen(scanReturnScreen);
+  } else if (ui.token) {
     showHome();
   } else {
-    show('screen-scan');
+    goScreen('scan');
   }
-  previousScreen = null;
+  scanReturnScreen = null;
 }
 
 function onScanResult(msg) {
@@ -356,24 +309,22 @@ function onScanResult(msg) {
 
 // -- Connect ---------------------------------------------------------
 function doConnect(device) {
-  isScanning = false;
-  document.getElementById('scan-active').style.display = 'none';
-  document.getElementById('scan-idle').style.display = 'flex';
+  ui.scanning = false;
   document.getElementById('connecting-label').textContent = 'CONNECTING...';
-  show('screen-connecting');
+  goScreen('connecting');
   sendToApp('connect', { deviceId: device.id, deviceName: device.name });
 }
 
 function onConnectResult(msg) {
   if (msg.success) {
-    bleConnected = true;
+    ui.connected = true;
     document.getElementById('loading-overlay').classList.add('visible');
-    show('screen-rowing');
+    goScreen('rowing');
     initRowing();
     initFtmsTracking();
   } else {
     document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
-    setTimeout(function() { show('screen-scan'); }, 2000);
+    setTimeout(function() { goScreen('scan'); }, 2000);
   }
 }
 
@@ -389,14 +340,14 @@ function onReconnected() {
 function doGiveUp() {
   document.getElementById('reconnect-overlay').classList.remove('visible');
   sendToApp('disconnect', {});
-  bleConnected = false;
-  isScanning = false;
-  if (appToken) { showHome(); } else { show('screen-login'); }
+  ui.connected = false;
+  ui.scanning = false;
+  if (ui.token) showHome(); else goScreen('login');
 }
 
 function resumeRowing() {
   document.getElementById('loading-overlay').classList.add('visible');
-  show('screen-rowing');
+  goScreen('rowing');
   initRowing();
   initFtmsTracking();
   if (inDebugMode) { DebugSim.reset(); DebugSim.start(); }
@@ -405,18 +356,16 @@ function resumeRowing() {
 function disconnectRower() {
   if (inDebugMode) { DebugSim.stop(); inDebugMode = false; }
   else { sendToApp('disconnect', {}); }
-  bleConnected = false;
-  isScanning = false;
-  document.getElementById('scan-active').style.display = 'none';
-  document.getElementById('scan-idle').style.display = 'flex';
-  if (appToken) { showHome(); } else { show('screen-login'); }
+  ui.connected = false;
+  ui.scanning = false;
+  if (ui.token) showHome(); else goScreen('login');
 }
 
 function debugMode() {
-  bleConnected = true;
+  ui.connected = true;
   inDebugMode = true;
   document.getElementById('loading-overlay').classList.add('visible');
-  show('screen-rowing');
+  goScreen('rowing');
   initRowing();
   initFtmsTracking();
   DebugSim.reset();
@@ -447,7 +396,7 @@ window.addEventListener('hashchange', function() {
 });
 
 // -- Upload / save ack -----------------------------------------------
-function onSaveAck() { if (appToken) showHome(); }
+function onSaveAck() { if (ui.token) showHome(); }
 
 function onTagCleared(msg) { /* AI2 cleared the offline tag */ }
 
@@ -466,18 +415,15 @@ function onUploadWorkout(msg) {
 }
 
 // -- Post workout ----------------------------------------------------
-// Called immediately on save/exit so the rowing animation is hidden
-// before any async save work runs.
+// Hide the rowing animation immediately, before async save work runs.
 window.onLeaveRowing = function() {
   document.getElementById('connecting-label').textContent = '';
-  show('screen-connecting');
+  goScreen('connecting');
 };
 
-// Called when the save/exit flow is complete.
 window.onWorkoutComplete = function(savedState) {
   var title = document.getElementById('pw-title');
   var sub   = document.getElementById('pw-subtitle');
-
   if (savedState === 'online') {
     title.textContent = 'WORKOUT SAVED';
     sub.textContent   = 'synced to your account';
@@ -488,8 +434,7 @@ window.onWorkoutComplete = function(savedState) {
     title.textContent = 'WORKOUT ENDED';
     sub.textContent   = 'not saved';
   }
-
-  document.getElementById('pw-workouts-btn').style.display = appToken ? '' : 'none';
+  document.getElementById('pw-workouts-btn').style.display = ui.token ? '' : 'none';
   document.getElementById('post-workout').classList.add('visible');
 };
 
@@ -499,12 +444,12 @@ function hidePostWorkout() {
 
 function postWorkoutGoWorkouts() {
   hidePostWorkout();
-  if (appToken) { showHome(); } else { show('screen-login'); }
+  if (ui.token) showHome(); else goScreen('login');
 }
 
 function postWorkoutGoLogin() {
   hidePostWorkout();
-  show('screen-login');
+  goScreen('login');
 }
 
 // -- Utils -----------------------------------------------------------
