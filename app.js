@@ -259,13 +259,19 @@ function showHome() {
 var scanReturnScreen = null;
 
 function startScan() {
-  document.body.style.background = '#003300'; // PROOF: new code is running
   scanReturnScreen = ui.screen;
   ui.scanning = true;
   document.getElementById('device-list').innerHTML = '';
   document.getElementById('pulse-ring').style.display = '';
   document.getElementById('scan-label').textContent = 'SCANNING...';
   goScreen('scan');
+  if (ui.debug) {
+    // Debug: no real BLE, so emit a fake rower after a short delay
+    setTimeout(function() {
+      onScanResult({ devices: [{ id: 'DE:BU:G0:00:01 Debug Rower' }] });
+    }, 1200);
+    return;
+  }
   sendToApp('scan', {});
 }
 
@@ -313,6 +319,11 @@ function doConnect(device) {
   ui.scanning = false;
   document.getElementById('connecting-label').textContent = 'CONNECTING...';
   goScreen('connecting');
+  if (ui.debug) {
+    inDebugMode = true;
+    setTimeout(function() { onConnectResult({ success: true }); }, 800);
+    return;
+  }
   sendToApp('connect', { deviceId: device.id, deviceName: device.name });
 }
 
@@ -323,6 +334,7 @@ function onConnectResult(msg) {
     goScreen('rowing');
     initRowing();
     initFtmsTracking();
+    if (inDebugMode) { DebugSim.reset(); DebugSim.start(); }
   } else {
     document.getElementById('connecting-label').textContent = msg.error || 'CONNECTION FAILED';
     setTimeout(function() { goScreen('scan'); }, 2000);
