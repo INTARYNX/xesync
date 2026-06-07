@@ -22,7 +22,13 @@ Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native A
 ```
 Android App (App Inventor)
   └─ BLE FTMS packets → WebView bridge → app.html
-                                          ├─ ftms_integration.js  (session tracking, UI)
+                                          ├─ state.js             (app state)
+                                          ├─ view.js              (DOM rendering)
+                                          ├─ api.js               (network calls)
+                                          ├─ bridge.js            (App Inventor messaging)
+                                          ├─ debug.js             (debug-mode fakes)
+                                          ├─ ftms_integration.js  (FTMS session tracking)
+                                          ├─ controller.js        (orchestration)
                                           ├─ rowing_display.html  (WebGL scene)
                                           └─ config.js            (endpoints)
 
@@ -31,6 +37,10 @@ Server
   ├─ PostgREST  (auto-generated REST API on /rpc/*)
   └─ Mail worker (cron → SMTP for verification emails)
 ```
+
+The frontend is split into single-responsibility modules with one-way
+dependencies (`controller` is the only module that knows the others).
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full breakdown.
 
 The build process (`deploy.ps1`) inlines all CSS and JS into a single self-contained `app.html` for deployment. No bundler, no npm, no framework.
 
@@ -51,15 +61,21 @@ See [API.md](API.md) for the full API reference.
 ## Project structure
 
 ```
-app.html              # Main shell: routing, login, BLE bridge
+app.html              # Main shell: screens, overlays, markup
 app.css               # App styles
 config.js             # Runtime configuration (URLs)
+state.js              # Application state (the `ui` object) + id maps
+view.js               # All DOM rendering; render() syncs UI to state
+api.js                # Network calls (login, save, ...) returning Promises
+bridge.js             # App Inventor messaging (send + dispatch)
+debug.js              # Debug-mode fakes (fake scan/connect)
+controller.js         # Orchestration: actions, bridge messages, state changes
+ftms_integration.js   # FTMS session tracking, state machine, save flow
+debug_sim.js          # Fake FTMS data generator for debug mode
 rowing_display.html   # WebGL rowing scene (injected at build time)
 rowing_display.css    # Styles for the rowing display
 rowing_display.js     # WebGL init, animation loop, uniforms
-ftms_integration.js   # FTMS session tracking, state machine, save flow
-ftms_captured.js      # Real FTMS packets for debug mode
-test_app.html         # Browser-based test harness (simulates the Android bridge)
+ARCHITECTURE.md       # Module breakdown, state model, screen flow
 deploy.ps1            # Build + deploy script
 deploy.config.ps1.example  # Deploy config template (copy → deploy.config.ps1)
 site/                 # Static landing pages
@@ -79,10 +95,10 @@ server/
 ### Runtime (`config.js`)
 
 ```js
-var XEsync_CONFIG = {
-  apiBaseUrl: 'https://your-server/api',   // PostgREST root
-  homeUrl:    'https://your-server/',
-  logRawData: false                        // set true to POST every FTMS packet (debug only)
+var XESYNC_CONFIG = {
+  apiBaseUrl:  'https://your-server/api',   // PostgREST root
+  apexHomeUrl: 'https://your-server/',      // home dashboard loaded in the iframe
+  logRawData:  false                        // set true to POST every FTMS packet (debug only)
 };
 ```
 
@@ -151,7 +167,7 @@ Both scripts are idempotent.
 
 The script:
 1. Inlines `rowing_display.html` body, CSS and JS into `app.html`
-2. Inlines `config.js`, `ftms_integration.js`, `ftms_captured.js`
+2. Inlines all `<script src>` (config, state, view, api, bridge, debug, ftms_integration, controller, debug_sim) and `<link>` stylesheets
 3. Writes `dist/app.html` (UTF-8, no BOM)
 4. Copies static assets to `dist/`
 5. SCPs `dist/` to the remote server
@@ -161,9 +177,15 @@ The script:
 
 ## Local testing
 
-Open `test_app.html` in a browser. It simulates the Android BLE bridge with buttons for scan, connect, FTMS data packets, disconnect, and save. No Android device needed to test the full session flow.
+Open the app with `?debug=true` in the URL. Debug mode runs the full flow
+with no Android device or rower: it fakes a found device and a successful
+connection, and `debug_sim.js` feeds realistic FTMS data so the session,
+metrics, and save flow all work in a plain browser.
 
-For the WebGL shader standalone (no metrics UI), open the file in `inline/` if present, or use the debug mode button in the app after building.
+Add `?offline=true` to start in the offline (no-login) flow. The two flags
+can be combined: `?debug=true&offline=true`.
+
+All debug behaviour lives in `debug.js` and `debug_sim.js`.
 
 ---
 
