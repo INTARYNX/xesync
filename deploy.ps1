@@ -112,7 +112,7 @@ Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $dist | Out-Null
 
 # Site pages and assets
-Copy-Item (Join-Path $base 'site\*') $dist -Recurse
+Get-ChildItem (Join-Path $base 'site') | Copy-Item -Destination $dist -Recurse -Force
 
 # Write built app directly into dist/
 Write-Utf8NoBom (Join-Path $dist 'app.html') $app
