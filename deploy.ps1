@@ -111,7 +111,7 @@ $dist = Join-Path $base 'dist'
 Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-# Site pages and assets
+# Site pages and assets (including subdirectories like favicon/)
 Get-ChildItem (Join-Path $base 'site') | Copy-Item -Destination $dist -Recurse -Force
 
 # Write built app directly into dist/
@@ -143,6 +143,14 @@ if ($LASTEXITCODE -ne 0) {
     "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "SCP upload failed (exit $LASTEXITCODE)."
+    exit 1
+}
+
+# Fix permissions so the web server can read all files and traverse directories
+& ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new `
+    "$SSH_USER@$SSH_HOST" "chmod -R a+rX $REMOTE_DIR"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "chmod failed (exit $LASTEXITCODE)."
     exit 1
 }
 
