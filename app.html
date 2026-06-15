@@ -35,7 +35,7 @@
     <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="password" placeholder="password">
     <button class="btn primary" onclick="doLogin()">LOGIN</button>
-    <button class="btn" onclick="show('screen-register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
+    <button class="btn" onclick="goScreen('register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
     <div class="status-msg" id="login-status"></div>
   </div>
 
@@ -50,7 +50,7 @@
       <span>I agree to the privacy policy and consent to my data being stored to provide the service.</span>
     </label>
     <button class="btn primary" onclick="doRegister()">CREATE</button>
-    <button class="btn" onclick="show('screen-login')" style="margin-top:10px;opacity:0.7;">BACK</button>
+    <button class="btn" onclick="goScreen('login')" style="margin-top:10px;opacity:0.7;">BACK</button>
     <div class="status-msg" id="register-status"></div>
   </div>
 
