@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">XEsync</string>
+    <string name="title_activity_main">XEsync</string>
+    <string name="package_name">appinventor.ai_intarynx.XEsync</string>
+    <string name="custom_url_scheme">appinventor.ai_intarynx.XEsync</string>
+</resources>

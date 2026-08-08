@@ -1,0 +1,56 @@
+# Android build environment for the XEsync Capacitor app.
+# @capacitor/android's own build.gradle pins sourceCompatibility /
+# targetCompatibility to JavaVersion.VERSION_21 (confirmed by a real build
+# failure: "error: invalid source release: 21" under JDK 17) - so this
+# needs JDK 21, not just AGP 8's JDK 17 floor. Local machine only has
+# JDK 11 either way, so build inside here instead of touching the host
+# toolchain.
+#
+# Build:  podman build -t xesync-android-build -f Containerfile .
+# Run:    see build-capacitor.ps1 (mounts the repo, caches gradle/SDK in
+#         named volumes so repeat builds don't re-download everything)
+
+FROM docker.io/eclipse-temurin:21-jdk
+
+ENV ANDROID_SDK_ROOT=/opt/android-sdk \
+    ANDROID_HOME=/opt/android-sdk \
+    PATH=/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:${PATH} \
+    NODE_MAJOR=22
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl unzip git ca-certificates gnupg ruby-full build-essential \
+    && curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# fastlane, for publishing to Play Store via the API instead of the console
+# UI (see capacitor/README.md "Publishing"). Installed here rather than on
+# Windows: RubyInstaller + MSYS2 on Windows is its own can of worms, and
+# fastlane only needs to run at publish time, not on every build.
+RUN gem install fastlane --no-document
+
+# Android command-line tools
+ARG CMDLINE_TOOLS_VERSION=11076708
+RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools \
+    && curl -fsSL -o /tmp/cmdline-tools.zip \
+      "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip" \
+    && unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_SDK_ROOT}/cmdline-tools \
+    && mv ${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools ${ANDROID_SDK_ROOT}/cmdline-tools/latest \
+    && rm /tmp/cmdline-tools.zip
+
+# Platform + build-tools pinned to match Capacitor 7 / AGP 8 expectations
+# (capacitor/android/variables.gradle: compileSdkVersion = 35). Installed
+# up front so a build doesn't fall back on Gradle's own SDK auto-download
+# (works, since licenses are pre-accepted below, but re-downloads on every
+# fresh container unless this layer is cached).
+RUN yes | sdkmanager --licenses >/dev/null \
+    && sdkmanager --install \
+      "platform-tools" \
+      "platforms;android-34" \
+      "platforms;android-35" \
+      "build-tools;34.0.0" \
+      "build-tools;35.0.0" \
+    >/dev/null
+
+WORKDIR /work
+ENTRYPOINT ["/bin/bash", "-lc"]

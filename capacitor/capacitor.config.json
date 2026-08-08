@@ -1,0 +1,22 @@
+{
+  "appId": "appinventor.ai_intarynx.XEsync",
+  "appName": "XEsync",
+  "webDir": "www",
+  "android": {
+    "minWebViewVersion": 90,
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Scanning for rower...",
+        "cancel": "Cancel",
+        "availableDevices": "Available devices",
+        "noDeviceFound": "No rower found"
+      }
+    }
+  }
+}

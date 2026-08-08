@@ -1,0 +1,7 @@
+# Service account JSON key - NOT committed (capacitor/keys/ is gitignored).
+# Download it from Google Cloud Console > IAM & Admin > Service Accounts >
+# (your account) > Keys > Add Key > Create new key > JSON, then link it
+# in Play Console > Settings > API access (see ../../README.md).
+json_key_file "/work/capacitor/keys/xesync-publish-66353ab4f484.json"
+
+package_name "appinventor.ai_intarynx.XEsync"

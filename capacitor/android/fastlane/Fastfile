@@ -1,0 +1,12 @@
+default_platform(:android)
+
+platform :android do
+  desc "Upload the already-built release AAB to Play Store production"
+  lane :deploy do
+    upload_to_play_store(
+      track: 'production',
+      release_status: 'completed', # switch to 'draft' for manual review before rollout
+      aab: 'app/build/outputs/bundle/release/app-release.aab',
+    )
+  end
+end

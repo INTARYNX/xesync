@@ -8,3 +8,11 @@ web.cmd
 tunnel.cmd
 *.log
 .vscode/
+ai2/
+bin/
+capacitor/keys/
+capacitor/android/key.properties
+capacitor/android/local.properties
+capacitor/node_modules/
+capacitor/www/
+capacitor/.platform-tools-win/
