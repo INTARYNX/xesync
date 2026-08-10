@@ -6,7 +6,7 @@
 <title>XEsync — Bluetooth rowing tracker for Xebex machines</title>
 <meta name="description" content="A Bluetooth bridge between your Xebex rower and the web. Live FTMS metrics, automatic session saving, WebGL animation — built end-to-end as a personal study in technical assembly.">
 <meta property="og:title" content="XEsync — Bluetooth rowing tracker for Xebex machines">
-<meta property="og:description" content="Live FTMS metrics, automatic session saving, WebGL animation. A personal integration project: MIT App Inventor + WebView + Oracle APEX.">
+<meta property="og:description" content="Live FTMS metrics, automatic session saving, WebGL animation. A personal integration project: Capacitor + WebView + PostgreSQL/PostgREST.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="logo.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -451,7 +451,7 @@
     <div class="logo-container" aria-hidden="true"></div>
     <h1 class="tagline">Track every stroke. Own every session.</h1>
     <p class="sub-tagline">
-      A Bluetooth bridge between your Xebex rower and the web — built end-to-end as a study of how far you can push App Inventor, WebGL, and FTMS together.
+      A Bluetooth bridge between your Xebex rower and the web — built end-to-end as a study of how far you can push a native shell, WebGL, and FTMS together.
     </p>
     <div class="cta-row">
       <img src="logo_black.png" alt="XEsync" class="app-logo">
@@ -530,11 +530,12 @@
       </div>
 
       <div class="tech-card">
-        <h4><i class="fa-solid fa-diagram-project"></i> Hybrid architecture</h4>
+        <h4><i class="fa-solid fa-diagram-project"></i> Native shell, thin bridge</h4>
         <p>
-          MIT App Inventor handles native BLE (the one thing it does well); a WebView running
-          vanilla JS handles UI, animation, session logic, and HTTPS upload. The bridge is a
-          single JSON channel via <code>setWebViewString</code> / <code>RunJavaScript</code>.
+          A Capacitor native shell owns BLE scan/connect/notify and local storage; a WebView
+          running vanilla JS handles UI, animation, session logic, and HTTPS upload. The bridge
+          module exposes the exact same <code>send</code> / <code>setHandlers</code> API the
+          web app already used, so the entire UI and session-tracking layer never had to change.
         </p>
       </div>
 
@@ -577,7 +578,7 @@
       </div>
 
       <div class="stack">
-        <span class="pill">MIT App Inventor</span>
+        <span class="pill">Capacitor</span>
         <span class="pill">Android WebView</span>
         <span class="pill">BLE / FTMS</span>
         <span class="pill">Vanilla JS</span>
@@ -608,6 +609,13 @@
       complete system</strong>. Not inventing anything, not picking the "right" stack — just
       bending what was available into something that works end-to-end. The rower was the
       excuse. The integration was the project.
+    </p>
+    <p>
+      The stack itself evolved twice. The first working prototype paired MIT App Inventor with
+      an Oracle ORDS backend and an Oracle APEX frontend — enough to prove the BLE bridge could
+      work at all. The backend was rebuilt on PostgreSQL + PostgREST once the data model
+      stabilized, and the native shell was later rebuilt again, from App Inventor's block editor
+      onto Capacitor, once the block-based tooling itself became the bottleneck.
     </p>
   </section>
 
