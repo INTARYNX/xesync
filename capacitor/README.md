@@ -152,25 +152,21 @@ MIUI/HyperOS quirks hit while testing:
   drops when the phone leaves WiFi range or sleeps — reconnect via USB
   and re-run `adb tcpip 5555` when that happens.
 
-### On-device debugging
+### On-device debugging (removed from the shipped build)
 
-`bridge.src.js` has a **temporary, unconditional debug logger** (`dbg()`)
-that:
-- shows the last 40 lines in a green-on-black panel at the top of the
-  screen (quick glance on the phone itself)
-- also persists every line to `xesync-debug.log` in the app's private
-  storage, pulled with:
-  ```powershell
-  capacitor\.platform-tools-win\adb.exe shell run-as appinventor.ai_intarynx.XEsync cat files/xesync-debug.log
-  ```
-  (works on debug builds without root - `run-as` is allowed for
-  debuggable APKs)
+While bringing BLE up, `bridge.src.js` had a temporary, unconditional
+debug logger (`dbg()`): an on-screen panel plus a persisted
+`xesync-debug.log` pulled via `adb shell run-as ... cat files/xesync-debug.log`.
+That's what actually made the BLE bugs above findable - reading raw byte
+arrays off a live rower isn't something you can guess your way through
+from code alone. Removed entirely (along with the `@capacitor/filesystem`
+dependency it needed) once BLE was confirmed reliably working on real
+hardware, before the first real release build.
 
-This is what made the BLE bugs above findable at all - reading raw byte
-arrays off a live rower isn't something you can guess your way through.
-Remove it (or gate behind `?debug=true` like `ftms_integration.js`'s own
-`dbg()`) once the app has been stable for a while; until then it's cheap
-insurance against another multi-hour blind debugging session.
+If BLE needs debugging again on a future build, the pattern is worth
+re-adding rather than reasoning blind: an unconditional on-screen panel +
+persisted log file, not gated behind `?debug=true` (that flag isn't
+reachable by typing a URL on a packaged native app anyway).
 
 ## Publishing (Play Store, via API — no Play Console UI after first setup)
 
@@ -227,11 +223,6 @@ secure backup now, before this ever leaves this machine.
 
 ## Known gaps / not yet ported
 
-- No app icon/splash wiring — still Capacitor's defaults. Copy from
-  `ai2/assets/logo.png` via `npx cap-assets` or by hand into
-  `android/app/src/main/res/`.
 - iOS: `deviceId` from `bluetooth-le` is the MAC on Android (matches
   `connect`'s `deviceId` handling in `controller.js` today) but an
   opaque per-app UUID on iOS. Fine for Android-only; revisit if iOS ships.
-- The on-device debug logger (see above) is meant to come back out once
-  the app's been solid for a while.

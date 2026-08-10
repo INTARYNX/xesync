@@ -18,64 +18,10 @@ import { Preferences } from '@capacitor/preferences';
 import { App } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { KeepAwake } from '@capacitor-community/keep-awake';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 
 var FTMS_SERVICE = '00001826-0000-1000-8000-00805f9b34fb';
 var FTMS_CHAR    = '00002ad1-0000-1000-8000-00805f9b34fb';
 var WORKOUT_PREFIX = 'workout_';
-var LOG_FILE = 'xesync-debug.log';
-
-// TEMPORARY debug logging, unconditional (not gated behind ?debug=true
-// like ftms_integration.js's own dbg()) - added specifically to get BLE
-// lifecycle visibility on-device while chasing hardware bugs no amount of
-// code reading would surface. Two outputs:
-//  - on-screen panel (quick glance on the phone itself)
-//  - a plain-text file (Directory.Data / xesync-debug.log), pulled with
-//    `adb shell run-as com.enlistia.xesync cat files/xesync-debug.log`
-//    (debuggable builds allow run-as without root) - no more needing a
-//    screenshot or the user relaying numbers over chat.
-// Remove (or gate behind DEBUG) once BLE is confirmed reliably working.
-var dbgEl = null;
-var logBuffer = [];
-var logFlushScheduled = false;
-
-function dbg(msg) {
-  var t = new Date();
-  var ts = (t.getHours()<10?'0':'')+t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes()+':'+(t.getSeconds()<10?'0':'')+t.getSeconds();
-  var full = '[' + ts + '] ' + msg;
-
-  if (!dbgEl) {
-    dbgEl = document.createElement('div');
-    dbgEl.style.cssText = 'position:fixed;top:0;left:0;right:0;max-height:35vh;overflow-y:auto;' +
-      'background:rgba(0,0,0,0.85);color:#0f0;font-size:11px;font-family:monospace;' +
-      'padding:4px 6px;z-index:99999;pointer-events:none;white-space:pre-wrap;';
-    document.addEventListener('DOMContentLoaded', function () { document.body.appendChild(dbgEl); });
-    if (document.body) document.body.appendChild(dbgEl);
-  }
-  var line = document.createElement('div');
-  line.textContent = full;
-  dbgEl.appendChild(line);
-  dbgEl.scrollTop = dbgEl.scrollHeight;
-  while (dbgEl.children.length > 40) dbgEl.removeChild(dbgEl.firstChild);
-
-  logBuffer.push(full);
-  if (!logFlushScheduled) {
-    logFlushScheduled = true;
-    setTimeout(flushLog, 500); // batch writes instead of one file op per line
-  }
-}
-
-function flushLog() {
-  logFlushScheduled = false;
-  var chunk = logBuffer.join('\n') + '\n';
-  logBuffer = [];
-  Filesystem.appendFile({ path: LOG_FILE, directory: Directory.Data, data: chunk, encoding: 'utf8' })
-    .catch(function () {
-      // File doesn't exist yet on first write - create it instead.
-      Filesystem.writeFile({ path: LOG_FILE, directory: Directory.Data, data: chunk, encoding: 'utf8' })
-        .catch(function (e) { console.error('[bridge] log write failed', e); });
-    });
-}
 
 var Bridge = (function () {
   'use strict';
@@ -99,13 +45,10 @@ var Bridge = (function () {
 
   // -- boot: ask BLE permission once, restore token, kick off autoLogin --
   async function init() {
-    dbg('init() start');
     try {
       await BleClient.initialize({ androidNeverForLocation: true });
       bleReady = true;
-      dbg('BLE init OK');
     } catch (e) {
-      dbg('BLE init FAILED: ' + (e && e.message || e));
       console.error('[bridge] BLE init failed', e);
     }
     try { await KeepAwake.keepAwake(); } catch (e) { /* not fatal */ }
@@ -204,7 +147,6 @@ var Bridge = (function () {
   // in blocks.md). Matching that proven approach instead of the filtered
   // one until confirmed safe to filter.
   async function startScan() {
-    dbg('startScan() bleReady=' + bleReady);
     if (!bleReady) { fire('scanResult', { devices: [] }); return; }
     foundDevices = {};
     try {
@@ -212,17 +154,13 @@ var Bridge = (function () {
         {},
         function (result) {
           var name = result.device.name || result.localName || '';
-          dbg('seen: "' + name + '" ' + result.device.deviceId + ' rssi=' + result.rssi);
           if (name.indexOf('XEBEX') === -1) return; // same name filter AI2 used
           if (foundDevices[result.device.deviceId]) return;
           foundDevices[result.device.deviceId] = name;
-          dbg('MATCH: ' + name);
           emitScanResult();
         }
       );
-      dbg('requestLEScan() call returned OK, listening...');
     } catch (e) {
-      dbg('requestLEScan FAILED: ' + (e && e.message || e));
       console.error('[bridge] scan failed', e);
       fire('scanResult', { devices: [] });
     }
@@ -259,21 +197,17 @@ var Bridge = (function () {
   // every single attempt. 8000ms below is comfortably above that observed
   // ~3s, with margin - not copied from anywhere, just measured.
   async function connect(deviceId) {
-    dbg('connect(' + deviceId + ') connecting=' + connecting);
     if (!deviceId) { fire('connectResult', { success: false, error: 'no device' }); return; }
-    if (connecting) { dbg('connect() already in flight, ignoring overlapping call'); return; }
+    if (connecting) { return; }
     connecting = true;
     try {
       await stopScan();
       await BleClient.connect(deviceId, onUnexpectedDisconnect, { timeout: 8000 });
       connectedId = deviceId;
       skipNextFrame = true; // see onFtmsFrame: the rower's first push is a stale cached reading, not live data
-      dbg('GATT connected, starting notifications...');
       await BleClient.startNotifications(deviceId, FTMS_SERVICE, FTMS_CHAR, onFtmsFrame);
-      dbg('notifications started OK');
       fire('connectResult', { success: true });
     } catch (e) {
-      dbg('connect FAILED: ' + (e && e.message || e));
       fire('connectResult', { success: false, error: String(e && e.message || e) });
     } finally {
       connecting = false;
@@ -312,9 +246,9 @@ var Bridge = (function () {
     // read bytes belonging to a different notification.
     var bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     var csv = Array.prototype.join.call(bytes, ',');
-    dbg('FTMS frame: ' + bytes.length + ' bytes [' + csv + ']' + (skipNextFrame ? ' (SKIPPED: stale initial read)' : ''));
 
-    // FIXED: confirmed on-device via the persistent log - right after
+    // FIXED: confirmed on-device via a persistent debug log while bringing
+    // BLE up - right after
     // subscribing, the rower immediately pushes ONE notification carrying
     // its last-held reading from whenever someone last rowed (e.g. spm=31,
     // frozen, unchanged for 5+ minutes and across a full disconnect/
