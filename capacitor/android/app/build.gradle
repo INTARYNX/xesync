@@ -20,7 +20,7 @@ android {
         // ai2/youngandroidproject/project.properties) - same package name
         // now, so Android/Play treat this as an update, not a new app.
         // Bump both on every future release.
-        versionCode 13
+        versionCode 14
         versionName "2.03"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
