@@ -17,6 +17,7 @@
     <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
     <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
     <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
+    <span id="tbar-version" class="tbar-version"></span>
     <div id="tbar-user"></div>
   </div>
 
@@ -27,31 +28,30 @@
   </div>
 
   <!-- ── LOGIN ─────────────────────────────────────────── -->
-  <div id="screen-login" class="screen active" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+  <div id="screen-login" class="screen active fit-screen">
     <h1>XESYNC</h1>
-    <div id="offline-notice" style="display:none;font-size:0.85em;color:#886;letter-spacing:0.1em;text-align:center;margin-bottom:16px;padding:10px;border:1px solid #332200;background:#1a1000;max-width:320px;">
+    <div id="offline-notice" style="display:none;font-size:0.85em;color:#886;letter-spacing:0.1em;text-align:center;margin-bottom:clamp(8px,3vh,16px);padding:10px;border:1px solid #332200;background:#1a1000;max-width:320px;">
       CONNECT TO INTERNET TO LOG IN
     </div>
     <input type="text"     id="username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="password" placeholder="password">
     <button class="btn primary" onclick="doLogin()">LOGIN</button>
-    <button class="btn" onclick="goScreen('register')" style="margin-top:20px;opacity:0.7;">CREATE ACCOUNT</button>
+    <button class="btn" onclick="goScreen('register')" style="margin-top:clamp(6px,3vh,20px);opacity:0.7;">CREATE ACCOUNT</button>
     <div class="status-msg" id="login-status"></div>
-    <div class="app-version" id="app-version"></div>
   </div>
 
   <!-- ── REGISTER ─────────────────────────────────────── -->
-  <div id="screen-register" class="screen" style="overflow-y:auto;justify-content:flex-start;padding-top:30px;">
+  <div id="screen-register" class="screen fit-screen">
     <h1>CREATE ACCOUNT</h1>
     <input type="text"     id="reg-username" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="email"    id="reg-email"    placeholder="email"    autocomplete="off" autocorrect="off" autocapitalize="off">
     <input type="password" id="reg-password" placeholder="password (min 8 chars)">
-    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.8em;color:#888;max-width:320px;margin:10px 0;line-height:1.4;">
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85em;color:#888;max-width:320px;margin:clamp(6px,1.2vh,10px) 0;line-height:1.3;">
       <input type="checkbox" id="reg-consent" style="width:auto;margin-top:3px;">
       <span>I agree to the privacy policy and consent to my data being stored to provide the service.</span>
     </label>
     <button class="btn primary" onclick="doRegister()">CREATE</button>
-    <button class="btn" onclick="goScreen('login')" style="margin-top:10px;opacity:0.7;">BACK</button>
+    <button class="btn" onclick="goScreen('login')" style="opacity:0.7;">BACK</button>
     <div class="status-msg" id="register-status"></div>
   </div>
 
@@ -61,7 +61,7 @@
   </div>
 
   <!-- ── SCAN ──────────────────────────────────────────── -->
-  <div id="screen-scan" class="screen" style="justify-content:flex-start;padding-top:20px;overflow-y:auto;padding-bottom:40px;">
+  <div id="screen-scan" class="screen fit-screen">
     <div id="scan-idle">
       <h1 style="opacity:0.4;">XESYNC</h1>
       <div id="scan-offline-msg" style="display:none;text-align:center;margin-top:24px;">
@@ -72,7 +72,7 @@
     <div id="scan-active">
       <div id="pulse-ring"></div>
       <div id="scan-label">SCANNING...</div>
-      <button class="btn danger" onclick="stopScan()" style="margin-top:16px;">STOP</button>
+      <button class="btn danger" onclick="stopScan()" style="margin-top:clamp(8px,3vh,16px);flex-shrink:0;">STOP</button>
       <div id="device-list"></div>
     </div>
   </div>

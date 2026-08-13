@@ -27,8 +27,8 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     render();
-    var v = document.getElementById('app-version');
-    if (v) v.textContent = 'v' + XESYNC_CONFIG.appVersion;
+    var tbarVersion = document.getElementById('tbar-version');
+    if (tbarVersion) tbarVersion.textContent = 'v' + XESYNC_CONFIG.appVersion;
     if (params.get('offline') === 'true') goOffline();
     // Strip stray spaces (common from mobile autocorrect) on blur
     ['username', 'reg-username'].forEach(function (id) {

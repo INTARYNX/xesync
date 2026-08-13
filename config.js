@@ -16,5 +16,5 @@ var XESYNC_CONFIG = {
   // Shown on the login screen and useful in bug reports. Must match
   // capacitor/android/app/build.gradle's versionName — bump both together
   // on every release, there is no build step that syncs them automatically.
-  appVersion: '2.03'
+  appVersion: '2.04'
 };

@@ -283,8 +283,12 @@ Xebex air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
 
 - [x] Migrate backend to PostgreSQL + PostgREST
 - [x] Email verification flow
-- [ ] Multi-session history view
-- [ ] Password reset by email
+- [x] Password reset by email (`request_password_reset` / `reset_password_with_token`)
+- [x] Workout history view (`home.html` — card list + detail modal via `list_workouts`/`get_workout`)
+- [x] Default-deny permissions + auth-before-write on every mutating RPC
+- [x] Automated tests: `tests/*.test.js` (Node, no deps) + `tests/e2e/` (Playwright)
+- [x] Local dev stack (`dev/docker-compose.yml`) for rehearsing schema changes before prod
+- [ ] Android beta track release (versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 
 ---

@@ -1,5 +1,5 @@
 // =====================================================================
-// app-version.spec.js - the login screen shows XESYNC_CONFIG.appVersion.
+// app-version.spec.js - the top bar shows XESYNC_CONFIG.appVersion.
 //
 // Regression target: config.js's appVersion and
 // capacitor/android/app/build.gradle's versionName are two separate
@@ -12,11 +12,11 @@
 const { test, expect } = require('@playwright/test');
 const { bootLogin } = require('./helpers');
 
-test('login screen shows the configured app version', async ({ page }) => {
+test('top bar shows the configured app version', async ({ page }) => {
   await bootLogin(page);
-  await expect(page.locator('#app-version')).toHaveText(/^v\d+\.\d+/);
+  await expect(page.locator('#tbar-version')).toHaveText(/^v\d+\.\d+/);
   const [displayed, configured] = await Promise.all([
-    page.locator('#app-version').textContent(),
+    page.locator('#tbar-version').textContent(),
     page.evaluate(() => window.XESYNC_CONFIG.appVersion)
   ]);
   expect(displayed).toBe('v' + configured);

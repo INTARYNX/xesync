@@ -399,7 +399,7 @@ just intended. `pgsql/migrate.sh`'s permission-surface check
 (`EXPECTED_WEB_ANON_FUNCS`) is part of that: it fails loudly if a migration
 silently changes what `web_anon` can reach, in either direction.
 
-`config.js`'s `appVersion` (shown on the login screen) and
+`config.js`'s `appVersion` (shown in the top bar) and
 `build.gradle`'s `versionName` are two separate strings with no build step
 that syncs them — bump both by hand on every release. It exists for
 correlating a bug report to a build, not as an enforcement mechanism; there

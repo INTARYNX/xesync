@@ -50,10 +50,28 @@ body {
 }
 .screen.active { display: flex; }
 
+/* Login/register/scan: this app is landscape-locked (see MainActivity), so
+   the viewport is often only ~360-420px tall on a real phone - not a rare
+   edge case. Every vertical gap here is clamp()'d to vh so the form
+   compresses to fit that space instead of relying on scrolling to reach
+   it. Centered (not flex-start): on the far more common case of a normal
+   or tall screen, flex-start left the form pinned under the top bar with
+   a dead block of empty space below it - center uses that space instead.
+   Safe to center now that content is verified to fit at minimum realistic
+   height (measured 0px overflow @ 360px), so there's nothing left above
+   the fold for centering to hide; overflow-y:auto stays only as a
+   last-resort safety net (e.g. extreme OS-level font scaling). */
+.fit-screen {
+  justify-content: center;
+  padding-top: clamp(10px, 2.8vh, 30px);
+  padding-bottom: clamp(10px, 2.8vh, 30px);
+  overflow-y: auto;
+}
+
 h1 {
-  font-size: 1.4em;
+  font-size: clamp(1.05em, 4vh, 1.5em);
   letter-spacing: 0.15em;
-  margin-bottom: 32px;
+  margin-bottom: clamp(10px, 3vh, 32px);
 }
 
 input {
@@ -61,11 +79,11 @@ input {
   border: 1px solid #333;
   color: #fff;
   font-family: inherit;
-  font-size: 1em;
-  padding: 12px 16px;
+  font-size: 1.1em;
+  padding: clamp(8px, 2vh, 12px) 16px;
   width: 100%;
   max-width: 320px;
-  margin-bottom: 10px;
+  margin-bottom: clamp(6px, 1.5vh, 10px);
   border-radius: 2px;
   outline: none;
 }
@@ -76,8 +94,8 @@ input:focus { border-color: #555; }
   color: #fff;
   border: 1px solid #333;
   font-family: inherit;
-  font-size: 1em;
-  padding: 12px 24px;
+  font-size: 1.1em;
+  padding: clamp(8px, 2vh, 12px) 24px;
   cursor: pointer;
   border-radius: 2px;
   width: 100%;
@@ -85,30 +103,26 @@ input:focus { border-color: #555; }
   letter-spacing: 0.08em;
   text-align: center;
 }
-.btn + .btn { margin-top: 10px; }
+.btn + .btn { margin-top: clamp(6px, 2.2vh, 10px); }
 .btn:active { background: #1a1a1a; }
 .btn.primary { border-color: #00A2E8; color: #00A2E8; }
 .btn.danger  { border-color: #f44336; color: #f44336; }
 .btn:disabled { opacity: 0.4; cursor: default; }
 
 .status-msg {
-  font-size: 0.85em;
+  font-size: 0.95em;
   color: #f44336;
-  margin-top: 14px;
+  margin-top: clamp(6px, 2.2vh, 14px);
   min-height: 1.2em;
   text-align: center;
 }
 
-.app-version {
-  font-size: 0.7em;
-  color: #444;
-  letter-spacing: 0.1em;
-  margin-top: 28px;
-  text-align: center;
-}
-
 /* Scan screen */
-#scan-idle, #scan-active { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; flex: 1; }
+/* min-height:0 overrides the flex default of min-height:auto, which would
+   otherwise force this box to at least its content's size and push
+   #screen-scan into overflow instead of letting #device-list do its own
+   internal scrolling below. */
+#scan-idle, #scan-active { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; flex: 1; min-height: 0; }
 #scan-active { display: none; }
 
 #pulse-ring {
@@ -117,10 +131,17 @@ input:focus { border-color: #555; }
   border-radius: 50%;
   border: 3px solid #00A2E8;
   position: relative;
-  margin: 30px 0 20px;
+  /* margin-top has a 36px floor, not the usual small clamp floor: the
+     ::before/::after halos below are 150/190px centered on this 120px box,
+     so they overhang it by (190-120)/2 = 35px on every side. Less than
+     35px clearance above and the halo's top gets rendered above this
+     element's own box - into negative scroll territory that can never be
+     scrolled to, i.e. invisibly clipped. Confirmed on a real device. */
+  margin: clamp(36px, 4vh, 40px) 0 clamp(20px, 3vh, 20px);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 #pulse-ring::before, #pulse-ring::after {
   content: '';
@@ -135,9 +156,9 @@ input:focus { border-color: #555; }
   0%   { opacity: 0.6; transform: scale(0.85); }
   100% { opacity: 0;   transform: scale(1.1); }
 }
-#scan-label { font-size: 0.9em; color: #fff; letter-spacing: 0.15em; margin-top: 50px; margin-bottom: 24px; }
+#scan-label { font-size: 1em; color: #fff; letter-spacing: 0.15em; margin-top: clamp(20px, 5vh, 50px); margin-bottom: clamp(12px, 3vh, 24px); flex-shrink: 0; }
 
-#device-list { width: 100%; flex: 1; overflow-y: auto; overscroll-behavior: none; }
+#device-list { width: 100%; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; }
 .device-item {
   display: flex;
   justify-content: space-between;
@@ -204,6 +225,13 @@ input:focus { border-color: #555; }
 .tbar-btn.danger:active { color: #f44; background: #110000; }
 .tbar-btn.accent { color: #00A2E8; }
 .tbar-btn.accent:active { color: #00A2E8; background: #00111a; }
+.tbar-version {
+  font-size: 0.7em;
+  color: #444;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  align-self: center;
+}
 #tbar-user { display: flex; align-items: center; margin-left: 8px; margin-right: 4px; }
 .tbar-avatar {
   width: 30px;
