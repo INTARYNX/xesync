@@ -288,7 +288,7 @@ Xebex air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
 - [x] Default-deny permissions + auth-before-write on every mutating RPC
 - [x] Automated tests: `tests/*.test.js` (Node, no deps) + `tests/e2e/` (Playwright)
 - [x] Local dev stack (`dev/docker-compose.yml`) for rehearsing schema changes before prod
-- [ ] Android beta track release (versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
+- [x] Android Play Store release (production; versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 
 ---

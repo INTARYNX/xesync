@@ -171,41 +171,39 @@ reachable by typing a URL on a packaged native app anyway).
 ## Publishing (Play Store, via API — no Play Console UI after first setup)
 
 See [`../migration-ai2-capacitor.md`](../migration-ai2-capacitor.md) for
-the full walkthrough. Short version, split by who does what:
+the full walkthrough this was based on.
 
-**Only you can do these (need your Play Console / Google Cloud access):**
-1. ✅ Play App Signing was already active on the existing listing (the AI2
-   app predates this session) → requested an **upload key reset** instead,
-   since nobody has AI2's original upload key. Submitted, awaiting Google's
-   review (can take hours to a few days - identity verification on their
-   end, nothing to do but wait).
-2. Create a Google Cloud **service account**, download its JSON key, link
-   + authorize it in Play Console (Settings → API access, "Release
-   manager" role) — this is what lets `fastlane` publish without opening
-   the console again. **Not done yet** - blocks the first `fastlane deploy`
-   (steps below are ready and waiting on this).
-
-**Already done:**
-- `keys/upload.keystore` generated. `keys/upload_certificate.pem` is its
-  exported public certificate (safe to share - that's what Google's key
-  reset review actually wants, not the keystore itself).
-- `android/app/build.gradle` wired to sign release builds with it.
-- `.\build-capacitor.ps1 -Release` produces a signed
-  `android/app/build/outputs/bundle/release/app-release.aab` — built and
-  signature-verified once already (`jarsigner -verify` → `jar verified`).
+**Status: live in Production on the Play Store**, under the same
+listing/package as the original AI2 app (`appinventor.ai_intarynx.XEsync`)
+so existing installs/reviews carried over. Full setup is done:
+- Upload key reset (needed since nobody had AI2's original upload key) was
+  submitted and approved by Google.
+- Google Cloud **service account** created and linked + authorized in Play
+  Console (Settings → API access, "Release manager" role) — `fastlane`
+  publishes without ever opening the console again.
+- `keys/upload.keystore` generated (`keys/upload_certificate.pem` is its
+  exported public certificate). `android/app/build.gradle` wired to sign
+  release builds with it.
 - App icon + splash generated from `site/logo.png` (AI2's original icon,
-  1254×1254 - big enough for adaptive icon generation) via
-  `npx capacitor-assets generate --android`. Source lives in
-  `resources/icon.png`; rerun that command if the icon ever changes.
+  1254×1254) via `npx capacitor-assets generate --android`. Source lives
+  in `resources/icon.png`; rerun that command if the icon ever changes.
 - fastlane installed **inside the podman image**, not on Windows -
   RubyInstaller+MSYS2 is its own mess to maintain, and fastlane only runs
   at publish time, not on every build. `android/fastlane/Appfile` and
   `Fastfile` are in place; `Appfile`'s `json_key_file` points at
-  `/work/capacitor/keys/play-store-sa.json` (container path) - drop the
-  service account JSON there once step 2 above is done, then:
-  ```powershell
-  podman run --rm -v "${PWD}\..:/work:Z" -w /work/capacitor/android xesync-android-build "fastlane deploy"
-  ```
+  `/work/capacitor/keys/play-store-sa.json` (container path, gitignored).
+
+**Releasing an update:** bump `versionCode`/`versionName` in
+`android/app/build.gradle` and `appVersion` in `../config.js` (see the
+comment there - no build step syncs them automatically), then:
+```powershell
+.\build-capacitor.ps1 -Release
+podman run --rm -v "${PWD}\..:/work:Z" -w /work/capacitor/android xesync-android-build "fastlane deploy"
+```
+`android/fastlane/Fastfile`'s `deploy` lane targets `production` with
+`release_status: 'completed'` - it rolls out immediately, not a draft
+awaiting manual review. Switch that to `'draft'` first if a release ever
+needs a manual check in Play Console before going live.
 
 ### ⚠️ What's actually irreplaceable here
 
