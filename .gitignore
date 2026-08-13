@@ -1,7 +1,11 @@
 tools/
 plsql/
 dist/
-dev/
+# was a blanket `dev/` before; narrowed to just this one file so
+# dev/docker-compose.yml and dev/db-init/ (local test stack) can be
+# tracked - gitignore can't un-ignore a path whose parent directory is
+# itself excluded, so keeping dev/ as a whole ignored wasn't an option.
+dev/postgresql.md
 SpaceGrotesk-Regular.ttf
 deploy.config.ps1
 web.cmd
@@ -16,3 +20,9 @@ capacitor/android/local.properties
 capacitor/node_modules/
 capacitor/www/
 capacitor/.platform-tools-win/
+
+# Root-level test tooling (tests/*.test.js + Playwright)
+node_modules/
+tests/e2e/.build/
+playwright-report/
+test-results/

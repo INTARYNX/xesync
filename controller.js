@@ -20,14 +20,15 @@
     saveAck:       function ()  { if (ui.token) showHome(); },
     uploadWorkout: onUploadWorkout,
     tagCleared:    function ()  {},
-    goHome:        showHome,
-    rawFtms:       function (csv) { ingestData(csv); }
+    goHome:        showHome
   });
 
   bootTimer = setTimeout(finishBoot, 1500);
 
   document.addEventListener('DOMContentLoaded', function () {
     render();
+    var v = document.getElementById('app-version');
+    if (v) v.textContent = 'v' + XESYNC_CONFIG.appVersion;
     if (params.get('offline') === 'true') goOffline();
     // Strip stray spaces (common from mobile autocorrect) on blur
     ['username', 'reg-username'].forEach(function (id) {
@@ -349,12 +350,13 @@ function onFtmsData(data) {
 }
 
 function logRaw(data) {
+  if (!ui.token) return;   // server rejects tokenless calls; don't bother it
   var d = new Date();
   var p = function (n, w) { return String(n).padStart(w || 2, '0'); };
   var dateStr = p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' +
                 p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' +
                 p(d.getMilliseconds(), 3);
-  Api.logRawData(dateStr, data);
+  Api.logRawData(ui.token, dateStr, data);
 }
 
 function onUploadWorkout(msg) {

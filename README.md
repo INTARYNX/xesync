@@ -113,9 +113,13 @@ The app calls PostgREST RPC endpoints under `apiBaseUrl/rpc/*`:
 | POST | `/rpc/validate_token`      | `{token}` → `{status, username}`; extends expiry |
 | POST | `/rpc/save_workout`        | `{token, workout, data}` → persists summary + samples |
 | POST | `/rpc/list_workouts`       | `{token}` → workouts for the user, newest first |
-| POST | `/rpc/log_rawdata`         | `{date, data}` → raw FTMS frame (debug, guarded by `logRawData`) |
+| POST | `/rpc/log_rawdata`         | `{token, date, data}` → raw FTMS frame (debug, guarded by `logRawData`) |
 
 All endpoints return a JSON array with a `status` field (`"success"` / `"error"`). See [API.md](API.md) for full schemas.
+
+Every endpoint that writes resolves its token before the first write, and the
+schema grants `EXECUTE` on an allowlist basis rather than revoking case by
+case — see the Security notes in [API.md](API.md).
 
 ### Deploy (`deploy.config.ps1`)
 
@@ -186,6 +190,75 @@ Add `?offline=true` to start in the offline (no-login) flow. The two flags
 can be combined: `?debug=true&offline=true`.
 
 All debug behaviour lives in `debug.js` and `debug_sim.js`.
+
+### Unit tests
+
+```bash
+node --test "tests/*.test.js"
+```
+
+No npm install, no build step, no dependencies — Node's built-in test runner
+against the source files as they ship. `tests/harness.js` loads the browser
+IIFEs into a `vm` sandbox with a fake clock, a fake DOM and a captured
+`setInterval`, so session timing is deterministic rather than wall-clock
+dependent.
+
+Covered: packet decoding against a hand-checked fixture frame, malformed-frame
+rejection, activity detection, session start/pause/resume, mid-session counter
+resets, the sampling rate limit and cap, pace derivation, workout-id
+uniqueness, payload shape, and bridge message dispatch.
+
+### End-to-end (Playwright)
+
+```bash
+npm install                      # once
+npx playwright install chromium  # once
+npm run test:e2e
+```
+
+Drives a real Chromium against the debug simulator (`?debug=true`) — the
+actual `app.html`, actual `rowing_display.js` WebGL scene, actual
+`ftms_integration.js` state machine, with `debug_sim.js` standing in for BLE.
+`tests/e2e/build-app.js` reproduces `deploy.ps1`'s inlining step (without its
+SCP/git-push side effects) so the page under test has the same DOM shape
+production ships, not raw unbuilt source.
+
+Two projects:
+
+- **`client`** — no backend. Covers the login-screen overscroll fix and the
+  full connect → row → pause → save/exit lifecycle. `apiBaseUrl` is baked in
+  as an address nothing listens on, so a test that accidentally triggers a
+  real network call fails loudly instead of quietly hitting production.
+- **`db-integration`** — needs the local stack below running. Logs in through
+  the real form, runs a debug session, saves it through the real
+  `save_workout()`, then confirms via `list_workouts()` that it actually
+  landed in Postgres. Skips itself if the stack isn't up.
+
+Run one project at a time with `npx playwright test --project=client` /
+`--project=db-integration`. See [tests/e2e/README.md](tests/e2e/README.md)
+for how the two Chromium builds and the fake-vs-real backend split work.
+
+### Local database (`dev/docker-compose.yml`)
+
+A disposable Postgres 16 + PostgREST 12.2.3 stack, pinned to the exact
+versions running in production, for testing schema changes and for the
+`db-integration` Playwright project:
+
+```bash
+podman compose -f dev/docker-compose.yml up -d      # start
+podman compose -f dev/docker-compose.yml down -v    # stop, wipe data
+```
+
+`dev/db-init/` mirrors the manual prod setup (roles, schema, grants — see
+[pgsql/API.md](pgsql/API.md#security-notes)) and seeds one pre-verified user
+(`e2e_test_user`) for the Playwright specs, since there's no local SMTP to
+complete real email verification. PostgREST comes up on `localhost:3001`,
+Postgres on `localhost:5433`.
+
+Applying `pgsql/xesync_schema.sql` against this stack is exactly what
+`pgsql/migrate.sh` does against production — reapply the whole idempotent
+file — so it's a faithful rehearsal of a real migration, permission checks
+included.
 
 ---
 

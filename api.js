@@ -34,8 +34,11 @@ var Api = (function () {
     saveWorkout: function (token, workout, data) {
       return post('/rpc/save_workout', { token: token, workout: workout, data: data });
     },
-    logRawData: function (dateStr, data) {
-      return post('/rpc/log_rawdata', { date: dateStr, data: data }).catch(function () {});
+    // Debug-only, and token-gated server-side: ftms_rawdata rows are
+    // attributed to the logged-in user, so an anonymous caller gets nothing.
+    logRawData: function (token, dateStr, data) {
+      return post('/rpc/log_rawdata', { token: token, date: dateStr, data: data })
+        .catch(function () {});
     }
   };
 })();

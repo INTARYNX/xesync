@@ -12,6 +12,10 @@ body.rowing-dashboard {
   margin: 0;
   padding: 1.5rem;
   min-height: 100vh;
+  min-height: 100dvh;
+  /* This page runs inside the app's iframe: without this its overscroll
+     bounces and chains to the shell, reading as the whole app sliding. */
+  overscroll-behavior: none;
 }
 
 .status-msg {

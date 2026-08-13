@@ -1,0 +1,14 @@
+{
+  "name": "xesync",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

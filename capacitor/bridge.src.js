@@ -266,16 +266,20 @@ var Bridge = (function () {
   }
 
   // -- incoming (unused with Capacitor - kept for API parity / debug) ------
+  //
+  // JSON only: { action: "...", ... }. There is no bare-CSV path here, and
+  // there never was a live one - nothing on the Capacitor side calls this.
+  // FTMS frames reach the app through fire('ftmsData', ...) in onFtmsFrame
+  // above, already carrying an explicit action.
   function receive(json) {
     if (!json) return;
     var msg;
     try { msg = typeof json === 'string' ? JSON.parse(json) : json; }
     catch (e) {
-      if (typeof json === 'string' && /^\s*\d/.test(json) && handlers.rawFtms) {
-        handlers.rawFtms(json.trim());
-      }
+      console.warn('[bridge] dropping unparseable message:', String(json).slice(0, 80));
       return;
     }
+    if (!msg || !msg.action) { console.warn('[bridge] message with no action'); return; }
     var fn = handlers[msg.action];
     if (fn) fn(msg); else console.warn('Unknown action:', msg.action);
   }

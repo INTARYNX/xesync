@@ -78,18 +78,43 @@ CREATE TABLE IF NOT EXISTS xesync.workout_strokes (
 CREATE INDEX IF NOT EXISTS idx_strokes_workout ON xesync.workout_strokes (workout_id);
 
 
+-- Verbatim archive of every accepted save_workout() payload, kept so a
+-- parsing change can be replayed against real submissions.
+--
+-- user_id/workout_id are populated only for rows written after the
+-- authentication fix; pre-existing rows were inserted before the caller was
+-- identified at all and are left NULL rather than guessed at. That is also
+-- why user_id is nullable - the column cannot be NOT NULL without
+-- destroying that history.
 CREATE TABLE IF NOT EXISTS xesync.workout_data (
     id          BIGSERIAL PRIMARY KEY,
     data        JSONB,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE xesync.workout_data
+    ADD COLUMN IF NOT EXISTS user_id BIGINT
+    REFERENCES xesync.users(user_id) ON DELETE CASCADE;
 
+ALTER TABLE xesync.workout_data
+    ADD COLUMN IF NOT EXISTS workout_id VARCHAR(50);
+
+CREATE INDEX IF NOT EXISTS idx_workout_data_user ON xesync.workout_data (user_id);
+
+
+-- Debug capture of raw FTMS frames. Written only by log_rawdata(), which
+-- requires a valid session token - see the note on that function.
 CREATE TABLE IF NOT EXISTS xesync.ftms_rawdata (
     id           BIGSERIAL PRIMARY KEY,
     insert_date  TIMESTAMPTZ NOT NULL,
     raw_data     TEXT        NOT NULL
 );
+
+ALTER TABLE xesync.ftms_rawdata
+    ADD COLUMN IF NOT EXISTS user_id BIGINT
+    REFERENCES xesync.users(user_id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_ftms_rawdata_user ON xesync.ftms_rawdata (user_id);
 
 
 CREATE TABLE IF NOT EXISTS xesync.email_queue (
@@ -184,6 +209,20 @@ $$;
 CREATE OR REPLACE FUNCTION xesync.email_from() RETURNS TEXT
 LANGUAGE sql IMMUTABLE AS $$
     SELECT 'XeSync <noreply@enlistia.com>';
+$$;
+
+-- Upload limits. The client samples at most once a second and caps itself at
+-- 15000 samples; these sit above that so a legitimate long session is never
+-- rejected, while a crafted payload can't be used to write unbounded rows.
+CREATE OR REPLACE FUNCTION xesync.max_workout_samples() RETURNS INTEGER
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT 20000;
+$$;
+
+-- ~2MB of JSON. A 15000-sample payload is well under 1MB.
+CREATE OR REPLACE FUNCTION xesync.max_workout_bytes() RETURNS INTEGER
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT 2097152;
 $$;
 
 CREATE OR REPLACE FUNCTION xesync.build_verification_email(p_username TEXT, p_token TEXT)
@@ -356,8 +395,20 @@ BEGIN
 
     RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
 EXCEPTION
+    -- The EXISTS checks above are advisory only - two concurrent
+    -- registrations for the same name/email both pass them and race to the
+    -- INSERT. The unique constraint on user_name and the unique lower(email)
+    -- index are what actually guarantee uniqueness; this turns the loser of
+    -- that race into the same clean message the pre-check would have given,
+    -- instead of a raw constraint-violation string.
+    WHEN unique_violation THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Username or email already registered'::TEXT;
     WHEN OTHERS THEN
-        RETURN QUERY SELECT 'error'::TEXT, ('Registration failed: ' || SQLERRM)::TEXT;
+        -- SQLERRM used to be returned to the caller here, exposing internal
+        -- column, constraint and statement detail to an unauthenticated
+        -- endpoint. It belongs in the server log only.
+        RAISE WARNING 'register failed for %: %', v_clean_username, SQLERRM;
+        RETURN QUERY SELECT 'error'::TEXT, 'Registration failed'::TEXT;
 END;
 $$;
 
@@ -524,17 +575,49 @@ DECLARE
     v_summary JSONB;
     v_sample  JSONB;
     v_idx     INTEGER := 0;
+    v_samples INTEGER;
 BEGIN
     IF token IS NULL OR workout IS NULL OR data IS NULL THEN
         RETURN QUERY SELECT 'error'::TEXT, 'Missing token, workout or data'::TEXT;
         RETURN;
     END IF;
 
-    INSERT INTO xesync.workout_data(data) VALUES (data);
-
+    -- AUTHENTICATE FIRST. Nothing above this point writes.
+    --
+    -- This used to INSERT the submitted JSON into workout_data before
+    -- resolving the token, which made the RPC an unauthenticated write:
+    -- anyone who could reach PostgREST could grow that table without ever
+    -- holding an account. Every write below is now behind a resolved user.
     v_user_id := xesync.user_id_from_token(token);
     IF v_user_id IS NULL THEN
         RETURN QUERY SELECT 'error'::TEXT, 'Invalid or expired token'::TEXT;
+        RETURN;
+    END IF;
+
+    IF length(workout) > 50 THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Workout id too long'::TEXT;
+        RETURN;
+    END IF;
+
+    -- Bound the payload before doing any per-sample work, so an oversized
+    -- submission costs one length check rather than N inserts.
+    IF length(data::TEXT) > xesync.max_workout_bytes() THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Workout payload too large'::TEXT;
+        RETURN;
+    END IF;
+
+    -- IS DISTINCT FROM, not <>: jsonb_typeof() returns SQL NULL when the key
+    -- is absent entirely, and a plain <> would evaluate to NULL and fall
+    -- through instead of rejecting.
+    IF jsonb_typeof(data -> 'samples') IS DISTINCT FROM 'array'
+       OR jsonb_typeof(data -> 'summary') IS DISTINCT FROM 'object' THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Malformed workout payload'::TEXT;
+        RETURN;
+    END IF;
+
+    v_samples := jsonb_array_length(data -> 'samples');
+    IF v_samples > xesync.max_workout_samples() THEN
+        RETURN QUERY SELECT 'error'::TEXT, 'Too many samples'::TEXT;
         RETURN;
     END IF;
 
@@ -542,6 +625,9 @@ BEGIN
         RETURN QUERY SELECT 'success'::TEXT, 'Data already processed'::TEXT;
         RETURN;
     END IF;
+
+    INSERT INTO xesync.workout_data(user_id, workout_id, data)
+    VALUES (v_user_id, workout, data);
 
     v_summary := data -> 'summary';
 
@@ -583,8 +669,16 @@ BEGIN
 
     RETURN QUERY SELECT 'success'::TEXT, NULL::TEXT;
 EXCEPTION
+    WHEN unique_violation THEN
+        -- Concurrent duplicate upload of the same workout id; the row the
+        -- other call inserted is authoritative and equivalent.
+        RETURN QUERY SELECT 'success'::TEXT, 'Data already processed'::TEXT;
     WHEN OTHERS THEN
-        RETURN QUERY SELECT 'error'::TEXT, ('Failed to process workout: ' || SQLERRM)::TEXT;
+        -- SQLERRM goes to the server log, never to the client: it can carry
+        -- column names, constraint names and fragments of the statement.
+        RAISE WARNING 'save_workout failed for user % workout %: %',
+            v_user_id, workout, SQLERRM;
+        RETURN QUERY SELECT 'error'::TEXT, 'Failed to process workout'::TEXT;
 END;
 $$;
 
@@ -641,15 +735,81 @@ $$;
 -- RAW FTMS LOGGING (debug)
 -- ============================================================================
 
+-- log_rawdata(date, data) - the original two-argument form - was SECURITY
+-- DEFINER, granted to web_anon, with no token check anywhere in the body:
+-- an unauthenticated, public, write-only endpoint into ftms_rawdata.
+--
+-- It is NOT dropped. The Capacitor build bakes api.js into the APK at
+-- build time rather than fetching it from this server, so every app
+-- version already installed from Google Play up to and including
+-- versionCode 14 is running a frozen copy that calls exactly
+-- log_rawdata(date, data) - no token, because that build predates one
+-- existing. PostgREST resolves /rpc/log_rawdata by matching the JSON
+-- body's keys against a function's parameter names, so dropping this
+-- overload turns every call from an already-installed app into a
+-- "function not found" error the moment this migration runs, not
+-- whenever that user happens to update.
+--
+-- So the two-argument form stays, permanently reachable, but reduced to a
+-- no-op: it accepts the call and reports success (matching what those
+-- clients already expect, since the original call is wrapped in
+-- `.catch(() => {})` and ignored either way) without writing anything an
+-- anonymous caller supplied. That closes the actual hole - arbitrary
+-- unauthenticated data no longer reaches the table - without changing
+-- observable behaviour for any client that can't be made to send a token.
+--
+-- New clients (versionCode 15+) call the three-argument, token-checked
+-- overload below instead; see api.js / controller.js.
 CREATE OR REPLACE FUNCTION xesync.log_rawdata(date TEXT, data TEXT)
+RETURNS TABLE (status TEXT)
+LANGUAGE sql
+AS $$
+    SELECT 'ok'::TEXT;
+$$;
+
+CREATE OR REPLACE FUNCTION xesync.log_rawdata(token TEXT, date TEXT, data TEXT)
 RETURNS TABLE (status TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = xesync, public
 AS $$
+DECLARE
+    v_user_id BIGINT;
+    v_ts      TIMESTAMPTZ;
 BEGIN
-    INSERT INTO xesync.ftms_rawdata (insert_date, raw_data)
-    VALUES (to_timestamp(date, 'DD/MM/YYYY HH24:MI:SS.MS'), data);
+    IF token IS NULL OR data IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT;
+        RETURN;
+    END IF;
+
+    -- Authenticate before writing, same rule as save_workout().
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT 'error'::TEXT;
+        RETURN;
+    END IF;
+
+    -- One frame is 20 values of at most 3 digits plus separators; anything
+    -- an order of magnitude past that is not a frame.
+    IF length(data) > 512 THEN
+        RETURN QUERY SELECT 'error'::TEXT;
+        RETURN;
+    END IF;
+
+    -- to_timestamp() raises on a badly-formed input rather than returning
+    -- NULL, so COALESCE cannot cover this - it needs its own handler. For a
+    -- debug capture, stamping now() beats discarding the frame over a
+    -- device clock formatting quirk.
+    BEGIN
+        v_ts := to_timestamp(date, 'DD/MM/YYYY HH24:MI:SS.MS');
+    EXCEPTION
+        WHEN OTHERS THEN v_ts := now();
+    END;
+    IF v_ts IS NULL THEN v_ts := now(); END IF;
+
+    INSERT INTO xesync.ftms_rawdata (user_id, insert_date, raw_data)
+    VALUES (v_user_id, v_ts, data);
+
     RETURN QUERY SELECT 'ok'::TEXT;
 EXCEPTION
     WHEN OTHERS THEN
@@ -1042,47 +1202,94 @@ $$;
 
 -- ============================================================================
 -- PERMISSIONS
+--
+-- Default-deny. PostgreSQL grants EXECUTE on every new function to PUBLIC
+-- automatically, and PostgREST turns anything web_anon can execute into a
+-- public /rpc/ endpoint. Enumerating functions to revoke one by one means a
+-- helper added later is exposed by default until someone remembers to add a
+-- line here - which is exactly what had happened to user_id_from_token(),
+-- a SECURITY DEFINER token->user_id lookup that was reachable as
+-- /rpc/user_id_from_token because it appeared in no REVOKE list.
+--
+-- So: strip everything first, then grant back only the intended API surface.
+-- A new function is closed until it is named below.
 -- ============================================================================
 
 GRANT USAGE ON SCHEMA xesync TO web_anon;
 
-REVOKE ALL ON FUNCTION xesync.login(TEXT, TEXT)               FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.validate_token(TEXT)            FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.save_workout(TEXT, TEXT, JSONB) FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.list_workouts(TEXT)             FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.log_rawdata(TEXT, TEXT)         FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.verify_email(TEXT)              FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.resend_verification(TEXT)       FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.get_workout(TEXT, TEXT) 		  FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.request_password_reset(TEXT)           FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.reset_password_with_token(TEXT, TEXT)  FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.delete_account(TEXT, TEXT)             FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.export_account(TEXT) FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA xesync FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA xesync FROM web_anon;
+
+-- No direct table access: web_anon reaches data only through the SECURITY
+-- DEFINER functions below, which is what makes the token checks inside them
+-- the only way in.
+REVOKE ALL ON ALL TABLES IN SCHEMA xesync FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA xesync FROM web_anon;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA xesync FROM PUBLIC;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA xesync FROM web_anon;
+
+-- Keep the deny-by-default stance for objects created after this script runs.
+ALTER DEFAULT PRIVILEGES IN SCHEMA xesync REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 
-GRANT EXECUTE ON FUNCTION xesync.login(TEXT, TEXT)               TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.validate_token(TEXT)            TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.save_workout(TEXT, TEXT, JSONB) TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.list_workouts(TEXT)             TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.log_rawdata(TEXT, TEXT)         TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.register(TEXT, TEXT, TEXT)      TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.verify_email(TEXT)              TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.resend_verification(TEXT)       TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)         TO web_anon;
+-- ── Public API surface (PostgREST /rpc/*) ───────────────────────────────
+-- Unauthenticated by nature: they establish or recover an identity.
+GRANT EXECUTE ON FUNCTION xesync.register(TEXT, TEXT, TEXT)             TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.login(TEXT, TEXT)                      TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.verify_email(TEXT)                     TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.resend_verification(TEXT)              TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.request_password_reset(TEXT)           TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.reset_password_with_token(TEXT, TEXT)  TO web_anon;
+
+-- Token-authenticated: each verifies the token itself before doing anything.
+GRANT EXECUTE ON FUNCTION xesync.validate_token(TEXT)                   TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.save_workout(TEXT, TEXT, JSONB)        TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.list_workouts(TEXT)                    TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)                TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.delete_account(TEXT, TEXT)             TO web_anon;
-GRANT EXECUTE ON FUNCTION xesync.export_account(TEXT) TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.export_account(TEXT)                   TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.log_rawdata(TEXT, TEXT, TEXT)          TO web_anon;
+
+-- Legacy no-op, kept reachable only so pre-token app builds (Play Store
+-- versionCode <= 14) get their existing 'ok' response instead of a
+-- PostgREST "function not found" error. Writes nothing. Safe to drop once
+-- no installed app older than the token-aware log_rawdata build remains -
+-- check Play Console's version distribution before removing.
+GRANT EXECUTE ON FUNCTION xesync.log_rawdata(TEXT, TEXT)                TO web_anon;
+
+-- Deliberately NOT granted to web_anon, and listed here so their absence is
+-- a decision rather than an oversight:
+--   user_id_from_token   - internal auth helper
+--   create_user          - admin/bootstrap
+--   reset_password       - admin, no token required
+--   email_queue_claim / _mark_sent / _mark_failed - cron worker only; the
+--     xesync_worker role gets these explicitly in worker/setup_worker.sh,
+--     and the REVOKEs above target only PUBLIC and web_anon so re-running
+--     this file does not strip them
+--   random_hex, build_*_email, and the *_ttl/*_url/max_* config helpers
 
 
-REVOKE ALL ON FUNCTION xesync.create_user(TEXT, TEXT)                      FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.reset_password(TEXT, TEXT)                   FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.email_queue_claim(INTEGER)                   FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.email_queue_mark_sent(BIGINT)                FROM PUBLIC;
-REVOKE ALL ON FUNCTION xesync.email_queue_mark_failed(BIGINT, TEXT)        FROM PUBLIC;
+-- ── Verification ────────────────────────────────────────────────────────
+-- After running this file, this should return exactly the granted list
+-- above and nothing else:
+--
+--   SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args
+--     FROM pg_proc p
+--     JOIN pg_namespace n ON n.oid = p.pronamespace
+--    WHERE n.nspname = 'xesync'
+--      AND has_function_privilege('web_anon', p.oid, 'EXECUTE')
+--    ORDER BY 1, 2;
+--
+-- And this should return zero rows - nothing in the schema reachable by
+-- PUBLIC, which every role inherits:
+--
+--   SELECT p.proname
+--     FROM pg_proc p
+--     JOIN pg_namespace n ON n.oid = p.pronamespace
+--    WHERE n.nspname = 'xesync'
+--      AND has_function_privilege('public', p.oid, 'EXECUTE')
+--    ORDER BY 1;
 
 
 

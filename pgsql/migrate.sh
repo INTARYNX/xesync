@@ -63,6 +63,66 @@ FUNC_COUNT=$(psql_super -d "$DB_NAME" -tAc \
     "SELECT count(*) FROM information_schema.routines WHERE specific_schema='xesync';")
 ok "Schema 'xesync' has $TABLE_COUNT tables and $FUNC_COUNT functions."
 
+# ── Permission surface check ─────────────────────────────────────────────────
+# The schema is default-deny (see the PERMISSIONS section of
+# xesync_schema.sql), but a default-deny policy is only as good as the
+# allowlist actually matching intent - that's exactly how
+# user_id_from_token() ended up reachable by web_anon in the first place:
+# nothing enumerated it as forbidden, so PostgreSQL's implicit PUBLIC grant
+# stood. This turns that audit into something that runs on every future
+# migration instead of a one-time manual check.
+log "Verifying web_anon's function grants…"
+EXPECTED_WEB_ANON_FUNCS=$(cat <<'EOF'
+change_password(text,text,text)
+delete_account(text,text)
+export_account(text)
+get_workout(text,text)
+list_workouts(text)
+log_rawdata(text,text)
+log_rawdata(text,text,text)
+login(text,text)
+register(text,text,text)
+request_password_reset(text)
+resend_verification(text)
+reset_password_with_token(text,text)
+save_workout(text,text,jsonb)
+validate_token(text)
+verify_email(text)
+EOF
+)
+ACTUAL_WEB_ANON_FUNCS=$(psql_super -d "$DB_NAME" -tAc "
+    SELECT p.proname || '(' || array_to_string(ARRAY(
+               SELECT format_type(t, NULL) FROM unnest(p.proargtypes) AS t
+           ), ',') || ')'
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'xesync'
+       AND has_function_privilege('web_anon', p.oid, 'EXECUTE')
+     ORDER BY 1;
+")
+
+if [ "$ACTUAL_WEB_ANON_FUNCS" != "$EXPECTED_WEB_ANON_FUNCS" ]; then
+    echo "--- expected ---"
+    echo "$EXPECTED_WEB_ANON_FUNCS"
+    echo "--- actual ---"
+    echo "$ACTUAL_WEB_ANON_FUNCS"
+    echo "--- diff (expected vs actual) ---"
+    diff <(echo "$EXPECTED_WEB_ANON_FUNCS") <(echo "$ACTUAL_WEB_ANON_FUNCS") || true
+    fail "web_anon's EXECUTE grants don't match the expected allowlist. A function is exposed that shouldn't be (or vice versa) - see the diff above before proceeding."
+fi
+ok "web_anon can reach exactly the intended $(echo "$ACTUAL_WEB_ANON_FUNCS" | wc -l) functions."
+
+log "Verifying PUBLIC has no function grants…"
+PUBLIC_FUNCS=$(psql_super -d "$DB_NAME" -tAc "
+    SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'xesync'
+       AND has_function_privilege('public', p.oid, 'EXECUTE');
+")
+[ -z "$PUBLIC_FUNCS" ] || fail "PUBLIC can execute functions it shouldn't: $PUBLIC_FUNCS"
+ok "PUBLIC has zero function grants in the xesync schema."
+
 # ── Reload PostgREST ────────────────────────────────────────────────────────
 if systemctl is-active --quiet "$POSTGREST_SERVICE"; then
     log "Restarting $POSTGREST_SERVICE…"

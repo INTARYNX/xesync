@@ -11,5 +11,10 @@ var XESYNC_CONFIG = {
 
   // Send every FTMS packet to /rpc/log_rawdata for debugging.
   // Leave false in prod — at ~2 req/sec per user it adds a lot of noise.
-  logRawData: false
+  logRawData: false,
+
+  // Shown on the login screen and useful in bug reports. Must match
+  // capacitor/android/app/build.gradle's versionName — bump both together
+  // on every release, there is no build step that syncs them automatically.
+  appVersion: '2.03'
 };

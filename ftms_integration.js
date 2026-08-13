@@ -17,12 +17,32 @@
 
   // ─────────────────────────────────────────────────────────────────────
   // Config
+  //
+  // DEBUG must be assigned BEFORE anything reads it. `var` hoists the
+  // declaration but not the assignment, so INACTIVITY_MS used to be
+  // computed from `undefined` and was always 5000, never the 10000 the
+  // debug build wants.
   // ─────────────────────────────────────────────────────────────────────
+  var DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
   var INACTIVITY_MS   = DEBUG ? 10000 : 5000;
   var INACTIVITY_TICK = 500;
   var INITIAL_PACE    = 150;
   var PACE_WINDOW_MS  = 30000;
-  var DEBUG = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+  // Activity predicate — see isActive(). A packet counts as "rowing" when
+  // any of these move, not just SPM, so a single zero-SPM frame mid-stroke
+  // (or a brief BLE stall serving a stale frame) can't fake inactivity.
+  var ACTIVE_WATTS_MIN = 10;
+
+  // Sampling: at MOST one sample per second. Actual spacing follows packet
+  // arrival, so intervals vary — samples are not a fixed 1 Hz series.
+  var SAMPLE_MIN_INTERVAL_S = 1.0;
+
+  // Upper bound on samples kept for one session. At ~1 Hz this is ~4h of
+  // rowing; past that we stop growing the array rather than build a payload
+  // the server will reject.
+  var MAX_SAMPLES = 15000;
 
   // ─────────────────────────────────────────────────────────────────────
   // Visual debug log (only active when ?debug=true)
@@ -67,31 +87,73 @@
       rawDist:       0,
       rawStrokes:    0,
       rawCals:       0,
-      paceSeconds:   INITIAL_PACE,
+      // Two distinct quantities, deliberately not merged:
+      //   machinePace — whatever the rower reported in the last frame.
+      //                 Instantaneous and noisy.
+      //   rollingPace — derived from distance covered over a 30s window.
+      //                 Smoothed; this is what the UI shows and what gets
+      //                 stored per sample.
+      machinePace:   INITIAL_PACE,
+      rollingPace:   INITIAL_PACE,
       paceHistory:   [],
-      samples:       []
+      samples:       [],
+      droppedSamples: 0
     };
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Parsing — Xebex FTMS: 20 bytes, big = byte[hi]*255 + byte[lo]
+  // Parsing — Xebex FTMS
+  //
+  // A frame is 20 comma-separated byte values. Multi-byte fields use the
+  // machine's own odd encoding: value = byte[hi] * 255 + byte[lo] (255, not
+  // 256 — that is what the hardware actually sends, not a typo).
+  //
+  // The layout lives here as data rather than as offsets inlined into the
+  // object literal, so the wire format is stated once and readable next to
+  // the fixtures in tests/ftms.test.js.
   // ─────────────────────────────────────────────────────────────────────
+  var PACKET_BYTES = 20;
+
+  var PACKET_LAYOUT = {
+    spm:      { byte: 2,           scale: 0.5 },  // half-strokes per minute
+    strokes:  { hi: 4,  lo: 3  },
+    distance: { hi: 6,  lo: 5  },                 // metres
+    pace:     { hi: 9,  lo: 8  },                 // sec / 500m, as reported
+    watts:    { hi: 11, lo: 10 },
+    cals:     { hi: 13, lo: 12 },
+    hr:       { byte: 16 },                       // HR_ABSENT when no strap
+    elapsed:  { hi: 19, lo: 18 }                  // seconds
+  };
+
+  var HR_ABSENT = 255;
+
+  // Diagnostics — distinguishes "BLE went quiet" from "BLE is talking but
+  // we reject every frame", which are very different hardware problems.
+  var metrics = { packets: 0, badPackets: 0, lastBadSample: null };
+
   function parsePacket(csv) {
-    if (!csv) return null;
+    if (!csv) { noteBadPacket(csv); return null; }
     var b = csv.split(',').map(function (s) { return parseInt(s, 10); });
-    if (b.length < 20 || b.some(isNaN)) return null;
-    var u16 = function (hi, lo) { return b[hi] * 255 + b[lo]; };
-    return {
-      t:        Date.now(),
-      spm:      b[2] * 0.5,
-      strokes:  u16(4, 3),
-      distance: u16(6, 5),
-      pace:     u16(9, 8),
-      watts:    u16(11, 10),
-      cals:     u16(13, 12),
-      hr:       b[16],
-      elapsed:  u16(19, 18)
-    };
+    if (b.length < PACKET_BYTES || b.some(isNaN)) { noteBadPacket(csv); return null; }
+
+    var p = { t: Date.now() };
+    for (var field in PACKET_LAYOUT) {
+      if (!Object.prototype.hasOwnProperty.call(PACKET_LAYOUT, field)) continue;
+      var f = PACKET_LAYOUT[field];
+      var raw = f.byte !== undefined ? b[f.byte] : (b[f.hi] * 255 + b[f.lo]);
+      p[field] = f.scale ? raw * f.scale : raw;
+    }
+    metrics.packets++;
+    return p;
+  }
+
+  function noteBadPacket(csv) {
+    metrics.badPackets++;
+    metrics.lastBadSample = typeof csv === 'string' ? csv.slice(0, 80) : String(csv);
+    // Only every 25th, so a fully-misaligned stream doesn't flood the log.
+    if (metrics.badPackets % 25 === 1) {
+      dbg('BAD PACKET #' + metrics.badPackets + ' ' + metrics.lastBadSample);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -118,7 +180,34 @@
     return (now - session.startedAt - pausedMs) / 1000;
   }
 
+  // Two predicates, deliberately not the same one.
+  //
+  // isActive() keeps an ALREADY-RUNNING session alive and is liberal: any
+  // forward progress counts, so a single zero-SPM frame mid-stroke — or a
+  // stale frame served during a BLE hiccup — can't be mistaken for the user
+  // stopping. That was the old `spm > 0` failure mode.
+  //
+  // isSessionStart() wakes a session from IDLE/PAUSED and is deliberately
+  // stricter: it ignores distance, because a flywheel coasting down after
+  // the user stops still creeps the distance counter for a few seconds. On
+  // the liberal predicate that creep would auto-resume a session the user
+  // just paused on purpose.
+  function isActive(p, prev) {
+    if (isSessionStart(p, prev)) return true;
+    if (!prev) return false;
+    return p.distance > prev.distance;
+  }
+
+  function isSessionStart(p, prev) {
+    if (p.spm > 0) return true;
+    if (p.watts >= ACTIVE_WATTS_MIN) return true;
+    return !!prev && p.strokes > prev.strokes;
+  }
+
   function updatePace(prev, curr) {
+    // The machine's own reading, kept as-is for reference/diagnostics.
+    if (isFinite(curr.pace) && curr.pace > 0) session.machinePace = curr.pace;
+
     var now = curr.t;
     var currentTotalDist = totalDistance();
     session.paceHistory.push({ t: now, dist: currentTotalDist });
@@ -132,22 +221,25 @@
     var dTime = (now - oldestPoint.t) / 1000;
     if (dDist > 0 && dTime > 0.5) {
       var averagePace = (dTime / dDist) * 500;
-      if (isFinite(averagePace) && averagePace > 0) session.paceSeconds = averagePace;
+      // Below the movement threshold we keep the previous value rather than
+      // spiking to infinity, so rollingPace is a held-last-good figure.
+      if (isFinite(averagePace) && averagePace > 0) session.rollingPace = averagePace;
     }
   }
 
   function recordSample(p) {
     var now = sessionSeconds();
     var last = session.samples.length ? session.samples[session.samples.length - 1] : null;
-    if (last && now - last.time < 1.0) return;
+    if (last && now - last.time < SAMPLE_MIN_INTERVAL_S) return;
+    if (session.samples.length >= MAX_SAMPLES) { session.droppedSamples++; return; }
     session.samples.push({
       time:     now,
       distance: totalDistance(),
       strokes:  totalStrokes(),
       spm:      p.spm,
       watts:    p.watts,
-      hr:       p.hr === 255 ? null : p.hr,
-      pace:     session.paceSeconds
+      hr:       p.hr === HR_ABSENT ? null : p.hr,
+      pace:     session.rollingPace
     });
   }
 
@@ -173,16 +265,16 @@
 
   function render() {
     if (!lastPacket) return;
-    setText('heartrate',   lastPacket.hr === 255 ? '-' : lastPacket.hr);
+    setText('heartrate',   lastPacket.hr === HR_ABSENT ? '-' : lastPacket.hr);
     setText('distance',    totalDistance());
     setText('watts',       Math.round(lastPacket.watts));
-    setText('pace',        fmtTime(session.paceSeconds));
+    setText('pace',        fmtTime(session.rollingPace));
     setText('spm',         Math.round(lastPacket.spm));
     setText('cals',        totalCals());
     setText('strokes',     totalStrokes());
     setText('elapsedtime', fmtTime(sessionSeconds()));
     if (typeof setConsoleSpeedAndSpm === 'function') {
-      setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds), lastPacket.spm);
+      setConsoleSpeedAndSpm(paceToAnimSpeed(session.rollingPace), lastPacket.spm);
     }
   }
 
@@ -331,9 +423,9 @@
       var decay = 1 - (silent - 1000) / (INACTIVITY_MS - 1000);
       decay = Math.max(0, decay);
       setText('spm', Math.round(lastPacket.spm * decay));
-      setText('pace', decay > 0 ? fmtTime(session.paceSeconds / decay) : '--:--');
+      setText('pace', decay > 0 ? fmtTime(session.rollingPace / decay) : '--:--');
       if (typeof setConsoleSpeedAndSpm === 'function') {
-        setConsoleSpeedAndSpm(paceToAnimSpeed(session.paceSeconds) * decay, lastPacket.spm * decay);
+        setConsoleSpeedAndSpm(paceToAnimSpeed(session.rollingPace) * decay, lastPacket.spm * decay);
       }
     }
   }
@@ -354,6 +446,11 @@
   }
 
   function ingestData(csv) {
+    // The AI2 hash transport calls this with no argument and leaves the
+    // frame in location.hash (see controller.js's hashchange listener).
+    if (csv == null && typeof window !== 'undefined' && window.location) {
+      csv = window.location.hash;
+    }
     if (typeof csv === 'string' && csv.indexOf('#data=') === 0) {
       csv = decodeURIComponent(csv.slice(6));
     }
@@ -362,19 +459,23 @@
 
     var prev = lastPacket;
 
-    dbg('pkt spm=' + p.spm + ' dist=' + p.distance + ' phase=' + phase);
+    dbg('pkt spm=' + p.spm + ' dist=' + p.distance + ' w=' + p.watts + ' phase=' + phase);
 
-    if (phase === 'IDLE') {
-      if (p.spm > 0) { lastPacket = p; goActive(); } else return;
-    } else if (phase === 'PAUSED') {
-      if (p.spm > 0) { lastPacket = p; goActive(); } else return;
+    if (phase === 'IDLE' || phase === 'PAUSED') {
+      // Keep the frame either way, so the next one has something to compare
+      // against — that comparison is what makes stroke/distance deltas
+      // usable as activity signals at all. Only real effort wakes the
+      // session, though.
+      lastPacket = p;
+      if (!isSessionStart(p, prev)) return;
+      goActive();
     } else {
       lastPacket = p;
     }
 
     applyResetIfNeeded(p);
     updatePace(prev, p);
-    if (p.spm > 0) {
+    if (isActive(p, prev)) {
       lastActiveAt = Date.now();
       recordSample(p);
     }
@@ -384,14 +485,22 @@
   // ─────────────────────────────────────────────────────────────────────
   // Save / exit — notify app.html via onWorkoutComplete(savedState)
   // ─────────────────────────────────────────────────────────────────────
+  // Returns null rather than 0 when a metric has no readings at all, so a
+  // session rowed without a heart-rate strap stores NULL instead of a
+  // fictitious 0 bpm.
   function avg(arr, key) {
-    if (!arr.length) return 0;
     var s = 0, n = 0;
     for (var i = 0; i < arr.length; i++) {
       if (arr[i][key] == null) continue;
       s += arr[i][key]; n++;
     }
-    return n ? s / n : 0;
+    return n ? s / n : null;
+  }
+
+  function roundOrNull(v, places) {
+    if (v == null) return null;
+    var f = Math.pow(10, places || 0);
+    return Math.round(v * f) / f;
   }
 
   function buildPayload() {
@@ -403,10 +512,10 @@
         distance: totalDistance(),
         strokes:  totalStrokes(),
         calories: totalCals(),
-        avgSpm:   Math.round(avg(s, 'spm')   * 10) / 10,
-        avgPace:  Math.round(avg(s, 'pace')),
-        avgWatts: Math.round(avg(s, 'watts')),
-        avgHr:    Math.round(avg(s, 'hr'))
+        avgSpm:   roundOrNull(avg(s, 'spm'), 1),
+        avgPace:  roundOrNull(avg(s, 'pace')),
+        avgWatts: roundOrNull(avg(s, 'watts')),
+        avgHr:    roundOrNull(avg(s, 'hr'))
       },
       samples: s.map(function (x) {
         return [
@@ -422,10 +531,35 @@
     };
   }
 
+  // 48 bits of randomness, from the CSPRNG where one exists. The fallback
+  // only matters on WebViews without crypto.getRandomValues, where a
+  // collision is still far less likely than the old second-resolution id.
+  function randomHex(bytes) {
+    var out = '';
+    var g = (typeof crypto !== 'undefined' && crypto.getRandomValues)
+      ? crypto.getRandomValues(new Uint8Array(bytes))
+      : null;
+    for (var i = 0; i < bytes; i++) {
+      var v = g ? g[i] : Math.floor(Math.random() * 256);
+      out += (v < 16 ? '0' : '') + v.toString(16);
+    }
+    return out;
+  }
+
+  // workout_<local timestamp>_<random>
+  //
+  // The timestamp half is not for uniqueness — the random half handles that.
+  // It stays because it is the only record of when an OFFLINE workout was
+  // actually rowed: the server stamps workout_date at INSERT time, which for
+  // a queued upload can be days later.
+  //
+  // The `workout_` prefix is load-bearing: the Capacitor bridge scans
+  // Preferences keys by that prefix to find pending offline uploads.
   function workoutTag() {
     var d = new Date(), p = function (n) { return n < 10 ? '0' + n : '' + n; };
     return 'workout_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
-      + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+      + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds())
+      + '_' + randomHex(6);
   }
 
   function notifyLeave() {
@@ -477,5 +611,26 @@
   window.ingestData       = ingestData;
   window.saveWorkout      = saveWorkout;
   window.exitSession      = exitSession;
+
+  // Internals, exposed for the unit tests in tests/ and for diagnosing a
+  // misbehaving rower from the console. Read-only in spirit: nothing in the
+  // app reads this back.
+  window.FtmsInternals = {
+    DEBUG:         DEBUG,
+    INACTIVITY_MS: INACTIVITY_MS,
+    MAX_SAMPLES:   MAX_SAMPLES,
+    PACKET_LAYOUT: PACKET_LAYOUT,
+    PACKET_BYTES:  PACKET_BYTES,
+    HR_ABSENT:     HR_ABSENT,
+    metrics:       metrics,
+    parsePacket:   parsePacket,
+    isActive:      isActive,
+    isSessionStart: isSessionStart,
+    buildPayload:  buildPayload,
+    workoutTag:    workoutTag,
+    getPhase:      function () { return phase; },
+    getSession:    function () { return session; },
+    _forceIdle:    goIdle
+  };
 
 })();

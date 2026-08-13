@@ -160,7 +160,12 @@ app on startup to skip the login screen.
 
 ### `POST /rpc/save_workout`
 
-Persists a completed workout: summary row plus per-second samples.
+Persists a completed workout: summary row plus samples.
+
+Samples are recorded at **at most** 1 Hz — the client drops any frame arriving
+less than a second after the last one it kept, so spacing follows BLE packet
+timing and is not a fixed interval. Treat `time` as authoritative, not the row
+index.
 
 **Request**
 ```json
@@ -206,14 +211,29 @@ Persists a completed workout: summary row plus per-second samples.
 ```
 
 Re-posting the same `workout` ID is safe: the call returns success without
-duplicating rows. The raw payload is always logged to `xesync.workout_data`
-before any validation.
+duplicating rows.
+
+**Order of operations.** The token is resolved *before anything is written*.
+The raw payload used to be inserted into `xesync.workout_data` ahead of the
+token check, which made this an unauthenticated write; it is now archived
+there only after authentication succeeds, tagged with `user_id` and
+`workout_id`.
+
+**Limits.** A payload over 2 MB, or carrying more than 20 000 samples, is
+rejected outright. `data.summary` must be an object and `data.samples` an
+array.
 
 **Response — error**
 ```json
 [ { "status": "error", "error": "Invalid or expired token" } ]
-[ { "status": "error", "error": "Failed to process workout: ..." } ]
+[ { "status": "error", "error": "Workout payload too large" } ]
+[ { "status": "error", "error": "Too many samples" } ]
+[ { "status": "error", "error": "Malformed workout payload" } ]
+[ { "status": "error", "error": "Failed to process workout" } ]
 ```
+
+Error strings are fixed. Internal `SQLERRM` detail is written to the server
+log via `RAISE WARNING` and never returned to the caller.
 
 ---
 
@@ -251,11 +271,19 @@ Returns an empty array if the token is invalid (no error).
 
 ### `POST /rpc/log_rawdata`
 
-Debug endpoint for raw FTMS frames. Stores them verbatim with a timestamp.
+Debug endpoint for raw FTMS frames. Stores them verbatim with a timestamp,
+attributed to the calling user.
+
+**Requires a valid token.** This was previously unauthenticated — a public
+write-only endpoint into `ftms_rawdata`. It now resolves the token before
+writing, and rejects frames longer than 512 characters.
+
+Off by default in the client; `logRawData` in `config.js` gates it.
 
 **Request**
 ```json
 {
+  "token": "5c3f...",
   "date": "23/05/2026 18:44:12.123",
   "data": "02 1c 00 4d 01 ..."
 }
@@ -266,6 +294,9 @@ Debug endpoint for raw FTMS frames. Stores them verbatim with a timestamp.
 [ { "status": "ok" } ]
 [ { "status": "error" } ]
 ```
+
+`error` is deliberately opaque: an invalid token, an oversized frame and a
+malformed timestamp are indistinguishable to the caller.
 
 ---
 
@@ -303,14 +334,78 @@ curl -X POST https://xesync.enlistia.com/api/rpc/list_workouts \
 
 ## Security notes
 
-- All functions are `SECURITY DEFINER` and run as the schema owner.
-- The `web_anon` role used by PostgREST has `EXECUTE` only on the public-facing
-  functions, no direct table access.
+- All functions are `SECURITY DEFINER` and run as the schema owner, each with
+  an explicit `SET search_path = xesync, public`.
+- Permissions are **default-deny**: the schema revokes `EXECUTE` on all
+  functions from `PUBLIC` and `web_anon`, then grants back only the endpoints
+  documented above. PostgreSQL grants `EXECUTE` to `PUBLIC` on every new
+  function automatically, and PostgREST exposes anything `web_anon` can
+  execute — so an allowlist is the only arrangement where adding a helper
+  doesn't silently publish it. (`user_id_from_token` had been exposed this
+  way.)
+- `web_anon` has no direct table or sequence access; the token checks inside
+  the functions are the only path to data.
+- Every endpoint that writes resolves its token *before* the first write.
 - Passwords are stored as bcrypt hashes (`crypt(..., gen_salt('bf', 10))`).
 - Tokens are 64-char hex strings from `gen_random_bytes()`; each login
   invalidates the previous token for the same user.
 - Email verification tokens expire after 24 hours and are single-use.
 - `resend_verification` does not leak account existence.
+
+## Versioning policy
+
+There are two things that version independently, not four. The DB schema is
+an implementation detail nobody outside this repo ever sees; the JS web app
+is baked into the APK at Capacitor build time (`capacitor/build-capacitor.ps1`
+copies it into `www/`, not fetched from this server at runtime), so its
+version is always identical to whatever APK shipped it. What's actually left:
+
+- **The client** — one Android `versionCode`/`versionName`
+  (`capacitor/android/app/build.gradle`), distributed via Google Play.
+  Nobody can be made to update. A user can sit on any past build
+  indefinitely — disabled auto-update, an old device that never opens the
+  app, a staged rollout they never received. Treat every `versionCode` ever
+  shipped as still live, forever, unless proven otherwise (Play
+  Console → Statistics → version distribution is the actual source of
+  truth for "still live").
+- **The server** — this API + the schema behind it. Deployed whenever *we*
+  choose, via `pgsql/migrate.sh`. This is the only side with a real release
+  button.
+
+Because the client side can never be forced to catch up, **the server must
+stay backward compatible with every RPC signature any shipped client still
+calls** — indefinitely, or until Play Console shows the old version's
+install base is gone. Concretely:
+
+- **Additive change** (new optional param via a new overload, a brand new
+  function): safe, ship freely.
+- **Behavior change on an existing signature** (e.g. tightening validation):
+  safe only if every input the old client could legitimately send still
+  produces the response it already expects.
+- **Destructive change** (removing/renaming a param, requiring something the
+  old client never sends): never done by editing the function in place.
+  Keep the old signature as a compatibility overload — see
+  `xesync.log_rawdata(date, data)` in `xesync_schema.sql`, kept as a
+  permanent no-op specifically because Capacitor builds up to
+  `versionCode 14` call it with no token and always will, until every one
+  of those installs is gone. `xesync.save_workout` never had to do this
+  because its signature never changed — that's the easy case, not the
+  general one.
+
+Every schema change first runs against `dev/docker-compose.yml` (see the
+README's Local database section) before touching production — that's what
+turns "should be backward compatible" into something actually checked, not
+just intended. `pgsql/migrate.sh`'s permission-surface check
+(`EXPECTED_WEB_ANON_FUNCS`) is part of that: it fails loudly if a migration
+silently changes what `web_anon` can reach, in either direction.
+
+`config.js`'s `appVersion` (shown on the login screen) and
+`build.gradle`'s `versionName` are two separate strings with no build step
+that syncs them — bump both by hand on every release. It exists for
+correlating a bug report to a build, not as an enforcement mechanism; there
+is currently no server-side check that rejects an old client, by design —
+only bumped for a real vulnerability if backward compatibility for the
+security fix itself is impossible.
 
 ## Internal functions (not exposed via PostgREST)
 

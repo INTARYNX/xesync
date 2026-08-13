@@ -10,6 +10,11 @@ html, body {
   height: 100%;
   overflow: hidden;
   background-color: #000;
+  /* Kills the elastic overscroll ("rubber band") drag. Without this, any
+     scroll container still slides vertically under a touch drag and springs
+     back even when its content fits entirely on screen - which is what the
+     login screen was doing. */
+  overscroll-behavior: none;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,7 +23,12 @@ body {
   font-family: "SpaceGrotesk", monospace;
   background: #000;
   color: #fff;
+  /* 100vh is the viewport WITHOUT the soft keyboard, so once the keyboard
+     opens on a login/register field the body stays taller than what is
+     actually visible and the content shifts. dvh tracks the live viewport;
+     vh stays first as the fallback for WebViews that lack dvh. */
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -32,6 +42,11 @@ body {
   justify-content: center;
   padding: 30px;
   min-height: 0;
+  /* Screens that opt into overflow-y:auto inline must not rubber-band or
+     chain their scroll up to the body. `none` rather than `contain`:
+     `contain` stops the chaining but still permits the local stretch
+     affordance, which is the visible slide being fixed here. */
+  overscroll-behavior: none;
 }
 .screen.active { display: flex; }
 
@@ -84,6 +99,14 @@ input:focus { border-color: #555; }
   text-align: center;
 }
 
+.app-version {
+  font-size: 0.7em;
+  color: #444;
+  letter-spacing: 0.1em;
+  margin-top: 28px;
+  text-align: center;
+}
+
 /* Scan screen */
 #scan-idle, #scan-active { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; flex: 1; }
 #scan-active { display: none; }
@@ -114,7 +137,7 @@ input:focus { border-color: #555; }
 }
 #scan-label { font-size: 0.9em; color: #fff; letter-spacing: 0.15em; margin-top: 50px; margin-bottom: 24px; }
 
-#device-list { width: 100%; flex: 1; overflow-y: auto; }
+#device-list { width: 100%; flex: 1; overflow-y: auto; overscroll-behavior: none; }
 .device-item {
   display: flex;
   justify-content: space-between;
@@ -238,6 +261,7 @@ input:focus { border-color: #555; }
   z-index: 150;
   font-family: "SpaceGrotesk", monospace;
   overflow-y: auto;
+  overscroll-behavior: none;
   padding: 12px;
 }
 
