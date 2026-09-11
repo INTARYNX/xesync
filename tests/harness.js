@@ -56,6 +56,11 @@ function makeElement(id) {
   el.classList = {
     add: (c) => el.classes.add(c),
     remove: (c) => el.classes.delete(c),
+    toggle: (c, force) => {
+      const enabled = force === undefined ? !el.classes.has(c) : !!force;
+      if (enabled) el.classes.add(c); else el.classes.delete(c);
+      return enabled;
+    },
     contains: (c) => el.classes.has(c)
   };
   el.appendChild = (child) => { el.children.push(child); return child; };

@@ -2,13 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
         <loc>https://xesync.enlistia.com/</loc>
-        <lastmod>2026-06-10</lastmod>
+        <lastmod>2026-09-10</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
     <url>
         <loc>https://xesync.enlistia.com/index.html</loc>
-        <lastmod>2026-06-10</lastmod>
+        <lastmod>2026-09-10</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
@@ -51,4 +51,9 @@
         <changefreq>yearly</changefreq>
         <priority>0.3</priority>
     </url>
+    <url>
+        <loc>https://xesync.enlistia.com/engineering.html</loc>
+        <lastmod>2026-09-10</lastmod>
+    </url>
+    <url><loc>https://xesync.enlistia.com/apple.html</loc><lastmod>2026-09-10</lastmod></url>
 </urlset>

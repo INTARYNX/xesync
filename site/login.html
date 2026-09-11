@@ -4,163 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login — XEsync</title>
-    <script src="config.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-            font-family: Helvetica, Arial, sans-serif;
-            color: #fff;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 20px;
-        }
-        .back {
-            position: fixed;
-            top: 24px;
-            left: 24px;
-            z-index: 100;
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            font-size: 13px;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 14px;
-            border-radius: 8px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            transition: all 0.2s ease;
-        }
-        .back:hover {
-            color: #00d4ff;
-            border-color: rgba(0,212,255,0.4);
-            background: rgba(0,212,255,0.08);
-            transform: translateX(-2px);
-        }
-        @media (max-width: 480px) {
-            body { padding-top: 80px; justify-content: flex-start; }
-            .back { top: 16px; left: 16px; padding: 7px 12px; font-size: 12px; }
-        }
-        .card {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 48px 40px;
-            width: 100%;
-            max-width: 420px;
-            backdrop-filter: blur(20px);
-        }
-        .logo {
-            font-size: 28px;
-            font-weight: 700;
-            font-family: 'Courier Prime', 'Courier New', monospace;
-            color: #00d4ff;
-            text-align: center;
-            margin-bottom: 8px;
-            letter-spacing: 2px;
-        }
-        .logo-sub {
-            text-align: center;
-            font-size: 13px;
-            color: rgba(255,255,255,0.4);
-            margin-bottom: 36px;
-            letter-spacing: 1px;
-        }
-        .form-group { margin-bottom: 20px; }
-        label {
-            display: block;
-            font-size: 12px;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.5);
-            margin-bottom: 8px;
-        }
-        input {
-            width: 100%;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 8px;
-            color: #fff;
-            font-size: 15px;
-            padding: 13px 16px;
-            outline: none;
-            transition: border-color 0.2s;
-            font-family: inherit;
-        }
-        input:focus { border-color: #00d4ff; }
-        input::placeholder { color: rgba(255,255,255,0.2); }
-        .btn {
-            width: 100%;
-            padding: 14px;
-            background: #00d4ff;
-            color: #0a0a0a;
-            border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            letter-spacing: 0.5px;
-            transition: background 0.2s, transform 0.1s;
-            font-family: inherit;
-            margin-top: 8px;
-        }
-        .btn:hover { background: #00b8e6; }
-        .btn:active { transform: scale(0.99); }
-        .btn:disabled { background: rgba(0,212,255,0.3); color: rgba(255,255,255,0.4); cursor: default; }
-        .error {
-            background: rgba(255,60,60,0.1);
-            border: 1px solid rgba(255,60,60,0.3);
-            border-radius: 8px;
-            padding: 12px 16px;
-            font-size: 13px;
-            color: #ff6b6b;
-            margin-bottom: 20px;
-            display: none;
-        }
-        .register-link {
-            text-align: center;
-            margin-top: 28px;
-            font-size: 14px;
-            color: rgba(255,255,255,0.4);
-        }
-        .register-link a { color: #00d4ff; text-decoration: none; }
-        .register-link a:hover { text-decoration: underline; }
-        .footer {
-            margin-top: 40px;
-            font-size: 12px;
-            color: rgba(255,255,255,0.25);
-            text-align: center;
-        }
-        .footer a { color: rgba(255,255,255,0.25); text-decoration: none; }
-        .footer a:hover { color: #00d4ff; }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="shortcut icon" href="favicon/favicon.ico" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
 </head>
-<body>
+<body class="auth">
 
     <a href="index.html" class="back"><i class="fa-solid fa-arrow-left"></i> Back</a>
 
-    <div class="card">
-        <div class="logo">XEsync</div>
-        <div class="logo-sub">Sign in to your account</div>
+    <div class="card reveal">
+        <div class="brand"><span class="xe">XE</span><span class="sync">sync</span></div>
+        <div class="brand-sub">Sign in to your account</div>
 
-        <div class="error" id="error"></div>
+        <div class="error" id="error" aria-live="polite" aria-atomic="true"></div>
 
         <form id="loginForm" onsubmit="handleSubmit(event)">
             <div class="form-group">
-                <label>Username</label>
+                <label for="username">Username</label>
                 <input type="text" id="username" placeholder="your_username" autocomplete="username" required>
             </div>
             <div class="form-group">
-                <label>Password</label>
+                <label for="password">Password</label>
                 <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
             </div>
             <button type="submit" class="btn" id="submitBtn">Sign In</button>
@@ -170,10 +39,11 @@
         <div class="register-link" style="margin-top: 12px;"><a href="reset_request.html">Forgot password?</a></div>
     </div>
 
-    <div class="footer">
+    <div class="auth-footer">
         <a href="confidentiality.html">Privacy Policy</a>
     </div>
 
+    <script src="config.js"></script>
     <script>
         function handleSubmit(e) {
             e.preventDefault();
@@ -222,5 +92,6 @@
             el.style.display = 'block';
         }
     </script>
+    <script src="site.js"></script>
 </body>
 </html>

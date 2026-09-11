@@ -17,7 +17,7 @@
     disconnected:  onDisconnected,
     reconnected:   onReconnected,
     ftmsData:      function (m) { onFtmsData(m.data); },
-    saveAck:       function ()  { if (ui.token) showHome(); },
+    saveAck:       function ()  {},
     uploadWorkout: onUploadWorkout,
     tagCleared:    function ()  {},
     goHome:        showHome
@@ -67,6 +67,17 @@ function finishBoot() {
 }
 
 // -- Login / auth ----------------------------------------------------
+// Fire-and-forget Bridge.send whose result we don't need, but whose
+// rejection (Capacitor's Preferences calls can throw) must not become an
+// unhandled promise rejection.
+function sendBridge(action, data) {
+  var p = Bridge.send(action, data);
+  if (p && typeof p.catch === 'function') {
+    p.catch(function (e) { console.error('[bridge] ' + action + ' failed', e); });
+  }
+}
+function sendLoginResult(data) { sendBridge('loginResult', data); }
+
 function onAutoLogin(msg) {
   if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
   if (!msg.token) { goScreen('login'); hideBootSplash(); return; }
@@ -74,11 +85,13 @@ function onAutoLogin(msg) {
     .then(function (data) {
       if (data && data.status === 'success') {
         setSession(msg.token, data.username);
+        sendLoginResult({ success: true, token: msg.token, username: data.username });
         setLoginStatus('');
         showHome();
       } else {
         setLoginStatus('Session expired: ' + ((data && data.error) || 'invalid token'));
         clearSession();
+        sendLoginResult({ success: false, error: (data && data.error) || 'invalid token' });
         goScreen('login');
       }
       hideBootSplash();
@@ -102,12 +115,12 @@ function doLogin() {
       btn.disabled = false; btn.textContent = 'LOGIN';
       if (data && data.status === 'success' && data.token) {
         setSession(data.token, u);
-        Bridge.send('loginResult', { success: true, token: data.token, username: u });
+        sendLoginResult({ success: true, token: data.token, username: u });
         showHome();
       } else {
         var err = (data && data.error) || 'Login failed';
         setLoginStatus(err);
-        Bridge.send('loginResult', { success: false, error: err });
+        sendLoginResult({ success: false, error: err });
       }
     })
     .catch(function (e) {
@@ -158,7 +171,7 @@ function clearSession() {
 // -- Offline ---------------------------------------------------------
 function goOffline() {
   ui.offline = true;
-  Bridge.send('loginResult', { success: false, offline: true });
+  sendLoginResult({ success: false, offline: true });
   goScreen('scan');
 }
 
@@ -187,6 +200,7 @@ function hideExitConfirm() { closeOverlay(); }
 function doLogoff() {
   closeOverlay();
   clearSession();
+  sendLoginResult({ success: false });
   ui.connected = false;
   ui.scanning = false;
   Debug.stopSim();
@@ -360,9 +374,16 @@ function logRaw(data) {
 }
 
 function onUploadWorkout(msg) {
-  Api.saveWorkout(msg.token, msg.workout, msg.data)
+  // Native storage returns serialized JSON; the RPC expects a JSON object.
+  var payload;
+  try { payload = typeof msg.data === 'string' ? JSON.parse(msg.data) : msg.data; }
+  catch (e) {
+    console.error('[bridge] unparseable stored workout, leaving it queued', msg.workout, e);
+    return; // Keep unreadable entries rather than acknowledging them.
+  }
+  Api.saveWorkout(msg.token, msg.workout, payload)
     .then(function (row) {
-      if (row && row.status === 'success') Bridge.send('uploadAck', { workout: msg.workout });
+      if (row && row.status === 'success') sendBridge('uploadAck', { workout: msg.workout });
     })
     .catch(function () {});
 }
@@ -372,19 +393,41 @@ function onUploadWorkout(msg) {
 // Decides online (Api) vs offline (Bridge to App Inventor storage),
 // then reports 'online' | 'offline' back through `done`.
 window.onWorkoutSave = function (tag, payload, done) {
-  if (!ui.token) {
-    Bridge.send('saveData', { workout: tag, data: payload });
-    setTimeout(function () { done('offline'); }, 1200);
-    return;
+  function saveOffline() {
+    // Capacitor resolves only after Preferences has persisted the payload.
+    // Older App Inventor bridges have no Promise return value.
+    try {
+      var saving = Bridge.send('saveData', { workout: tag, data: payload });
+      if (saving && typeof saving.then === 'function') {
+        saving.then(function () { done('offline'); }, function () { done('error'); });
+      } else {
+        setTimeout(function () { done('offline'); }, 1200);
+      }
+    } catch (e) {
+      done('error');
+    }
   }
+  if (!ui.token) { saveOffline(); return; }
+  var timeoutId;
+  var gaveUp = false;
   var timeout = new Promise(function (_, reject) {
-    setTimeout(function () { reject(new Error('timeout')); }, 10000);
+    timeoutId = setTimeout(function () { reject(new Error('timeout')); }, 10000);
   });
-  Promise.race([Api.saveWorkout(ui.token, tag, payload), timeout])
+  var savePromise = Api.saveWorkout(ui.token, tag, payload);
+  // If the timeout wins the race below, this request is still in flight and
+  // may still land server-side after we've already stored it offline. Clear
+  // that offline copy on a late success so it isn't re-uploaded (and
+  // duplicated) on the next login's reuploadStoredWorkouts().
+  savePromise.then(function (row) {
+    if (gaveUp && row && row.status === 'success') sendBridge('uploadAck', { workout: tag });
+  }, function () {});
+  Promise.race([savePromise, timeout])
     .then(function (row) {
-      done(row && row.status === 'success' ? 'online' : 'offline');
+      clearTimeout(timeoutId);
+      if (row && row.status === 'success') done('online');
+      else { gaveUp = true; saveOffline(); }
     })
-    .catch(function () { done('offline'); });
+    .catch(function () { clearTimeout(timeoutId); gaveUp = true; saveOffline(); });
 };
 
 window.onLeaveRowing = function () {

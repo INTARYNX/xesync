@@ -138,6 +138,9 @@ function renderPostWorkout(savedState, hasToken) {
   } else if (savedState === 'offline') {
     title.textContent = 'WORKOUT SAVED';
     sub.textContent   = 'stored offline, will sync on next login';
+  } else if (savedState === 'error') {
+    title.textContent = 'SAVE FAILED';
+    sub.textContent   = 'could not store your workout';
   } else {
     title.textContent = 'WORKOUT ENDED';
     sub.textContent   = 'not saved';

@@ -4,67 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Verify your email — XEsync</title>
-  <script src="config.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
-      font-family: Helvetica, Arial, sans-serif;
-      color: #fff;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 40px 20px;
-    }
-    .card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 16px;
-      padding: 48px 40px;
-      width: 100%;
-      max-width: 460px;
-      text-align: center;
-    }
-    .logo {
-      font-size: 28px;
-      font-weight: 700;
-      font-family: 'Courier New', monospace;
-      color: #00d4ff;
-      margin-bottom: 24px;
-      letter-spacing: 2px;
-    }
-    .icon { font-size: 56px; margin-bottom: 20px; }
-    .title { font-size: 22px; margin-bottom: 12px; }
-    .msg { font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.6; }
-    .btn {
-      display: inline-block;
-      margin-top: 28px;
-      padding: 12px 28px;
-      background: #00d4ff;
-      color: #0a0a0a;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 14px;
-      letter-spacing: 0.5px;
-    }
-    .btn:hover { background: #00b8e6; }
-    .ok    { color: #00d4ff; }
-    .err   { color: #ff6b6b; }
-    .spin  { color: rgba(255,255,255,0.4); }
-  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="shortcut icon" href="favicon/favicon.ico" type="image/x-icon">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
 </head>
-<body>
-  <div class="card">
-    <div class="logo">XEsync</div>
-    <div class="icon" id="icon">⏳</div>
-    <div class="title" id="title">Verifying…</div>
-    <div class="msg"   id="msg">Please wait while we confirm your email.</div>
-    <a href="login.html" class="btn" id="cta" style="display:none;">Sign in</a>
+<body class="auth">
+  <a href="login.html" class="back"><i class="fa-solid fa-arrow-left"></i> Back</a>
+
+  <div class="card reveal">
+    <div class="brand"><span class="xe">XE</span><span class="sync">sync</span></div>
+    <div class="verify-icon verify-spin" id="icon">⏳</div>
+    <div class="verify-title" id="title">Verifying…</div>
+    <div class="verify-msg"  id="msg" aria-live="polite" aria-atomic="true">Please wait while we confirm your email.</div>
+    <a href="login.html" class="btn-inline" id="cta" style="display:none;">Sign in</a>
   </div>
 
+  <script src="config.js"></script>
   <script>
     (function () {
       function qp(name) {
@@ -77,8 +37,9 @@
         var t    = document.getElementById('title');
         var m    = document.getElementById('msg');
         var cta  = document.getElementById('cta');
-        if (state === 'ok')  { icon.textContent = '✓'; icon.className = 'icon ok';  cta.style.display = 'inline-block'; }
-        if (state === 'err') { icon.textContent = '✕'; icon.className = 'icon err'; cta.style.display = 'none'; }
+        if (state === 'ok')  { icon.textContent = '✓'; icon.className = 'verify-icon verify-ok';  cta.style.display = 'inline-block'; }
+        if (state === 'err') { icon.textContent = '✕'; icon.className = 'verify-icon verify-err'; cta.style.display = 'none'; }
+        if (state === 'spin') { icon.textContent = '⏳'; icon.className = 'verify-icon verify-spin'; cta.style.display = 'none'; }
         t.textContent = title;
         m.textContent = msg;
       }
@@ -111,5 +72,6 @@
       });
     })();
   </script>
+  <script src="site.js"></script>
 </body>
 </html>
