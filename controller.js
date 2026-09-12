@@ -283,6 +283,7 @@ function onConnectResult(msg) {
 function enterRowing() {
   showLoadingOverlay();
   goScreen('rowing');
+  Coaching.setMode(loadCoachingMode());
   initRowing();
   initFtmsTracking();
   if (Debug.isOn()) Debug.startSim();
@@ -431,14 +432,118 @@ window.onWorkoutSave = function (tag, payload, done) {
 };
 
 window.onLeaveRowing = function () {
+  CoachingView.reset();
   setConnectingLabel('');
   goScreen('connecting');
 };
 
-window.onWorkoutComplete = function (savedState) {
-  renderPostWorkout(savedState, !!ui.token);
+window.onWorkoutComplete = function (savedState, extra) {
+  renderPostWorkout(savedState, !!ui.token, extra && extra.splitsTable, extra && extra.coachingSummary);
   openOverlay('postWorkout');
 };
+
+// -- Coaching (encouragements / milestones / mini-challenges) --------
+// AMELIORATIONS_PRODUIT.md. ftms_integration.js only knows about the
+// window.onFtms*/onBeforeSave hooks it calls if present - all the rule
+// logic lives in coaching.js, all the DOM in coaching_view.js.
+//
+// Mode is a same-device UI preference, not account data that needs to
+// survive a reinstall, so plain localStorage is enough here - it avoids
+// adding a new action to both the Capacitor and legacy App Inventor
+// bridges just to flip one toggle.
+function coachingModeKey() { return 'coachingMode_' + (ui.username || 'guest'); }
+function loadCoachingMode() {
+  try { return localStorage.getItem(coachingModeKey()) === 'justRow' ? 'justRow' : 'coaching'; }
+  catch (e) { return 'coaching'; }
+}
+function saveCoachingMode(mode) {
+  try { localStorage.setItem(coachingModeKey(), mode); } catch (e) {}
+}
+function toggleCoachingMode() {
+  var next = Coaching.getMode() === 'coaching' ? 'justRow' : 'coaching';
+  Coaching.setMode(next);
+  saveCoachingMode(next);
+  if (next === 'justRow') CoachingView.reset();
+  render();
+}
+
+window.onFtmsSessionStart = function () {
+  Coaching.reset();
+  Coaching.setMode(loadCoachingMode());
+};
+window.onFtmsPause = function () {
+  Coaching.onPause();
+  CoachingView.hideChallenge();
+};
+window.onFtmsResume = function () { Coaching.onResume(); };
+window.onFtmsTick = function (snapshot) {
+  var evt = Coaching.tick(snapshot);
+  if (evt) CoachingView.showMessage(CoachingText.resolve(evt.textKey, evt.textArgs));
+  CoachingView.renderChallenge(Coaching.getChallenge());
+};
+window.onBeforeSave = function (payload) {
+  var session = window.FtmsInternals.getSession();
+  // Splits are fixed 500m distance rows (splits.js has no idea coaching.js
+  // exists) - challenge results are reported separately, in coachingSummary.
+  payload.splitsTable = Splits.computeSplitsTable(session.samples, payload.summary.duration);
+  payload.coachingSummary = summarizeCoaching(Coaching.getSessionEvents());
+};
+
+// Best sprint time per exact target distance, per account. A same-device
+// preference in spirit (see coachingModeKey above) - not synced server-side,
+// just enough to answer "how does this compare to my best" on this phone.
+function sprintBestsKey() { return 'sprintBests_' + (ui.username || 'guest'); }
+function loadSprintBests() {
+  try { return JSON.parse(localStorage.getItem(sprintBestsKey()) || '{}'); }
+  catch (e) { return {}; }
+}
+// Returns the PREVIOUS best for this distance (null if none yet), and
+// persists the new one if it's faster - single read-modify-write so the
+// caller never has to reconcile two separate calls.
+function recordSprintResult(target, elapsedS) {
+  var bests = loadSprintBests();
+  var key = String(target);
+  var prevBest = bests[key] != null ? bests[key] : null;
+  if (prevBest == null || elapsedS < prevBest) {
+    bests[key] = elapsedS;
+    try { localStorage.setItem(sprintBestsKey(), JSON.stringify(bests)); } catch (e) {}
+  }
+  return prevBest;
+}
+
+// One entry per challenge that actually ran to completion (success or
+// genuinely not followed) - an 'interrupted' attempt (pause/BLE drop) is
+// dropped entirely, since nothing meaningful was measured. Real numbers
+// only: a time, a distance covered, seconds in range - never just a
+// pass/fail label with nothing behind it.
+function summarizeCoaching(events) {
+  var journal = events.filter(function (e) { return e.type === 'challenge' && e.outcome !== 'interrupted'; });
+  var challenges = journal.map(function (e) {
+    if (e.kind === 'distance') {
+      var covered = e.distanceEnd - e.distanceStart;
+      var title = 'Sprint · ' + e.target + ' m';
+      if (e.outcome === 'success') {
+        var elapsedS = e.tEnd - e.tStart;
+        var prevBest = recordSprintResult(e.target, elapsedS);
+        var textKey = prevBest == null ? 'sprintRecapFirst' : (elapsedS < prevBest ? 'sprintRecapBest' : 'sprintRecapBehind');
+        return { kind: 'distance', outcome: e.outcome, meters: e.target, elapsedS: elapsedS, prevBestS: prevBest,
+          title: title, detail: CoachingText.resolve(textKey, [elapsedS, prevBest]) };
+      }
+      return { kind: 'distance', outcome: e.outcome, meters: e.target, coveredM: covered,
+        title: title, detail: CoachingText.resolve('sprintRecapIncomplete', [Math.round(covered), e.target]) };
+    }
+    return { kind: 'cadence', outcome: e.outcome, reference: e.reference, targetSpm: e.targetSpm,
+      inRangeS: e.inRangeS, totalS: e.totalS,
+      title: 'Cadence · ' + e.targetSpm + '+ spm',
+      detail: CoachingText.resolve('cadenceRecap', [e.inRangeS, e.totalS, e.outcome === 'success']) };
+  });
+  return {
+    milestonesReached:   events.filter(function (e) { return e.type === 'milestone'; }).length,
+    challengesAttempted: journal.length,
+    challengesSucceeded: journal.filter(function (e) { return e.outcome === 'success'; }).length,
+    challenges: challenges
+  };
+}
 
 function postWorkoutGoWorkouts() {
   closeOverlay();

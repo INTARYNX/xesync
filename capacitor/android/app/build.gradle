@@ -20,8 +20,8 @@ android {
         // ai2/youngandroidproject/project.properties) - same package name
         // now, so Android/Play treat this as an update, not a new app.
         // Bump both on every future release.
-        versionCode 15
-        versionName "2.04"
+        versionCode 17
+        versionName "2.06"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

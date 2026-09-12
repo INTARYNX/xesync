@@ -77,6 +77,16 @@ body.rowing-dashboard {
 
 .summary-stats span { display: block; }
 
+.summary-compare {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #1a1a1a;
+  color: #666;
+  font-size: 0.85em;
+}
+
+.summary-stats small { color: #666; font-size: 0.8em; letter-spacing: 0.03em; }
+
 .dashboard-container {
   display: flex;
   flex-wrap: wrap;

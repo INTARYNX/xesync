@@ -1,0 +1,206 @@
+/* =====================================================================
+   coaching.css - lightweight DOM overlay for the coaching module.
+   Deliberately NOT a shader/3D-scene change (AMELIORATIONS_PRODUIT.md:
+   "préférer d'abord une surcouche légère"). z-index sits above the
+   canvas/HUD (0/5/10) but below the reconnect/loading overlays (20) so
+   a reconnect properly hides it, and well below modal dialogs (150/300).
+   ===================================================================== */
+
+.coaching-banner {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  z-index: 15;
+  pointer-events: none;
+  max-width: min(92%, 460px);
+  text-align: center;
+  padding: 10px 20px;
+  border-radius: 12px;
+  background: rgba(10, 12, 18, 0.78);
+  color: #fff;
+  font-size: 1.3em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.coaching-banner.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.coaching-challenge {
+  position: absolute;
+  bottom: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  pointer-events: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.65);
+  color: #ffd166;
+  font-size: 0.85em;
+  letter-spacing: 0.03em;
+  display: none;
+}
+.coaching-challenge.visible { display: block; }
+
+/* Live status during a challenge: green = on/ahead of pace or in range,
+   amber = behind pace or out of range. Neutral (default amber-ish text
+   color above) covers "on pace" so a correct effort isn't flagged either
+   color, only a clear deviation is. */
+.coaching-challenge.status-ahead,
+.coaching-challenge.status-inrange { color: #4ade80; }
+.coaching-challenge.status-behind,
+.coaching-challenge.status-outrange { color: #f87171; }
+
+/* Post-workout: two separate sections side by side - challenges (real
+   measured values per attempt) and splits (fixed distance, no idea a
+   challenge ever happened). The device is landscape-locked with plenty of
+   width and comparatively little height, so two columns beats stacking
+   both sections vertically and fighting for the same scarce height. */
+#pw-columns {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 28px;
+  width: 100%;
+  max-width: 720px;
+  margin: 4px 0;
+}
+#pw-coaching-summary, #pw-splits-table {
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+/* Same card language as the HUD tiles (rowing_display.css) and the
+   dashboard (home.css's .summary-block/.rowing-card): dark translucent
+   panel, subtle 1px border, generous radius, icon-led headers - not a wall
+   of plain text lines. */
+.pw-section-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #00A2E8;
+  margin-bottom: 10px;
+}
+.pw-section-label svg { width: 16px; height: 16px; flex-shrink: 0; }
+.pw-split-count {
+  margin-left: auto;
+  color: #666;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  font-size: 0.9em;
+}
+
+.pw-challenge-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid #262626;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.pw-challenge-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: #888;
+}
+.pw-challenge-icon svg { width: 17px; height: 17px; }
+.pw-challenge-card.success .pw-challenge-icon { background: rgba(74, 222, 128, 0.14); color: #4ade80; }
+.pw-challenge-body { flex: 1; min-width: 0; }
+.pw-challenge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pw-challenge-title {
+  font-size: 0.95em;
+  font-weight: 700;
+  color: #fff;
+}
+.pw-challenge-detail {
+  font-size: 0.82em;
+  color: #999;
+  margin-top: 3px;
+}
+
+.pw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #999;
+  border: 1px solid #444;
+  border-radius: 999px;
+  padding: 3px 9px 3px 7px;
+}
+.pw-pill svg { width: 11px; height: 11px; }
+.pw-pill.success { color: #4ade80; border-color: #4ade80; }
+
+.pw-splits-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid #262626;
+  border-radius: 14px;
+  padding: 6px 12px;
+}
+.pw-splits {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+}
+.pw-splits th, .pw-splits td {
+  padding: 7px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+.pw-splits th:nth-child(2), .pw-splits td:nth-child(2) { text-align: left; }
+.pw-split-num {
+  text-align: center !important;
+  color: #666;
+  width: 1.6em;
+}
+.pw-splits thead th {
+  color: #888;
+  font-weight: normal;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #262626;
+}
+.pw-splits tbody tr:not(.pw-splits-total):nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+.pw-splits-total {
+  font-weight: bold;
+  background: rgba(0, 162, 232, 0.12);
+}
+.pw-splits-total td:first-child { border-radius: 8px 0 0 8px; }
+.pw-splits-total td:last-child  { border-radius: 0 8px 8px 0; }
+.pw-insufficient {
+  color: #888;
+  font-style: italic;
+  font-size: 0.9em;
+}

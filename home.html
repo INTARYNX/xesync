@@ -406,31 +406,68 @@
         var startOfWeek = new Date(now);
         startOfWeek.setHours(0,0,0,0);
         startOfWeek.setDate(startOfWeek.getDate() - (startOfWeek.getDay() + 6) % 7);
+        var startOfLastWeek = new Date(startOfWeek);
+        startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
         var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         var startOfYear  = new Date(now.getFullYear(), 0, 1);
 
         var buckets = {
-          week:  { dist: 0, dur: 0, count: 0 },
-          month: { dist: 0, dur: 0, count: 0 },
-          year:  { dist: 0, dur: 0, count: 0 }
+          week:     { dist: 0, dur: 0, count: 0 },
+          lastWeek: { dist: 0, dur: 0, count: 0 },
+          month:    { dist: 0, dur: 0, count: 0 },
+          year:     { dist: 0, dur: 0, count: 0 }
         };
+
+        // Simple, honest personal bests (AMELIORATIONS_PRODUIT.md section 5):
+        // longest distance and longest duration only - no 1km PB here, since
+        // that needs a precisely-measured 1000m crossing that isn't tracked
+        // for every stored session.
+        var bestDistance = null, bestDuration = null;
 
         rows.forEach(function (w) {
           var d = new Date(w.workout_date);
           var dist = w.distance_m || 0, dur = w.duration_sec || 0;
-          if (d >= startOfWeek)  { buckets.week.dist  += dist; buckets.week.dur  += dur; buckets.week.count++;  }
+          if (d >= startOfWeek)          { buckets.week.dist     += dist; buckets.week.dur     += dur; buckets.week.count++;     }
+          else if (d >= startOfLastWeek) { buckets.lastWeek.dist += dist; buckets.lastWeek.dur += dur; buckets.lastWeek.count++; }
           if (d >= startOfMonth) { buckets.month.dist += dist; buckets.month.dur += dur; buckets.month.count++; }
           if (d >= startOfYear)  { buckets.year.dist  += dist; buckets.year.dur  += dur; buckets.year.count++;  }
+
+          if (!bestDistance || dist > bestDistance.dist) bestDistance = { dist: dist, date: w.workout_date };
+          if (!bestDuration || dur  > bestDuration.dur)  bestDuration = { dur: dur,   date: w.workout_date };
         });
 
-        function block(label, b) {
+        function block(label, b, compareLine) {
           return '<div class="summary-block">'
             + '<div class="summary-label">' + label + '</div>'
             + '<div class="summary-stats">'
             + '<span>' + (b.dist / 1000).toFixed(1) + ' km</span>'
             + '<span>' + fmtDuration(b.dur) + '</span>'
             + '<span>' + b.count + ' session' + (b.count === 1 ? '' : 's') + '</span>'
+            + (compareLine ? '<span class="summary-compare">' + compareLine + '</span>' : '')
             + '</div></div>';
+        }
+
+        // Only shown when last week actually has data - a quiet week never
+        // gets a "0 km last week too" callout (no guilt-tripping).
+        var weekCompare = buckets.lastWeek.count > 0
+          ? 'Last week: ' + (buckets.lastWeek.dist / 1000).toFixed(1) + ' km · '
+            + buckets.lastWeek.count + ' session' + (buckets.lastWeek.count === 1 ? '' : 's')
+          : null;
+
+        function bestsBlock() {
+          if (!bestDistance && !bestDuration) return '';
+          var lines = '';
+          if (bestDistance) {
+            lines += '<span>Best distance<br>' + bestDistance.dist + ' m'
+              + '<br><small>' + fmtDate(bestDistance.date) + '</small></span>';
+          }
+          if (bestDuration) {
+            lines += '<span>Longest session<br>' + fmtDuration(bestDuration.dur)
+              + '<br><small>' + fmtDate(bestDuration.date) + '</small></span>';
+          }
+          return '<div class="summary-block">'
+            + '<div class="summary-label">Personal bests</div>'
+            + '<div class="summary-stats">' + lines + '</div></div>';
         }
 
         function encouragement(week) {
@@ -443,9 +480,10 @@
 
         summaryEl.innerHTML = '<div class="summary-message">' + encouragement(buckets.week) + '</div>'
           + '<div class="summary-container">'
-          + block('This week',  buckets.week)
+          + block('This week',  buckets.week, weekCompare)
           + block('This month', buckets.month)
           + block('This year',  buckets.year)
+          + bestsBlock()
           + '</div>';
       }
 

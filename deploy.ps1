@@ -119,7 +119,7 @@ Write-Utf8NoBom (Join-Path $dist 'app.html') $app
 Write-Host "Build complete: $(Join-Path $dist 'app.html')"
 
 # Root-level assets (app.css is inlined into app.html, no need to copy)
-foreach ($asset in @('SpaceGrotesk-Regular.ttf', 'test_app.html', 'home.html', 'home.css', 'config.js')) {
+foreach ($asset in @('SpaceGrotesk-Regular.ttf', 'test_app.html', 'home.html', 'home.css', 'analytics.html', 'config.js')) {
     $src = Join-Path $base $asset
     if (Test-Path $src) { Copy-Item $src $dist }
 }
@@ -138,8 +138,12 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Upload contents of dist/ to remote dir
-& scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new -r "$dist\*" `
+# Upload contents of dist/ to remote dir. PowerShell does not glob-expand
+# "*" for arguments handed to an external exe (unlike a POSIX shell), so
+# scp used to receive the literal path "...\dist\*" and fail with "No such
+# file or directory" - enumerate the top-level entries ourselves instead.
+$distItems = Get-ChildItem -Path $dist | ForEach-Object { $_.FullName }
+& scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new -r @distItems `
     "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "SCP upload failed (exit $LASTEXITCODE)."

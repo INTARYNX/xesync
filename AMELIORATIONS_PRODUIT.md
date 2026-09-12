@@ -80,7 +80,7 @@ Les exemples sont en français. L’interface actuelle étant en anglais, prévo
 - Pas de file d’attente de compliments : un message devenu tardif est abandonné.
 - Pas de messages ordinaires pendant un défi, une pause, une reconnexion ou une sauvegarde.
 - Aucun « accélère ! » automatique quand la cadence baisse : la personne peut volontairement récupérer.
-- Encouragements et défis automatiques par défaut, sans son. Une commande discrète « Mode calme » les coupe ; mémoriser ce choix, sans demander de confirmation avant chaque séance.
+- Encouragements et défis automatiques par défaut, sans son (mode **Coaching**). Une commande discrète bascule vers **Just Row** — le même mode calme, renommé pour se lire comme un vrai choix plutôt qu’un réglage caché — qui coupe encouragements, jalons et défis ; mémoriser ce choix par compte, sans écran de sélection ni confirmation avant chaque séance.
 - Pas de commentaire sur la technique du geste ou l’état physique : les données disponibles ne permettent pas de les évaluer.
 
 ## 2. Des petits repères sans rien saisir
@@ -144,6 +144,14 @@ Exemple : une cadence stable à 18 coups/min produit une plage de 16–20 ; une 
 
 Éviter dans cette première version les sprints surprises, les objectifs imposés en watts et les défis de fréquence cardiaque. La régularité fournit déjà une expérience de jeu avec moins de paramètres à gérer.
 
+### Un troisième type, à envisager pour le tableau de fin de séance : le défi de distance
+
+En pleine séance libre, l’app peut proposer un segment ciblé à parcourir, du type « On fait un 3 000 m » — sans écran de préparation, comme les autres défis. La cible se choisit selon l’effort déjà fourni et le temps restant probable de la séance : **3 000 m est envisagé comme plafond haut, la plupart des propositions devraient rester nettement plus courtes**. Aucune distance totale n’est jamais imposée à la personne ; le segment reste une proposition parmi d’autres, pas un objectif de séance.
+
+**Le but reste la variété** : ce défi de distance est un type de stimulation parmi d’autres (jalon, défi de cadence, célébration, temps calme), pas un mécanisme systématique qui remplacerait les autres. Une séance ne doit pas devenir une suite répétitive de « fais un X m » ; la cadence et le choix du type de sollicitation suivent les mêmes règles d’espacement et d’adaptation au contexte que le reste de la section 3.
+
+Le segment complété (distance réellement parcourue entre le lancement et la fin du défi) devient naturellement une ligne du tableau de fin de séance (section 4), sur le modèle des fractions du PM5 : le tableau reflète alors la structure effective de la séance plutôt qu’un découpage temporel arbitraire.
+
 ### Cas à traiter dès le départ
 
 - Pause ou perte Bluetooth : interrompre le défi sans le compter comme un échec ; ne pas reprendre son compte à rebours silencieusement.
@@ -196,11 +204,13 @@ Le total reste visuellement distinct. Sur téléphone, conserver les cinq colonn
 
 #### Découpage proposé
 
-- Par défaut : **cinq portions de même durée active**. Ainsi, 60 minutes donnent cinq fois 12 minutes ; 20 minutes donnent cinq fois 4 minutes. C’est un choix proposé pour XEsync, pas une déduction sur le fonctionnement interne du moniteur photographié.
-- Utiliser la durée réellement effectuée, sans durée prévue à saisir. Ne pas inventer de portions futures.
-- Si une séance est trop courte pour fournir cinq portions exploitables, réduire leur nombre, voire afficher seulement le total.
+- Par défaut : **une ligne par jalon réellement franchi ou par segment de stimulation proposé par l’app** (par exemple un jalon « 1 km », ou un segment annoncé du type « fais un 3 000 m »). Le tableau reflète ainsi la structure effective de la séance, comme le fait le PM5 pour un entraînement programmé (`6x500m`), sans que XEsync ait besoin d’un entraînement préconfiguré : les lignes viennent des jalons observés pendant l’effort, pas d’une saisie préalable.
+- Les mini-défis courts (par exemple 30 secondes de cadence régulière) ne créent pas leur propre ligne : ils apparaissent en note ou en badge sur la ligne du jalon pendant laquelle ils ont eu lieu, pour garder des lignes de granularité comparable.
+- Si les jalons annoncés pendant l’effort sont trop rapprochés pour rester lisibles en tableau, regrouper plusieurs jalons consécutifs dans une seule ligne, ou définir une cadence de jalon dédiée à l’affichage du tableau, distincte de la fréquence des messages pendant l’effort. Point à calibrer avec les premiers tableaux réels.
+- Si une séance ne comporte aucun jalon exploitable (aucune distance franchie, séance trop courte ou jalons trop irréguliers pour un découpage lisible), retomber sur le découpage par défaut initial : **cinq portions de même durée active**. Ainsi, 60 minutes donnent cinq fois 12 minutes ; 20 minutes donnent cinq fois 4 minutes.
+- Utiliser la durée et la distance réellement effectuées, jamais une durée ou un segment prévu à l’avance. Ne pas inventer de portions futures.
+- Si une séance est trop courte pour fournir de découpage exploitable même en repli, réduire le nombre de portions, voire afficher seulement le total.
 - Évolution possible après la séance uniquement : vue alternative par portions fixes de 500 m, 1 km ou 5 minutes. Une dernière portion incomplète reste affichée avec sa durée et sa distance réelles. Le tableau par défaut ne nécessite aucun choix.
-- Garder le découpage d’analyse indépendant des mini-défis : une portion du tableau n’est pas forcément un intervalle d’entraînement.
 
 #### Formules à appliquer
 

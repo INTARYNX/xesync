@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>XeSync — Analytics</title>
+  <link rel="stylesheet" href="home.css">
+  <script src="config.js"></script>
+</head>
+<body class="rowing-dashboard">
+
+  <div id="status" class="status-msg">Loading…</div>
+  <div id="stats" style="display:none;"></div>
+
+  <script>
+    (function () {
+      var token = localStorage.getItem('xesync_token');
+      if (!token) { window.location.href = 'login.html'; return; }
+
+      var statusEl = document.getElementById('status');
+      var statsEl  = document.getElementById('stats');
+
+      function fmtNum(n)   { return (n || 0).toLocaleString(); }
+      function fmtKm(m)    { return ((m || 0) / 1000).toFixed(1) + ' km'; }
+      function fmtHours(s) { return ((s || 0) / 3600).toFixed(1) + ' h'; }
+
+      function block(label, value) {
+        return '<div class="summary-block">'
+          + '<div class="summary-label">' + label + '</div>'
+          + '<div class="summary-stats"><span style="font-size:1.6em;">' + value + '</span></div>'
+          + '</div>';
+      }
+
+      // Fills gaps with 0 so a quiet day shows as an empty bar, not a
+      // missing one - the whole point of this page is seeing quiet spells.
+      function barChart(series, colorHex) {
+        var byDay = {};
+        (series || []).forEach(function (p) { byDay[p.day] = p.count; });
+        var days = [];
+        var today = new Date();
+        for (var i = 29; i >= 0; i--) {
+          var d = new Date(today);
+          d.setDate(d.getDate() - i);
+          days.push(d.toISOString().slice(0, 10));
+        }
+        var counts = days.map(function (day) { return byDay[day] || 0; });
+        var max = Math.max(1, Math.max.apply(null, counts));
+        var W = 600, H = 110, barW = W / days.length;
+        var bars = counts.map(function (c, i) {
+          var h = (c / max) * (H - 8);
+          return '<rect x="' + (i * barW + 1) + '" y="' + (H - h) + '" width="' + Math.max(1, barW - 2) + '" height="' + h + '" fill="' + colorHex + '" rx="1"/>';
+        }).join('');
+        var total = counts.reduce(function (a, b) { return a + b; }, 0);
+        return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:70px;display:block;">' + bars + '</svg>'
+          + '<div style="font-size:0.75em;color:#666;text-align:center;margin-top:4px;">' + total + ' over the last 30 days</div>';
+      }
+
+      fetch(XESYNC_CONFIG.apiBaseUrl + '/rpc/get_usage_stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token })
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (arr) {
+        var row = Array.isArray(arr) ? arr[0] : arr;
+        if (!row || row.status !== 'success') {
+          if (row && /invalid|expired/i.test(row.error || '')) {
+            localStorage.removeItem('xesync_token');
+            window.location.href = 'login.html';
+            return;
+          }
+          statusEl.textContent = (row && row.error) || 'Failed to load analytics.';
+          return;
+        }
+        var d = row.data;
+        statusEl.style.display = 'none';
+        statsEl.innerHTML =
+          '<div class="summary-message">USAGE ANALYTICS</div>' +
+          '<div class="summary-container">' +
+            block('Total accounts', fmtNum(d.totalUsers)) +
+            block('Verified', fmtNum(d.verifiedUsers)) +
+            block('Active · 7d', fmtNum(d.connectedUsers7d)) +
+            block('Active · 30d', fmtNum(d.connectedUsers30d)) +
+            block('Rowed · 7d', fmtNum(d.rowedUsers7d)) +
+            block('Rowed · 30d', fmtNum(d.rowedUsers30d)) +
+          '</div>' +
+          '<div class="summary-container">' +
+            block('Total workouts', fmtNum(d.totalWorkouts)) +
+            block('Total distance', fmtKm(d.totalDistanceM)) +
+            block('Total time rowed', fmtHours(d.totalDurationSec)) +
+          '</div>' +
+          '<div class="summary-block" style="max-width:640px;width:100%;margin:1rem auto;">' +
+            '<div class="summary-label">WORKOUTS · LAST 30 DAYS</div>' +
+            barChart(d.workoutsByDay, '#00A2E8') +
+          '</div>' +
+          '<div class="summary-block" style="max-width:640px;width:100%;margin:1rem auto;">' +
+            '<div class="summary-label">NEW SIGNUPS · LAST 30 DAYS</div>' +
+            barChart(d.signupsByDay, '#4ade80') +
+          '</div>';
+        statsEl.style.display = '';
+      })
+      .catch(function (err) {
+        statusEl.textContent = 'Error: ' + err.message;
+      });
+    })();
+  </script>
+</body>
+</html>

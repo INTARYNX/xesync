@@ -370,6 +370,7 @@
       phase = 'ACTIVE';
       lastActiveAt = Date.now();
       dbg('RESUMED');
+      if (typeof window.onFtmsResume === 'function') window.onFtmsResume();
       return;
     }
     // Fresh start — capture rower baseline so counters always start from 0
@@ -390,6 +391,7 @@
     phase = 'ACTIVE';
     hideBanner();
     hidePauseDialog();
+    if (typeof window.onFtmsSessionStart === 'function') window.onFtmsSessionStart();
   }
 
   function goPaused() {
@@ -399,6 +401,7 @@
     dbg('PAUSED');
     if (typeof setConsoleSpeedAndSpm === 'function') setConsoleSpeedAndSpm(0, 0);
     showPauseDialog();
+    if (typeof window.onFtmsPause === 'function') window.onFtmsPause();
   }
 
   function goIdle() {
@@ -480,6 +483,17 @@
       recordSample(p);
     }
     render();
+    // Coaching (coaching.js) is entirely optional: ftms_integration.js never
+    // requires it to exist, it just calls out if controller.js wired it up.
+    if (phase === 'ACTIVE' && typeof window.onFtmsTick === 'function') {
+      window.onFtmsTick({
+        activeSeconds: sessionSeconds(),
+        distance:      totalDistance(),
+        strokes:       totalStrokes(),
+        spm:           p.spm,
+        watts:         p.watts
+      });
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -566,9 +580,11 @@
     if (typeof window.onLeaveRowing === 'function') window.onLeaveRowing();
   }
 
-  function notifyComplete(savedState) {
+  // `extra` (splitsTable/coachingSummary) is additive and optional - existing
+  // callers of window.onWorkoutComplete(savedState) keep working untouched.
+  function notifyComplete(savedState, extra) {
     if (typeof window.onWorkoutComplete === 'function') {
-      window.onWorkoutComplete(savedState);
+      window.onWorkoutComplete(savedState, extra);
     }
   }
 
@@ -580,6 +596,11 @@
     phase = 'IDLE';
     notifyLeave();
     var payload = buildPayload();
+    // Lets controller.js attach payload.splitsTable / payload.coachingSummary
+    // (computed from Coaching's session journal) while session.samples is
+    // still intact - goIdle() below wipes it.
+    if (typeof window.onBeforeSave === 'function') window.onBeforeSave(payload);
+    var extra = { splitsTable: payload.splitsTable || null, coachingSummary: payload.coachingSummary || null };
     var tag = workoutTag();
     goIdle();
 
@@ -587,11 +608,11 @@
     if (typeof window.onWorkoutSave === 'function') {
       window.onWorkoutSave(tag, payload, function (savedState) {
         hideBanner();
-        notifyComplete(savedState);
+        notifyComplete(savedState, extra);
       });
     } else {
       hideBanner();
-      notifyComplete('offline');
+      notifyComplete('offline', extra);
     }
   }
 

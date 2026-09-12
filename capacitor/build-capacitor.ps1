@@ -59,6 +59,7 @@ Write-Host "Assembling www/..."
 # Capacitor one built above.
 $sharedFiles = @(
     'app.css', 'state.js', 'view.js', 'api.js', 'debug.js',
+    'coaching_text.js', 'coaching.js', 'splits.js', 'coaching_view.js', 'coaching.css',
     'ftms_integration.js', 'controller.js', 'debug_sim.js', 'config.js',
     'rowing_display.css', 'rowing_display.js', 'dialog.css',
     'SpaceGrotesk-Regular.ttf'

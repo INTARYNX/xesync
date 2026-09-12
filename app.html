@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>XEsync</title>
   <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="coaching.css">
   <script src="config.js"></script>
 </head>
 <body>
@@ -15,6 +16,7 @@
     <span style="flex:1"></span>
     <button class="tbar-btn" id="tbar-disconnect-btn" onclick="disconnectRower()" style="display:none;color:#a66;">DISCONNECT</button>
     <button class="tbar-btn accent" id="tbar-row-btn" onclick="resumeRowing()" style="display:none;">ROW AGAIN</button>
+    <button class="tbar-btn" id="tbar-coaching-btn" onclick="toggleCoachingMode()" style="display:none;">COACHING</button>
     <button class="tbar-btn accent" id="tbar-scan-btn" onclick="startScan()">SCAN FOR ROWER</button>
     <button class="tbar-btn" id="tbar-debug-btn" onclick="debugMode()" style="color:#555;border-color:#333;display:none;">DEBUG</button>
     <span id="tbar-version" class="tbar-version"></span>
@@ -98,6 +100,10 @@
   <div id="post-workout" class="ftms-overlay">
     <div id="pw-title" class="ftms-overlay-title">WORKOUT ENDED</div>
     <div id="pw-subtitle" class="ftms-overlay-subtitle"></div>
+    <div id="pw-columns">
+      <div id="pw-coaching-summary" style="display:none;"></div>
+      <div id="pw-splits-table" style="display:none;"></div>
+    </div>
     <div class="ftms-actions">
       <button id="pw-workouts-btn" class="ftms-btn primary"   onclick="postWorkoutGoWorkouts()">WORKOUTS</button>
       <button                      class="ftms-btn secondary" onclick="postWorkoutGoLogin()">LOGIN</button>
@@ -129,6 +135,10 @@
   <script src="api.js"></script>
   <script src="bridge.js"></script>
   <script src="debug.js"></script>
+  <script src="coaching_text.js"></script>
+  <script src="coaching.js"></script>
+  <script src="splits.js"></script>
+  <script src="coaching_view.js"></script>
   <script src="ftms_integration.js"></script>
   <script src="controller.js"></script>
   <script src="debug_sim.js"></script>
