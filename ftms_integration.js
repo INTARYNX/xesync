@@ -449,8 +449,9 @@
   }
 
   function ingestData(csv) {
-    // The AI2 hash transport calls this with no argument and leaves the
-    // frame in location.hash (see controller.js's hashchange listener).
+    // Some hosts deliver a frame by changing the URL hash instead of
+    // calling this directly, leaving it in location.hash for pickup here
+    // (see controller.js's hashchange listener).
     if (csv == null && typeof window !== 'undefined' && window.location) {
       csv = window.location.hash;
     }

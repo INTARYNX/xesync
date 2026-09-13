@@ -5,8 +5,8 @@
 //
 // Challenge results are reported separately (controller.js's
 // coachingSummary highlight text, above the table) - this file has no
-// idea coaching.js even exists, on purpose: "pour les défis ça doit être
-// à part" was explicit feedback after mixing the two produced a table
+// idea coaching.js even exists, on purpose: keeping challenges out of this
+// table was explicit feedback after mixing the two produced a table
 // nobody could read (rows tagged SPRINT/KM, cumulative-time columns that
 // needed mental subtraction, a row whose tag silently vanished depending
 // on exactly when the session ended).
@@ -27,7 +27,7 @@ var Splits = (function () {
 
   var SPLITS_VERSION  = 3;
   var MAX_GAP_S        = 3;    // beyond this between-sample gap, don't trust interpolation across it
-  var HR_COVERAGE_MIN  = 0.8;  // doc's starting quality bar for showing a numeric HR average
+  var HR_COVERAGE_MIN  = 0.8;  // minimum data coverage required to show a numeric HR average
 
   // Split size scales with the session so the table stays a reasonable
   // length regardless of distance - 500m splits on a 10km row would be 20
@@ -107,8 +107,8 @@ var Splits = (function () {
 
   // Time-weighted HR coverage in [a,b]. Each sample's reading is treated as
   // holding from its own timestamp until the next sample's (capped at
-  // MAX_GAP_S), which is what "pondérer par le temps réellement couvert"
-  // means for irregularly-spaced FTMS packets.
+  // MAX_GAP_S) - weighting by the time each reading actually covers, which
+  // matters because FTMS packets arrive at irregular intervals.
   function hrCoverage(samples, a, b) {
     var idx = -1;
     for (var i = 0; i < samples.length; i++) { if (samples[i].time <= a) idx = i; else break; }
@@ -176,7 +176,7 @@ var Splits = (function () {
     return bounds;
   }
 
-  // -- Formatting (doc section 4: "arrondir uniquement à l'affichage") ----
+  // -- Formatting: round only at display time, never before -----------
   function formatTime(s) {
     s = Math.max(0, Math.round(s));
     var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;

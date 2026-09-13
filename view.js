@@ -1,6 +1,6 @@
 // =====================================================================
 // view.js - all DOM rendering. Reads `ui`, writes the DOM. Nothing here
-// makes decisions, calls the network, or talks to App Inventor.
+// makes decisions, calls the network, or talks to the native bridge.
 // render() is the single function that syncs the whole UI to `ui`.
 // =====================================================================
 

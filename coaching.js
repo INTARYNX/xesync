@@ -28,22 +28,22 @@ var Coaching = (function () {
   var MESSAGE_DISPLAY_S       = 4;
 
   // -- Cadence-boost challenge --------------------------------------------
-  // Renamed in spirit from the doc's original "cadence régulière" (hold
-  // your own current cadence steady) after feedback: benchmarking success
-  // against the person's own recent cadence meant "success" could be
-  // achieved by doing nothing differently at all. The challenge now
-  // requires a real, measurable push above the recent baseline.
+  // Originally spec'd as "hold your current cadence steady," renamed after
+  // feedback: benchmarking success against the person's own recent cadence
+  // meant "success" could be achieved by doing nothing differently at all.
+  // The challenge now requires a real, measurable push above the recent
+  // baseline.
   var CADENCE_MIN_ACTIVE_S    = 120;
   var CADENCE_WINDOW_S        = 30;
   var CADENCE_BOOST_SPM       = 3;    // required increase over the recent baseline
   var CADENCE_SUCCESS_S       = 24;
-  var CADENCE_ANNOUNCE_S      = 5;    // lead-in before timing starts (doc section 3: "Mini-défi dans 5 s")
+  var CADENCE_ANNOUNCE_S      = 5;    // lead-in before timing starts ("mini-challenge in 5s")
   var REFERENCE_WINDOW_S      = 30;   // recent-measurement window (median spm / speed estimate)
   var MIN_REFERENCE_SAMPLES   = 10;   // enough fresh points before trusting a reference
 
   // -- Distance-goal challenge ("fais un 3000 m") ------------------------
   var DISTANCE_MIN_M          = 300;
-  var DISTANCE_MAX_M          = 3000; // plafond haut - la plupart des propositions sont plus courtes
+  var DISTANCE_MAX_M          = 3000; // a high ceiling - most proposals will be shorter than this
   var DISTANCE_DURATIONS_S    = [120, 180, 150]; // deterministic cycle, no RNG needed for variety
   var DISTANCE_TIMEOUT_FACTOR = 3;    // give up (neutral) after this multiple of the estimated duration
   var DISTANCE_ANNOUNCE_S     = 10;   // lead-in so the person can accelerate before timing starts
@@ -130,8 +130,8 @@ var Coaching = (function () {
   }
 
   // Two 15s windows compared, not two isolated packets - a real, sustained
-  // decline suspends new proposals until things settle (section 3, "Adapter
-  // la stimulation à ce qui se passe maintenant").
+  // decline suspends new proposals until things settle, so the coaching
+  // stays responsive to what's actually happening right now.
   function isTrendingDown(t) {
     var older = windowSince(t - TREND_WINDOW_S, TREND_WINDOW_S);
     var newer = windowSince(t, TREND_WINDOW_S);
@@ -183,12 +183,12 @@ var Coaching = (function () {
     return null;
   }
 
-  // -- Cadence-regularity challenge (section 3) ----------------------------
+  // -- Cadence-regularity challenge -----------------------------------------
   // Both challenges open with an "announce" phase (5s cadence / 10s distance)
-  // before any scoring starts - doc section 3 ("Mini-défi dans 5 s..."), and
-  // for the sprint specifically the lead-in exists so the person has time to
-  // accelerate before the clock actually starts (real-device feedback: a
-  // sprint proposed with zero warning never got faster than cruising pace).
+  // before any scoring starts, and for the sprint specifically the lead-in
+  // exists so the person has time to accelerate before the clock actually
+  // starts (real-device feedback: a sprint proposed with zero warning never
+  // got faster than cruising pace).
   function tryStartCadenceChallenge(t) {
     var win = windowSince(t, CADENCE_WINDOW_S);
     if (win.length < MIN_REFERENCE_SAMPLES) return null;
@@ -207,7 +207,7 @@ var Coaching = (function () {
     };
   }
 
-  // -- Distance-goal challenge (section 3, "défi de distance") -------------
+  // -- Distance-goal challenge ----------------------------------------------
   function tryStartDistanceChallenge(t) {
     var speed = recentSpeedMps(t, REFERENCE_WINDOW_S);
     if (speed == null || speed <= 0 || windowSince(t, REFERENCE_WINDOW_S).length < MIN_REFERENCE_SAMPLES) return null;
@@ -230,8 +230,8 @@ var Coaching = (function () {
     return flags.ignoredStreak > 0 ? CHALLENGE_IGNORED_GAP_S : CHALLENGE_MIN_GAP_S;
   }
 
-  // Alternates type for variety (section "Un troisième type... le but reste
-  // la variété") rather than always proposing the same mechanic.
+  // Alternates challenge type for variety, rather than always proposing
+  // the same mechanic.
   function tryStartChallenge(t) {
     if (flags.challengesDisabled) return null;
     if (t < CADENCE_MIN_ACTIVE_S) return null;
@@ -384,8 +384,7 @@ var Coaching = (function () {
     return candidate;
   }
 
-  // Pause interrupts a running challenge without counting it as a failure
-  // (section 3, "Cas à traiter dès le départ").
+  // Pause interrupts a running challenge without counting it as a failure.
   function onPause() {
     if (challenge) {
       // Still counting down when the pause hit: nothing timed actually

@@ -259,10 +259,11 @@ function doConnect(device) {
 }
 
 function onConnectResult(msg) {
-  // App Inventor sends connectResult:success even after an unplanned drop
-  // (its Connected event can't tell first-connect from reconnect). If the
-  // reconnect overlay is up, this is a reconnection: stop the retry timer
-  // and just resume the live session.
+  // The native layer reports connectResult:success on any successful
+  // connect, whether it's a first connection or a reconnect after a drop -
+  // it can't tell the two apart itself. If the reconnect overlay is up,
+  // treat this as a reconnection: stop the retry timer and just resume
+  // the live session.
   if (ui.overlay === 'reconnect') {
     if (msg.success) {
       stopReconnect();
@@ -290,11 +291,12 @@ function enterRowing() {
 }
 
 // --- Reconnect (driven by the web app) ------------------------------
-// On an unplanned drop App Inventor sends {"action":"disconnected"}.
+// On an unplanned drop the native layer sends {"action":"disconnected"}.
 // The web app then drives the retries: it shows the RECONNECTING overlay
 // and sends {"action":"reconnect"} up to RECONNECT_MAX times, RECONNECT_DELAY
-// apart. App Inventor answers each reconnect by calling ConnectWithAddress;
-// its Connected event sends {"action":"connectResult","success":true}.
+// apart. The native layer answers each reconnect by attempting to
+// reconnect to the same device, then reports the result as
+// {"action":"connectResult","success":true|false}.
 //   - success arrives while overlay is up -> cancel timer, close overlay, resume
 //   - all attempts used up               -> give up, close overlay, mark disconnected
 var RECONNECT_MAX   = 3;
@@ -391,12 +393,13 @@ function onUploadWorkout(msg) {
 
 // -- Post workout (called by ftms_integration.js) --------------------
 // Called by ftms_integration.js to persist a finished workout.
-// Decides online (Api) vs offline (Bridge to App Inventor storage),
-// then reports 'online' | 'offline' back through `done`.
+// Decides online (Api) vs offline (Bridge to native storage), then
+// reports 'online' | 'offline' back through `done`.
 window.onWorkoutSave = function (tag, payload, done) {
   function saveOffline() {
-    // Capacitor resolves only after Preferences has persisted the payload.
-    // Older App Inventor bridges have no Promise return value.
+    // The current bridge returns a promise that resolves only once the
+    // payload is actually persisted. Fall back to a fixed delay for any
+    // bridge implementation whose send() doesn't return one.
     try {
       var saving = Bridge.send('saveData', { workout: tag, data: payload });
       if (saving && typeof saving.then === 'function') {
@@ -449,8 +452,7 @@ window.onWorkoutComplete = function (savedState, extra) {
 //
 // Mode is a same-device UI preference, not account data that needs to
 // survive a reinstall, so plain localStorage is enough here - it avoids
-// adding a new action to both the Capacitor and legacy App Inventor
-// bridges just to flip one toggle.
+// adding a new bridge action on both platforms just to flip one toggle.
 function coachingModeKey() { return 'coachingMode_' + (ui.username || 'guest'); }
 function loadCoachingMode() {
   try { return localStorage.getItem(coachingModeKey()) === 'justRow' ? 'justRow' : 'coaching'; }

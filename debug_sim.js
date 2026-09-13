@@ -10,8 +10,8 @@
  * Cumulative counters (distance, strokes, cals, elapsed time) grow monotonically
  * and reset to 0 when the simulator is reset.
  *
- * Packets are emitted every 500 ms through handleAppResponse(),
- * exactly like real BLE traffic from App Inventor.
+ * Packets are emitted every 500 ms through handleAppResponse(), the
+ * same path real BLE traffic takes.
  */
 var DebugSim = (function () {
   'use strict';

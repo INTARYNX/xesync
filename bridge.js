@@ -1,7 +1,8 @@
 // =====================================================================
-// bridge.js - App Inventor communication. Sends messages out via
-// setWebViewString, and dispatches incoming messages to controller
-// handlers. Knows nothing about screens, network, or business rules.
+// bridge.js - talks to the native host. Sends messages out through a
+// global the host provides, and dispatches incoming messages to
+// controller handlers. Knows nothing about screens, network, or
+// business rules.
 // =====================================================================
 
 var Bridge = (function () {
@@ -20,10 +21,9 @@ var Bridge = (function () {
   function setHandlers(map) { handlers = map; }
 
   // An FTMS frame is exactly the shape ftms_integration.js's parsePacket()
-  // accepts: at least 20 comma-separated integers. Checking the real frame
-  // shape is what makes the legacy path below safe - the old test was
-  // /^\s*\d/ ("starts with a digit"), which would route any non-JSON string
-  // beginning with a digit into the FTMS parser.
+  // accepts: at least 20 comma-separated integers. Validating the full
+  // shape (rather than just "starts with a digit") avoids misrouting an
+  // unrelated string into the FTMS parser below.
   var FTMS_MIN_BYTES = 20;
   function looksLikeFtmsFrame(s) {
     if (typeof s !== 'string') return false;
@@ -35,7 +35,7 @@ var Bridge = (function () {
     return true;
   }
 
-  // Called by App Inventor (exposed as window.handleAppResponse below).
+  // Called by the native host (exposed as window.handleAppResponse below).
   //
   // The protocol is JSON: { action: "...", ... }. FTMS frames arrive as
   // { action: "ftmsData", data: "<csv>" } like every other message.
@@ -46,11 +46,11 @@ var Bridge = (function () {
     try {
       msg = typeof json === 'string' ? JSON.parse(json) : json;
     } catch (e) {
-      // LEGACY: AI2 builds already in the field push the raw FTMS csv as a
-      // bare string with no envelope. Those blocks can't be updated
-      // retroactively, so the bare form is still accepted - but only when it
-      // actually validates as a frame, and it is not the documented protocol
-      // for anything new. The Capacitor bridge never takes this path.
+      // Some client versions send the raw FTMS CSV as a bare string with
+      // no JSON envelope. That form is still accepted here, but only when
+      // it actually validates as a real frame - it's not the documented
+      // protocol for anything new, and the current native shell never
+      // sends frames this way.
       if (looksLikeFtmsFrame(json)) {
         dispatch({ action: 'ftmsData', data: json.trim(), legacy: true });
       } else {
@@ -72,5 +72,5 @@ var Bridge = (function () {
   return { send: send, setHandlers: setHandlers, receive: receive };
 })();
 
-// App Inventor calls this global
+// Called by the native host
 window.handleAppResponse = Bridge.receive;
