@@ -586,6 +586,30 @@ figcaption strong { color: rgba(255,255,255,.85); font-weight: 500; }
 .maker-section { max-width: 740px; margin-left: auto; margin-right: auto; }
 .maker-section .section-title { margin-bottom: 24px; }
 .maker-section p + p { margin-top: 16px; }
+.faq-list { max-width: 740px; }
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 18px 4px;
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: '+';
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: transform 0.25s var(--ease);
+}
+.faq-item[open] summary::after { transform: rotate(45deg); }
+.faq-item p { color: rgba(255,255,255,.65); font-size: 15px; line-height: 1.8; padding: 0 4px 20px; }
 .closing-cta { text-align: center; padding: 48px 0 32px; border-top: 1px solid var(--line-strong); }
 .closing-cta h2 { font-size: clamp(24px, 3vw, 32px); font-weight: 400; margin-bottom: 12px; }
 .closing-cta p { color: var(--muted); margin-bottom: 28px; }

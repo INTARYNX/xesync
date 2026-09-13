@@ -1,59 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-        <loc>https://xesync.enlistia.com/</loc>
-        <lastmod>2026-09-10</lastmod>
+        <loc>https://xesync.intarynx.com/</loc>
+        <lastmod>2026-09-13</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
     <url>
-        <loc>https://xesync.enlistia.com/index.html</loc>
-        <lastmod>2026-09-10</lastmod>
+        <loc>https://xesync.intarynx.com/index.html</loc>
+        <lastmod>2026-09-13</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
 
     <url>
-        <loc>https://xesync.enlistia.com/login.html</loc>
+        <loc>https://xesync.intarynx.com/login.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.5</priority>
     </url>
     <url>
-        <loc>https://xesync.enlistia.com/register.html</loc>
+        <loc>https://xesync.intarynx.com/register.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.5</priority>
     </url>
 
     <url>
-        <loc>https://xesync.enlistia.com/confidentiality.html</loc>
+        <loc>https://xesync.intarynx.com/confidentiality.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>monthly</changefreq>
         <priority>0.4</priority>
     </url>
 
     <url>
-        <loc>https://xesync.enlistia.com/reset_request.html</loc>
+        <loc>https://xesync.intarynx.com/reset_request.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>yearly</changefreq>
         <priority>0.3</priority>
     </url>
     <url>
-        <loc>https://xesync.enlistia.com/reset_password.html</loc>
+        <loc>https://xesync.intarynx.com/reset_password.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>yearly</changefreq>
         <priority>0.3</priority>
     </url>
     <url>
-        <loc>https://xesync.enlistia.com/verify.html</loc>
+        <loc>https://xesync.intarynx.com/verify.html</loc>
         <lastmod>2026-06-10</lastmod>
         <changefreq>yearly</changefreq>
         <priority>0.3</priority>
     </url>
     <url>
-        <loc>https://xesync.enlistia.com/engineering.html</loc>
-        <lastmod>2026-09-10</lastmod>
+        <loc>https://xesync.intarynx.com/engineering.html</loc>
+        <lastmod>2026-09-13</lastmod>
     </url>
-    <url><loc>https://xesync.enlistia.com/apple.html</loc><lastmod>2026-09-10</lastmod></url>
+    <url><loc>https://xesync.intarynx.com/apple.html</loc><lastmod>2026-09-13</lastmod></url>
 </urlset>
