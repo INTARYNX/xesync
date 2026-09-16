@@ -13,13 +13,26 @@
   if (canvas && canvas.getContext) {
     var ctx = canvas.getContext('2d');
 
+    function viewportWidth() {
+      // On some mobile browsers innerWidth can briefly retain the landscape
+      // value after rotating back to portrait. clientWidth tracks the layout
+      // viewport, which is what the canvas must match.
+      return document.documentElement.clientWidth || window.innerWidth;
+    }
+
     function sizeCanvas() {
-      canvas.width = window.innerWidth;
-      var topPad = window.innerWidth < 900 ? 80 : 100;
+      var width = viewportWidth();
+      canvas.width = width;
+      var topPad = width < 900 ? 80 : 100;
       canvas.height = topPad + 220;
     }
     sizeCanvas();
-    window.addEventListener('resize', sizeCanvas);
+    function syncCanvasSize() {
+      sizeCanvas();
+      window.requestAnimationFrame(sizeCanvas);
+    }
+    window.addEventListener('resize', syncCanvasSize);
+    window.addEventListener('orientationchange', syncCanvasSize);
 
     var t = 0;
     var logoCanvas = null;
@@ -117,11 +130,12 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!logoCanvas) return;
 
-      var drawW = Math.min(logoCanvas.width, window.innerWidth * 0.78);
+      var width = viewportWidth();
+      var drawW = Math.min(logoCanvas.width, width * 0.78);
       var scale = drawW / logoCanvas.width;
       var drawH = logoCanvas.height * scale;
       var cx = canvas.width / 2 - drawW / 2;
-      var topPad = window.innerWidth < 900 ? 80 : 100;
+      var topPad = width < 900 ? 80 : 100;
       var ty = topPad + (200 - drawH) / 2;
       drawGraphs(topPad);
 
