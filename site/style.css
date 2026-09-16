@@ -568,7 +568,13 @@ figcaption strong { color: rgba(255,255,255,.85); font-weight: 500; }
 .section-note { color: var(--muted); font-size: 13px; line-height: 1.8; margin-top: 24px; }
 .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; }
 .setup-grid .section-title { margin-bottom: 24px; }
-.console-photo { max-width: 360px; margin: 0 auto 28px; }
+.console-photo {
+  max-width: 360px;
+  margin: 0 auto 28px;
+  /* The enlarged image is offset to crop its mount. Contain that offset so
+     it cannot increase the document width on narrow viewports. */
+  overflow: hidden;
+}
 .console-photo img {
   display: block;
   height: auto;
