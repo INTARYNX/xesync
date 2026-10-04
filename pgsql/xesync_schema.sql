@@ -125,8 +125,13 @@ CREATE TABLE IF NOT EXISTS xesync.email_queue (
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     sent_at     TIMESTAMPTZ,
     last_error  TEXT,
-    attempts    INTEGER      NOT NULL DEFAULT 0
+    attempts    INTEGER      NOT NULL DEFAULT 0,
+    claimed_at  TIMESTAMPTZ
 );
+
+-- Re-running this script against a database that already has the table
+-- (CREATE TABLE IF NOT EXISTS above is then a no-op) still needs this column.
+ALTER TABLE xesync.email_queue ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_email_queue_pending
     ON xesync.email_queue (created_at) WHERE sent_at IS NULL;
@@ -649,6 +654,14 @@ BEGIN
         NULLIF((v_summary ->> 'avgHr'),    '')::INTEGER
     );
 
+    -- stroke_number is this row's sequence position within the workout
+    -- (v_idx), not the rower's own cumulative stroke count (sample index 2):
+    -- that count repeats across samples at ordinary rowing cadences (one
+    -- stroke every 2-3s vs. ~1 sample/s), which previously made it collide
+    -- with the UNIQUE(workout_id, stroke_number) constraint and silently
+    -- drop every sample after the first at a given stroke count via the
+    -- ON CONFLICT below - get_workout() reads this table back ordered by
+    -- stroke_number, so that loss showed up directly in the saved workout.
     FOR v_sample IN SELECT * FROM jsonb_array_elements(data -> 'samples') LOOP
         v_idx := v_idx + 1;
         INSERT INTO xesync.workout_strokes (
@@ -656,7 +669,7 @@ BEGIN
             spm, watts, heartrate, pace_sec
         ) VALUES (
             workout,
-            COALESCE((v_sample ->> 2)::INTEGER, v_idx),
+            v_idx,
             (v_sample ->> 0)::NUMERIC,
             (v_sample ->> 1)::INTEGER,
             (v_sample ->> 3)::NUMERIC,
@@ -822,18 +835,33 @@ $$;
 -- WORKER HELPERS (cron script only — not exposed to web_anon)
 -- ============================================================================
 
+-- FOR UPDATE SKIP LOCKED + an immediately-committed claimed_at stamp (the
+-- caller must commit right after calling this, before any SMTP I/O) is what
+-- actually prevents two overlapping worker runs from sending the same queued
+-- email twice - the previous version was a bare SELECT with nothing marking
+-- a row as taken, so a slow run overlapping the next minute's cron tick
+-- would hand out the same rows to both. The 2-minute staleness window lets
+-- a row be reclaimed if a worker crashes after claiming but before calling
+-- email_queue_mark_sent/_failed, instead of leaving it stuck forever.
 CREATE OR REPLACE FUNCTION xesync.email_queue_claim(p_max INTEGER DEFAULT 20)
 RETURNS TABLE (id BIGINT, to_addr TEXT, subject TEXT, body TEXT)
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = xesync, public
 AS $$
-    SELECT id, to_addr::TEXT, subject, body
-      FROM xesync.email_queue
-     WHERE sent_at IS NULL
-       AND attempts < 5
-     ORDER BY created_at
-     LIMIT p_max;
+    UPDATE xesync.email_queue
+       SET claimed_at = now()
+     WHERE id IN (
+         SELECT q.id
+           FROM xesync.email_queue q
+          WHERE q.sent_at IS NULL
+            AND q.attempts < 5
+            AND (q.claimed_at IS NULL OR q.claimed_at < now() - INTERVAL '2 minutes')
+          ORDER BY q.created_at
+          LIMIT p_max
+            FOR UPDATE SKIP LOCKED
+     )
+    RETURNING id, to_addr::TEXT, subject, body;
 $$;
 
 CREATE OR REPLACE FUNCTION xesync.email_queue_mark_sent(p_id BIGINT)

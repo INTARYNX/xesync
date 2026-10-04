@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-XeSync email queue worker — local MTA variant.
+XeSync email queue worker.
 
-Reads pending rows from xesync.email_queue and sends them via a local
-SMTP relay (no auth, no TLS). Run from cron every minute.
+Reads pending rows from xesync.email_queue and sends them via SMTP
+(STARTTLS + AUTH when SMTP_USER is set — e.g. ZeptoMail; plain unauthenticated
+relay otherwise). Run from cron every minute.
 
 Configuration via /etc/xesync/mail.env:
 
   PG_DSN=postgresql://xesync_worker:password@localhost:5432/xesync
-  SMTP_HOST=localhost
-  SMTP_PORT=25
-  SMTP_FROM=noreply@enlistia.com
+  SMTP_HOST=smtp.zeptomail.eu
+  SMTP_PORT=587
+  SMTP_USER=emailapikey
+  SMTP_PASS=<Zepto send-mail token>
+  SMTP_FROM=noreply@intarynx.com
 """
 
 import os
@@ -40,7 +43,9 @@ load_env_file('/etc/xesync/mail.env')
 PG_DSN     = os.environ['PG_DSN']
 SMTP_HOST  = os.environ.get('SMTP_HOST', 'localhost')
 SMTP_PORT  = int(os.environ.get('SMTP_PORT', '25'))
-SMTP_FROM  = os.environ.get('SMTP_FROM', 'noreply@enlistia.com')
+SMTP_USER  = os.environ.get('SMTP_USER', '')
+SMTP_PASS  = os.environ.get('SMTP_PASS', '')
+SMTP_FROM  = os.environ.get('SMTP_FROM', 'noreply@intarynx.com')
 BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '20'))
 
 
@@ -61,6 +66,11 @@ def main():
                 (BATCH_SIZE,)
             )
             rows = cur.fetchall()
+        # email_queue_claim() stamps claimed_at on these rows so a worker run
+        # that overlaps the next minute's cron tick won't claim them again -
+        # that only holds if the stamp is committed now, before the SMTP
+        # round-trips below, rather than left pending on this connection.
+        conn.commit()
 
         if not rows:
             return
@@ -71,6 +81,10 @@ def main():
         try:
             smtp = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
             smtp.ehlo()
+            if SMTP_USER:
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(SMTP_USER, SMTP_PASS)
 
             for qid, to_addr, subject, body in rows:
                 try:

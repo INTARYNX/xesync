@@ -53,12 +53,14 @@ mkdir -p /etc/xesync
 if [ ! -f /etc/xesync/mail.env ]; then
     cat > /etc/xesync/mail.env <<EOF
 PG_DSN=postgresql://$WORKER_USER:$WORKER_PASSWORD@localhost:5432/$DB_NAME
-SMTP_HOST=localhost
-SMTP_PORT=25
-SMTP_FROM=noreply@enlistia.com
+SMTP_HOST=smtp.zeptomail.eu
+SMTP_PORT=587
+SMTP_USER=emailapikey
+SMTP_PASS=change-me
+SMTP_FROM=noreply@intarynx.com
 EOF
     chmod 600 /etc/xesync/mail.env
-    ok "mail.env written."
+    ok "mail.env written — fill in SMTP_USER/SMTP_PASS with the real ZeptoMail SMTP Mail Agent token before relying on this."
 else
     ok "mail.env already exists — skipping (not overwritten)."
 fi
