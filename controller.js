@@ -252,6 +252,7 @@ function showDevices(msg) {
 // -- Connect ---------------------------------------------------------
 function doConnect(device) {
   ui.scanning = false;
+  reconnectAbandoned = false; // a deliberate, fresh connect attempt
   setConnectingLabel('CONNECTING...');
   goScreen('connecting');
   if (Debug.isOn()) { Debug.fakeConnect(onConnectResult); return; }
@@ -270,6 +271,16 @@ function onConnectResult(msg) {
       closeOverlay();        // back to the live rowing screen, tracking intact
     }
     // a failure here is ignored: the retry timer keeps going until RECONNECT_MAX
+    return;
+  }
+  if (reconnectAbandoned) {
+    // Stale result from a reconnect attempt still in flight when we already
+    // gave up on it (a native connect() can outlast RECONNECT_DELAY). The
+    // user has already moved on - don't resume rowing or bounce their
+    // screen, just tear down a connection that may have succeeded behind
+    // our back.
+    reconnectAbandoned = false;
+    if (msg.success) Bridge.send('disconnect');
     return;
   }
   if (msg.success) {
@@ -303,6 +314,10 @@ var RECONNECT_MAX   = 3;
 var RECONNECT_DELAY = 5000;
 var reconnectTries  = 0;
 var reconnectTimer  = null;
+// True once we've given up on a reconnect cycle (RECONNECT_MAX hit, or the
+// user bailed via doGiveUp) but a connect() attempt from that cycle may
+// still be in flight - see onConnectResult.
+var reconnectAbandoned = false;
 
 function onDisconnected() {
   if (ui.overlay === 'reconnect') return;  // already reconnecting
@@ -318,6 +333,7 @@ function attemptReconnect() {
     if (reconnectTries >= RECONNECT_MAX) {
       stopReconnect();
       ui.connected = false;
+      reconnectAbandoned = true; // this cycle's last connect() may still resolve late
       closeOverlay();
       // No more FTMS packets, so the inactivity watchdog has paused the
       // session: the PAUSED dialog (SAVE / EXIT) is waiting for the user.
@@ -338,6 +354,7 @@ function onReconnected() {
 
 function doGiveUp() {
   stopReconnect();
+  reconnectAbandoned = true; // same reason as the automatic give-up above
   closeOverlay();
   Bridge.send('disconnect');
   ui.connected = false;
