@@ -1,4 +1,4 @@
-# Android build environment for the XEsync Capacitor app.
+# Android build environment for the XEsync Rowing Capacitor app.
 # @capacitor/android's own build.gradle pins sourceCompatibility /
 # targetCompatibility to JavaVersion.VERSION_21 (confirmed by a real build
 # failure: "error: invalid source release: 21" under JDK 17) - so this

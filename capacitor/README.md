@@ -1,4 +1,4 @@
-# XEsync — Capacitor port (replaces the AI2 shell)
+# XEsync Rowing — Capacitor port (replaces the AI2 shell)
 
 Ports the native layer only. `state.js`, `view.js`, `api.js`,
 `controller.js`, `ftms_integration.js`, `debug*.js`, `app.css`,

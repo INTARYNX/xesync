@@ -1,4 +1,4 @@
-# XEsync — Des améliorations simples pour donner envie de revenir
+# XEsync Rowing — Des améliorations simples pour donner envie de revenir
 
 > Proposition produit — 10 septembre 2026. Idées à tester, pas fonctionnalités déjà disponibles.
 

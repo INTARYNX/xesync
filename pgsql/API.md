@@ -1,4 +1,4 @@
-# XEsync API
+# XEsync Rowing API
 
 REST API served by PostgREST in front of a PostgreSQL schema. All endpoints are
 plain JSON over HTTPS.

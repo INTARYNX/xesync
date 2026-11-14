@@ -1,4 +1,4 @@
-# XEsync
+# XEsync Rowing
 
 Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native Android app (App Inventor) that bridges BLE FTMS data to a WebView running this app.
 
