@@ -9,7 +9,7 @@ keep-screen-on, status bar, exit) with direct Capacitor plugin calls,
 behind the exact same `Bridge.send` / `Bridge.setHandlers` API.
 
 **Status: BLE scan/connect/data/reconnect confirmed working on a real
-Xebex rower + real Android phone (2026-08-08).** Every fix below was found
+XEBEX rower + real Android phone (2026-08-08).** Every fix below was found
 by actually running the app on hardware, not by reading code — several
 would never have shown up otherwise. See `bridge.src.js`'s inline "FIXED"
 comments for full detail on each; short version:
@@ -30,7 +30,7 @@ comments for full detail on each; short version:
   was always the literal string `"workout_"` — every offline save
   overwrote the last one. Fixed to use the real unique tag the web app
   already generates.
-- **BLE scan uses no service-UUID filter.** The Xebex rower doesn't
+- **BLE scan uses no service-UUID filter.** The XEBEX rower doesn't
   advertise the FTMS service UUID in its ADV packet, only after GATT
   connect — matches name (`XEBEX`) like the real AI2 blocks did, not a
   service filter (confirmed: filtered scan found nothing even standing

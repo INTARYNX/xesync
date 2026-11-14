@@ -1,6 +1,6 @@
 # XEsync Rowing - Architecture
 
-Single-page app embedded in an App Inventor WebViewer. Drives a Xebex
+Single-page app embedded in an App Inventor WebViewer. Drives a XEBEX
 rower over BLE (FTMS), tracks the workout, and saves it online or offline.
 
 At deploy time `deploy.ps1` inlines every `<script src>` and `<link>` into

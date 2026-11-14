@@ -112,7 +112,7 @@
       lc.textBaseline = 'middle';
 
       var cx = logoCanvas.width / 2;
-      var cy = logoCanvas.height / 2;
+      var cy = 72;
       var wXE  = lc.measureText('XE').width;
       var wSyn = lc.measureText('sync').width;
       var x0 = cx - (wXE + wSyn) / 2;
@@ -121,6 +121,18 @@
       lc.fillText('XE', x0, cy);
       lc.fillStyle = grad;
       lc.fillText('sync', x0 + wXE, cy);
+
+      // Second line, drawn letter by letter so the spacing does not depend
+      // on canvas letterSpacing support
+      lc.font = '700 28px "Courier Prime", "Courier New", Courier, monospace';
+      lc.fillStyle = '#7fb4de';
+      var word = 'ROWING', gap = 16, wordW = -gap;
+      for (var i = 0; i < word.length; i++) wordW += lc.measureText(word[i]).width + gap;
+      var lx = cx - wordW / 2;
+      for (var j = 0; j < word.length; j++) {
+        lc.fillText(word[j], lx, 158);
+        lx += lc.measureText(word[j]).width + gap;
+      }
     }
 
     function draw(now) {

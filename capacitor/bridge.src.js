@@ -143,7 +143,7 @@ var Bridge = (function () {
         {},
         function (result) {
           var name = result.device.name || result.localName || '';
-          if (name.indexOf('XEBEX') === -1) return; // only Xebex rowers advertise this name
+          if (name.indexOf('XEBEX') === -1) return; // only XEBEX rowers advertise this name
           if (foundDevices[result.device.deviceId]) return;
           foundDevices[result.device.deviceId] = name;
           emitScanResult();

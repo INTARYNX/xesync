@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>XEsync Engineering — Bluetooth, WebGL and workout persistence</title>
+<title>XEsync Rowing Engineering — Bluetooth, WebGL and workout persistence</title>
 <meta name="description" content="Inside XEsync: a Capacitor Bluetooth bridge, procedural WebGL rowing scene, session state machine and PostgreSQL backend.">
-<meta property="og:title" content="XEsync Engineering — Bluetooth, WebGL and workout persistence">
+<meta property="og:title" content="XEsync Rowing Engineering — Bluetooth, WebGL and workout persistence">
 <meta property="og:description" content="Inside XEsync: a Capacitor Bluetooth bridge, procedural WebGL rowing scene, session state machine and PostgreSQL backend.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://xesync.intarynx.com/engineering.html">
@@ -13,7 +13,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="XEsync Engineering — Bluetooth, WebGL and workout persistence">
+<meta name="twitter:title" content="XEsync Rowing Engineering — Bluetooth, WebGL and workout persistence">
 <meta name="twitter:description" content="Inside XEsync: a Capacitor Bluetooth bridge, procedural WebGL rowing scene, session state machine and PostgreSQL backend.">
 <meta name="twitter:image" content="https://xesync.intarynx.com/og-image.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,17 +26,18 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
 <link rel="manifest" href="favicon/site.webmanifest">
 <link rel="canonical" href="https://xesync.intarynx.com/engineering.html">
+<script defer src="https://analytics.mintaka.cc/script.js" data-website-id="53271164-b9f2-4c7a-beed-6d7e84bc62c0" data-domains="xesync.intarynx.com" data-do-not-track="true"></script>
 </head>
 <body class="engineering">
-<nav class="nav" aria-label="Main navigation"><a href="index.html">XEsync</a><a href="engineering.html" aria-current="page">Engineering</a><a class="primary" href="https://github.com/INTARYNX/xesync" target="_blank" rel="noopener noreferrer">View code <span aria-hidden="true">↗</span></a></nav>
+<nav class="nav" aria-label="Main navigation"><a href="index.html">XEsync Rowing</a><a href="engineering.html" aria-current="page">Engineering</a><a class="primary" href="https://github.com/INTARYNX/xesync" target="_blank" rel="noopener noreferrer">View code <span aria-hidden="true">↗</span></a></nav>
 <main class="content">
-<header class="engineering-hero"><p class="eyebrow">XEsync / Engineering</p><h1>From a Bluetooth packet<br>to a workout worth keeping.</h1><p class="lead">An Android app, a procedural rowing scene and a workout backend. Built together to turn a Xebex console’s data into something a rower can use.</p><a class="text-link" href="index.html">See the app <span aria-hidden="true">↗</span></a></header>
-<section class="page-section"><h2 class="section-label"><span class="section-number">01</span> The system</h2><p class="section-note">The native layer connects to the hardware. The web layer turns incoming data into a live experience and a persistent training history.</p><ol class="architecture"><li><span>01 / Input</span><strong>Xebex console</strong><small>Bluetooth · FTMS packets</small></li><li><span>02 / Bridge</span><strong>Capacitor</strong><small>Scan · connect · notify</small></li><li><span>03 / Experience</span><strong>WebView + WebGL</strong><small>Metrics · scene · session state</small></li><li><span>04 / Persistence</span><strong>PostgreSQL</strong><small>PostgREST · saved workouts</small></li></ol><p class="section-note"><a class="text-link" href="https://github.com/INTARYNX/xesync/blob/main/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Read the architecture ↗</a> · <a class="text-link" href="https://github.com/INTARYNX/xesync/blob/main/capacitor/bridge.src.js" target="_blank" rel="noopener noreferrer">Explore the native bridge ↗</a></p></section>
+<header class="engineering-hero"><p class="eyebrow">XEsync Rowing / Engineering</p><h1>From a Bluetooth packet<br>to a workout worth keeping.</h1><p class="lead">An Android app, a procedural rowing scene and a workout backend. Built together to turn a XEBEX console’s data into something a rower can use.</p><a class="text-link" href="index.html">See the app <span aria-hidden="true">↗</span></a></header>
+<section class="page-section"><h2 class="section-label"><span class="section-number">01</span> The system</h2><p class="section-note">The native layer connects to the hardware. The web layer turns incoming data into a live experience and a persistent training history.</p><ol class="architecture"><li><span>01 / Input</span><strong>XEBEX console</strong><small>Bluetooth · FTMS packets</small></li><li><span>02 / Bridge</span><strong>Capacitor</strong><small>Scan · connect · notify</small></li><li><span>03 / Experience</span><strong>WebView + WebGL</strong><small>Metrics · scene · session state</small></li><li><span>04 / Persistence</span><strong>PostgreSQL</strong><small>PostgREST · saved workouts</small></li></ol><p class="section-note"><a class="text-link" href="https://github.com/INTARYNX/xesync/blob/main/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Read the architecture ↗</a> · <a class="text-link" href="https://github.com/INTARYNX/xesync/blob/main/capacitor/bridge.src.js" target="_blank" rel="noopener noreferrer">Explore the native bridge ↗</a></p></section>
 <section class="page-section engineering-details"><h2 class="section-label"><span class="section-number">02</span> Where the work lives</h2>      <div class="tech-list">
         <div class="tech-card">
           <h3>BLE + FTMS parsing</h3>
           <p>
-            The Android app subscribes to the Xebex FTMS characteristic and forwards 20-byte
+            The Android app subscribes to the XEBEX FTMS characteristic and forwards 20-byte
             packets to the WebView. Multi-byte fields use the rower's quirky
             <code>high * 255 + low</code> convention (not standard little-endian), reverse-engineered
             from capture sessions.

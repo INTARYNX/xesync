@@ -107,7 +107,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // Parsing — Xebex FTMS
+  // Parsing — XEBEX FTMS
   //
   // A frame is 20 comma-separated byte values. Multi-byte fields use the
   // machine's own odd encoding: value = byte[hi] * 255 + byte[lo] (255, not

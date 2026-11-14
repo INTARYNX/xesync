@@ -1,6 +1,6 @@
 # XEsync Rowing
 
-Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native Android app (App Inventor) that bridges BLE FTMS data to a WebView running this app.
+Real-time Bluetooth rowing tracker for XEBEX air rowers. Connects via a native Android app (App Inventor) that bridges BLE FTMS data to a WebView running this app.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -8,7 +8,7 @@ Real-time Bluetooth rowing tracker for Xebex air rowers. Connects via a native A
 
 ## What it does
 
-- Connects to a Xebex air rower over Bluetooth Low Energy (FTMS protocol)
+- Connects to a XEBEX air rower over Bluetooth Low Energy (FTMS protocol)
 - Displays live metrics: SPM, distance, watts, pace, calories, heart rate, elapsed time
 - Animated WebGL rowing scene (day/night cycle, weather, reflections)
 - Tracks sessions with automatic workout detection (starts on first stroke, ends after 5s inactivity)
@@ -264,7 +264,7 @@ included.
 
 ## FTMS packet format
 
-Xebex air rowers use a non-standard 20-byte FTMS payload where 16-bit values are encoded as `high * 255 + low` (not standard little-endian `* 256`).
+XEBEX air rowers use a non-standard 20-byte FTMS payload where 16-bit values are encoded as `high * 255 + low` (not standard little-endian `* 256`).
 
 | Bytes (1-indexed) | Value |
 |---|---|

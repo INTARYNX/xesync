@@ -150,7 +150,7 @@ function loadFtms(opts) {
 }
 
 // -- frame building ----------------------------------------------------
-// Encodes back into the Xebex wire format: value = byte[hi] * 255 + byte[lo].
+// Encodes back into the XEBEX wire format: value = byte[hi] * 255 + byte[lo].
 // Used to generate fixtures; the literal hand-checked frame lives in the
 // test file so the encoder and decoder aren't validating each other alone.
 function buildFrame(fields) {

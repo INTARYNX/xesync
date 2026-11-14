@@ -77,7 +77,7 @@ var DebugSim = (function () {
   }
 
   /**
-   * Encode a 20-byte FTMS packet using Xebex's high*255 + low convention.
+   * Encode a 20-byte FTMS packet using XEBEX's high*255 + low convention.
    * Field layout (1-indexed bytes, matches ftms_integration.js parsePacket):
    *   byte 3              : SPM * 2          (so half-integer SPM works)
    *   bytes 4–5  (lo,hi)  : strokes
