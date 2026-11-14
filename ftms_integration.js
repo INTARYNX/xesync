@@ -35,6 +35,11 @@
   // (or a brief BLE stall serving a stale frame) can't fake inactivity.
   var ACTIVE_WATTS_MIN = 10;
 
+  // Strokes reported to the animation per packet. The rower sends ~1 Hz, so
+  // more than a couple in one packet means frames were lost, and the extra
+  // count would only throw the animation's stroke clock off.
+  var MAX_TICKS_PER_PACKET = 3;
+
   // Sampling: at MOST one sample per second. Actual spacing follows packet
   // arrival, so intervals vary — samples are not a fixed 1 Hz series.
   var SAMPLE_MIN_INTERVAL_S = 1.0;
@@ -484,6 +489,16 @@
       recordSample(p);
     }
     render();
+    // The animation locks the rower's stroke cycle onto these ticks. After
+    // render(), so the spm it just handed over is the one reported with the
+    // stroke. `prev` is the previous packet even on the one that woke the
+    // session, so the stroke that started it counts too. A counter that went
+    // backwards (rower reset) is not a stroke.
+    if (phase === 'ACTIVE' && prev && p.strokes > prev.strokes &&
+        typeof noteStroke === 'function') {
+      noteStroke(Math.min(p.strokes - prev.strokes, MAX_TICKS_PER_PACKET),
+                 (p.t - prev.t) / 1000);
+    }
     // Coaching (coaching.js) is entirely optional: ftms_integration.js never
     // requires it to exist, it just calls out if controller.js wired it up.
     if (phase === 'ACTIVE' && typeof window.onFtmsTick === 'function') {

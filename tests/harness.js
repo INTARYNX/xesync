@@ -102,6 +102,9 @@ function makeDocument() {
  * @param {object} [opts]
  * @param {string} [opts.search] querystring, e.g. '?debug=true'
  * @param {number} [opts.startMs] initial clock value
+ * @param {object} [opts.globals] extra globals the module may call, e.g.
+ *   spies for setConsoleSpeedAndSpm/noteStroke (defined by rowing_display.js
+ *   in the real page, which this sandbox deliberately doesn't load)
  */
 function loadFtms(opts) {
   opts = opts || {};
@@ -123,6 +126,7 @@ function loadFtms(opts) {
     setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     clearInterval: () => {}
   };
+  Object.assign(sandbox, opts.globals || {});
   sandbox.globalThis = sandbox;
 
   vm.createContext(sandbox);
