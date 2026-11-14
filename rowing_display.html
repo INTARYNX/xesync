@@ -96,6 +96,7 @@
     precision highp float;
     varying vec2 v_uv;
     uniform float u_time;
+    uniform float u_day;   // index of the current 300 s day cycle, for per-day variation
     uniform float u_speed;
     uniform float u_flow;
     uniform float u_phase;
@@ -136,6 +137,79 @@
       vec2 pa = p - a, ba = b - a;
       float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
       return length(pa - ba * h);
+    }
+
+    const float TAU = 6.2831853;
+
+    // One layer of fairy lights: soft glowing motes drifting upward. A cell
+    // holds at most one mote, kept inside the cell, so one lookup per layer
+    // is enough. u_time wraps every 300 s, so everything periodic here runs
+    // a whole number of cycles per wrap, and the vertical cell index wraps
+    // at `rise` (the cells scrolled per wrap): no jump when the clock wraps.
+    vec3 motes(vec2 p, float cells, float rise, float seed, float dens, float tt){
+      vec2 g = p * cells;
+      g.y -= tt * rise;
+      vec2 id = floor(g);
+      vec2 f = fract(g) - 0.5;
+      id.y = mod(id.y, rise);
+      float h  = hash(id + seed);
+      float h2 = hash(id + seed + 7.31);
+      float h3 = hash(id + seed + 19.7);
+      vec2 pos = (vec2(h, h2) - 0.5) * 0.4 +
+                 0.10 * vec2(sin(TAU * (tt * 6.0 + h * 5.0)),
+                             cos(TAU * (tt * 5.0 + h2 * 5.0)));
+      float d = length(f - pos);
+      float tw = 0.35 + 0.65 * (0.5 + 0.5 * sin(TAU * (tt * (90.0 + floor(h2 * 90.0)) + h * 9.0)));
+      float glow = exp(-d * d * 60.0) * 0.45 + smoothstep(0.06, 0.0, d);
+      float k = fract(h * 3.7);
+      vec3 c = k < 0.34 ? vec3(1.00, 0.86, 0.55)
+             : k < 0.67 ? vec3(1.00, 0.62, 0.86)
+             :            vec3(0.55, 0.95, 1.00);
+      return c * glow * tw * step(1.0 - dens, h3);
+    }
+
+    // Stars: one fine point per cell at most, each with its own size and
+    // twinkle (whole cycles per u_time wrap). tt = u_time / 300.
+    float starField(vec2 p, float tt){
+      vec2 g = p * 70.0;
+      vec2 id = floor(g);
+      vec2 f = fract(g) - 0.5;
+      float h  = hash(id + 3.0);
+      float h2 = hash(id + 11.0);
+      vec2 pos = (vec2(h2, fract(h2 * 13.7)) - 0.5) * 0.7;
+      float size = mix(0.09, 0.22, fract(h * 17.0));
+      float tw = 0.65 + 0.35 * sin(TAU * (tt * (60.0 + floor(h2 * 120.0)) + h * 5.0));
+      return smoothstep(size, 0.0, length(f - pos)) * step(0.88, h) * tw;
+    }
+
+    // The moon crosses the sky over the night (0 = rising, 1 = setting).
+    float moonTime(float tt){ return (tt - 0.66) / 0.32; }
+    vec2 moonPos(float mt){
+      return vec2(0.5 + (mt - 0.5) * 0.9, 0.60 + 0.30 * sin(mt * 3.14159265));
+    }
+
+    // How much aurora there is right now: deep in the night, for about a
+    // minute, and only on some days (a different roll each day cycle, so
+    // most nights stay plain). tt = u_time / 300.
+    float auroraAmount(float tt){
+      return smoothstep(0.72, 0.78, tt) * (1.0 - smoothstep(0.88, 0.94, tt)) *
+             step(0.62, hash(vec2(u_day, 17.0))) * (0.7 + 0.5 * hash(vec2(u_day, 29.0))) *
+             (0.6 + 0.4 * sin(TAU * tt * 6.0));
+    }
+
+    // Aurora curtain at horizontal position x, h above the horizon: a bright
+    // wavy lower hem, fading upward into rays, green at the hem to violet on
+    // top. Everything periodic runs whole cycles per u_time wrap.
+    vec3 aurora(float x, float h, float tt){
+      float aw = sin(x * 5.0 + 1.6 * sin(x * 2.3 + TAU * tt * 3.0) + TAU * tt * 2.0);
+      float d = h - (0.22 + 0.05 * aw);
+      float curtain = smoothstep(-0.025, 0.012, d) * exp(-max(d, 0.0) / 0.10);
+      float patch = smoothstep(0.25, 0.60,
+          noise(vec2(x * 2.2 + 3.0 + 0.6 * sin(TAU * tt * 2.0), 1.7 + u_day)));
+      float rays = (0.45 + 0.75 * noise(vec2(x * 30.0 + 1.5 * aw, 7.0))) *
+                   (0.85 + 0.15 * sin(TAU * tt * 40.0 + x * 12.0));
+      vec3 c = mix(vec3(0.20, 1.00, 0.70), vec3(0.65, 0.45, 1.00), smoothstep(0.0, 0.16, d));
+      return c * curtain * rays * patch;
     }
 
     void main(){
@@ -182,13 +256,14 @@
           skyTop    = mix(skyTopDay, skyTopDusk, t);
           skyMid    = mix(skyMidDay, skyMidDusk, t);
           skyBottom = mix(skyBotDay, skyBotDusk, t);
-        } else if (dayCycle < 0.75) {
-          float t = (dayCycle - 0.5) / 0.25;
+        } else if (dayCycle < 0.90) {
+          // night proper from 0.70 to 0.90
+          float t = min((dayCycle - 0.5) / 0.20, 1.0);
           skyTop    = mix(skyTopDusk, skyTopNight, t);
           skyMid    = mix(skyMidDusk, skyMidNight, t);
           skyBottom = mix(skyBotDusk, skyBotNight, t);
         } else {
-          float t = (dayCycle - 0.75) / 0.25;
+          float t = (dayCycle - 0.90) / 0.10;
           skyTop    = mix(skyTopNight, skyTopDawn, t);
           skyMid    = mix(skyMidNight, skyMidDawn, t);
           skyBottom = mix(skyBotNight, skyBotDawn, t);
@@ -223,9 +298,23 @@
         float nightFactor = smoothstep(0.55, 0.75, dayCycle) *
                            (1.0 - smoothstep(0.95, 1.0, dayCycle));
         if (nightFactor > 0.0) {
-          float starN = noise(vec2(u * 200.0, sy * 200.0));
-          float stars = smoothstep(0.93, 0.99, starN) * smoothstep(0.0, 0.6, sy);
+          float stars = starField(P, dayCycle) * smoothstep(0.0, 0.6, sy);
           col += vec3(1.0, 1.0, 0.95) * stars * nightFactor * 0.8;
+        }
+
+        float moonT = moonTime(dayCycle);
+        if (moonT > 0.0 && moonT < 1.0) {
+          vec2 mp = moonPos(moonT);
+          float md = distance(P, mp);
+          float mr = 0.032;
+          // A different phase each night: a shadow disc slid more or less
+          // far across, from a crescent to a full moon
+          float mOff = mr * mix(0.7, 2.2, hash(vec2(u_day, 83.0))) *
+                       (hash(vec2(u_day, 89.0)) > 0.5 ? 1.0 : -1.0);
+          float lit = smoothstep(mr, mr - 0.003, md) *
+                      smoothstep(mr - 0.003, mr, distance(P, mp + vec2(mOff, 0.008)));
+          col += vec3(0.70, 0.78, 1.00) * smoothstep(0.20, 0.0, md) * 0.10;
+          col = mix(col, vec3(0.96, 0.95, 0.88), lit);
         }
 
         float cloudScroll = flow * 0.25;
@@ -234,6 +323,47 @@
         vec3 cloudColor = mix(vec3(1.0, 0.88, 0.78), vec3(0.30, 0.32, 0.45),
                              smoothstep(0.55, 0.75, dayCycle) * (1.0 - smoothstep(0.95, 1.0, dayCycle)));
         col = mix(col, cloudColor, cloudMask * 0.55);
+
+        float auroraK = auroraAmount(dayCycle);
+        if (auroraK > 0.01) {
+          col += aurora(P.x, y - horizon, dayCycle) * auroraK * 0.42;
+        }
+
+        // Shooting star: at most one a night, on about two nights in three,
+        // lasting a bit over a second
+        float ssT = (dayCycle - (0.75 + 0.15 * hash(vec2(u_day, 41.0)))) / 0.004;
+        if (ssT > 0.0 && ssT < 1.0 && hash(vec2(u_day, 43.0)) > 0.35) {
+          float ssSide = hash(vec2(u_day, 53.0)) > 0.5 ? 1.0 : -1.0;
+          vec2 ssDir = normalize(vec2(ssSide, -0.45));
+          vec2 ssHead = vec2(0.5 + (hash(vec2(u_day, 47.0)) - 0.5) * aspect * 0.6 - ssSide * 0.12,
+                             horizon + 0.44) + ssDir * ssT * 0.28;
+          float ssLife = sin(ssT * 3.14159265);
+          vec2 ssTail = ssHead - ssDir * (0.01 + 0.09 * ssLife);
+          vec2 ssPa = P - ssTail, ssBa = ssHead - ssTail;
+          float ssH = clamp(dot(ssPa, ssBa) / dot(ssBa, ssBa), 0.0, 1.0);
+          float ssD = length(ssPa - ssBa * ssH);
+          col += vec3(1.0, 0.97, 0.90) * smoothstep(0.0035, 0.0, ssD) * ssH * ssH * ssLife;
+        }
+
+        // A flock of birds crossing the morning sky, about one day in two
+        float birdT = (dayCycle - (0.06 + 0.20 * hash(vec2(u_day, 71.0)))) / 0.06;
+        if (birdT > 0.0 && birdT < 1.0 && hash(vec2(u_day, 73.0)) > 0.5) {
+          vec2 flock = vec2(0.5 + (birdT - 0.5) * (aspect + 0.4),
+                            horizon + 0.33 + 0.02 * sin(birdT * 9.0));
+          float birdMask = 0.0;
+          for (int bi = 0; bi < 5; bi++) {
+            float fi = float(bi);
+            float rank = floor((fi + 1.0) / 2.0);
+            float side = mod(fi, 2.0) < 0.5 ? 1.0 : -1.0;
+            vec2 bp = flock + vec2(-0.022 * rank, 0.012 * rank * side);
+            float flap = sin(TAU * (u_time / 300.0 * 600.0 + fi * 0.21));
+            float wingY = 0.002 + 0.004 * flap;
+            float bd = min(sdSegment(P, bp, bp + vec2(-0.008, wingY)),
+                           sdSegment(P, bp, bp + vec2( 0.008, wingY)));
+            birdMask = max(birdMask, smoothstep(0.0018, 0.0008, bd));
+          }
+          col = mix(col, vec3(0.16, 0.12, 0.22), birdMask * 0.8);
+        }
 
         float darknessFactor = smoothstep(0.55, 0.75, dayCycle) *
                               (1.0 - smoothstep(0.95, 1.0, dayCycle));
@@ -261,6 +391,24 @@
         LAYER(0.05, 0.010, 36.0, 1.0,  0.38, 0.24, 0.40,  0.30, 0.20, 0.34,  0.30)
         LAYER(0.03, 0.008, 40.0, 4.0,  0.30, 0.20, 0.34,  0.24, 0.18, 0.30,  0.34)
         LAYER(0.01, 0.007, 44.0, 2.0,  0.22, 0.18, 0.30,  0.18, 0.16, 0.26,  0.40)
+
+        // Pines along the nearest ridge (same line as the last LAYER), in
+        // scattered groves
+        {
+          float sc = u - flow * 0.40;
+          float baseY = horizon + 0.01;
+          float ridge = baseY + sin(sc * 44.0 + 2.0) * 0.007 +
+                        (noise(vec2(sc * 8.0, baseY * 5.0)) * 0.5 - 0.25) * 0.007;
+          float tx = sc * 55.0;
+          float th = hash(vec2(floor(tx), 77.0));
+          float grove = smoothstep(0.45, 0.65, noise(vec2(sc * 5.0, 31.0)));
+          float treeH = (0.012 + 0.022 * th) * grove * step(0.3, th);
+          float treeTop = ridge + treeH * (1.0 - 2.0 * abs(fract(tx) - 0.5));
+          if (y >= ridge - 0.001 && y < treeTop) {
+            vec3 pine = vec3(0.19, 0.16, 0.28);
+            col = mix(pine, pine * vec3(0.25, 0.25, 0.40), darknessFactor);
+          }
+        }
       } else {
         float yw = y / horizon;
         float depth = 1.0 - yw;
@@ -285,16 +433,36 @@
         base = mix(base, farCol, smoothstep(0.7, 1.0, yw));
         float crest = pow(waves, mix(1.5, 3.5, depth));
         col = base + vec3(0.30, 0.22, 0.18) * crest * mix(0.3, 1.0, depth) * (1.0 - darknessW * 0.6);
-        float sparkleN = noise(vec2((u - flow * 4.0) * 140.0, yw * 110.0 + u_time * 2.0));
-        float sparkle = smoothstep(0.92, 0.99, sparkleN) * mix(0.0, 1.0, depth);
-        vec3 sparkleCol = mix(vec3(1.0, 0.85, 0.65), vec3(0.85, 0.90, 1.0), darknessW);
-        col += sparkleCol * sparkle * 0.7;
+        vec2 glintG = vec2((u - flow * 4.0) * 80.0, yw * 60.0);
+        vec2 glintF = fract(glintG) - 0.5;
+        float glintH = hash(floor(glintG) + 5.0);
+        vec2 glintPos = (vec2(fract(glintH * 31.0), fract(glintH * 57.0)) - 0.5) * 0.6;
+        float glintTw = 0.5 + 0.5 * sin(TAU * (u_time / 300.0 * (150.0 + floor(glintH * 150.0)) + glintH * 9.0));
+        float sparkle = smoothstep(0.20, 0.02, length((glintF - glintPos) * vec2(1.0, 2.4))) *
+                        step(0.86, glintH) * glintTw * depth;
+        vec3 sparkleCol = mix(vec3(1.0, 0.85, 0.65), vec3(0.85, 0.90, 1.0), darknessW);        col += sparkleCol * sparkle * 0.7;
         float band = exp(-pow((yw - 0.50) * 4.0, 2.0));
         vec3 reflectCol = mix(vec3(1.0, 0.75, 0.55), vec3(0.6, 0.65, 0.85), darknessW);
         col += reflectCol * band * crest * 0.50;
         float haze = smoothstep(0.75, 1.0, yw);
         vec3 hazeCol = mix(vec3(0.95, 0.78, 0.70), vec3(0.20, 0.22, 0.36), darknessW);
         col = mix(col, hazeCol, haze * 0.6);
+
+        // Faint aurora reflection, broken up by the waves
+        float auroraW = auroraAmount(dayCycleW);
+        if (auroraW > 0.01) {
+          col += aurora(P.x + (waves - 0.5) * 0.05, (horizon - y) * 1.3, dayCycleW) *
+                 auroraW * 0.14 * (0.5 + waves);
+        }
+
+        float moonTW = moonTime(dayCycleW);
+        if (moonTW > 0.0 && moonTW < 1.0) {
+          float mVis = smoothstep(0.40, 0.75, sin(moonTW * 3.14159265));   // clear of the hills
+          float mW = mix(0.012, 0.07, 1.0 - yw);
+          float mShape = smoothstep(mW, mW * 0.2, abs(P.x - moonPos(moonTW).x));
+          col = mix(col, vec3(0.85, 0.88, 0.95),
+                    mShape * smoothstep(0.0, 0.8, yw) * smoothstep(0.3, 0.7, waves) * 0.30 * mVis);
+        }
 
         // ===== Reflet du soleil/lune dans l'eau =====
         float dayCycleS = fract(u_time / 300.0);
@@ -330,7 +498,12 @@
       float fIdx = phase * 8.0;
       int i0 = int(floor(fIdx));
       int i1 = int(mod(float(i0 + 1), 8.0));
+      int iPrev = int(mod(float(i0 + 7), 8.0));
+      int iNext = int(mod(float(i0 + 2), 8.0));
       float t = fract(fIdx);
+      // Finish pose on the u_phase track; must match FINISH_RENDER_PHASE in
+      // rowing_display.js.
+      float finishPhase = 0.375;
 
       vec2 KF[56];
       KF[0]  = vec2(0.00, 0.00); KF[1]  = vec2(0.10, 0.55); KF[2]  = vec2(0.55, 0.45);
@@ -360,21 +533,37 @@
 
       vec2 pts[7];
       for (int p = 0; p < 7; p++) {
+        vec2 a0 = vec2(0.0);
         vec2 a = vec2(0.0);
         vec2 b = vec2(0.0);
+        vec2 b1 = vec2(0.0);
         for (int k = 0; k < 8; k++) {
           for (int q = 0; q < 7; q++) {
             if (q == p) {
-              if (k == i0) a = KF[k * 7 + q];
-              if (k == i1) b = KF[k * 7 + q];
+              if (k == iPrev) a0 = KF[k * 7 + q];
+              if (k == i0)    a  = KF[k * 7 + q];
+              if (k == i1)    b  = KF[k * 7 + q];
+              if (k == iNext) b1 = KF[k * 7 + q];
             }
           }
         }
-        pts[p] = mix(a, b, t);
+        // Catmull-Rom through the keyframes: the joints keep their speed
+        // across a keyframe instead of changing direction abruptly.
+        pts[p] = 0.5 * (2.0 * a + (b - a0) * t +
+                        (2.0 * a0 - 5.0 * a + 4.0 * b - b1) * t * t +
+                        (3.0 * a - a0 - 3.0 * b + b1) * t * t * t);
       }
 
       float scale = 0.075 * u_scale;
-      vec2 origin   = vec2(0.5 - 0.02 * u_scale, horizon * 0.5);
+      // The boat bobs gently on the water, and the rower breathes while
+      // resting. Whole cycles per u_time wrap (5 s and 3.3 s periods).
+      float idle = 1.0 - smoothstep(0.0, 8.0, u_spm);
+      float bob = sin(TAU * u_time / 300.0 * 60.0) * 0.0035 * u_scale * mix(0.5, 1.0, idle);
+      float breath = sin(TAU * u_time / 300.0 * 90.0) * 0.03 * idle;
+      pts[3].y += breath;
+      pts[4].y += breath * 0.5;
+      pts[6].y += breath;
+      vec2 origin   = vec2(0.5 - 0.02 * u_scale, horizon * 0.5 + bob);
       vec2 foot     = origin + vec2(pts[0].x, pts[0].y) * scale;
       vec2 knee     = origin + vec2(pts[1].x, pts[1].y) * scale;
       vec2 hip      = origin + vec2(pts[2].x, pts[2].y) * scale;
@@ -392,9 +581,10 @@
       vec2 bladeTip = hand + oarDir * (handToLock + bladeArm);
 
       float oarWL = (origin.y + 0.025 * u_scale) - 0.085 * u_scale;
-      float clampStrength = 1.0;
-      if (phase < 0.5) clampStrength = 0.0;
-      else if (phase >= 0.875) clampStrength = 1.0 - (phase - 0.875) / 0.125;
+      // Blade in the water for the drive only: it lifts out at the finish
+      // and drops back in over the catch hold.
+      float clampStrength = smoothstep(finishPhase, finishPhase + 0.06, phase);
+      if (phase >= 0.875) clampStrength = 1.0 - (phase - 0.875) / 0.125;
       if (clampStrength > 0.0 && bladeTip.y < oarWL + 0.005) {
         float targetY = oarWL + 0.005;
         if (abs(oarDir.y) > 0.0001) {
@@ -745,8 +935,9 @@
         vec2 crossPt = mix(oarA, oarBpt, tCross);
         float bladeBelow = step(bladeTip.y, oarWaterline);
 
-        if (bladeBelow > 0.5 && phase < 0.5) {
-          float driveT = phase / 0.5;
+        if (bladeBelow > 0.5 && phase < finishPhase + 0.06) {
+          float driveT = min(phase / finishPhase, 1.0) *
+                         (1.0 - smoothstep(finishPhase, finishPhase + 0.06, phase));
           float trailLen = mix(0.10, 0.60, speedFactor) * u_scale;
           float trailAlong = P.x - crossPt.x;
           float trailPerp = abs(y - crossPt.y);
@@ -838,12 +1029,13 @@
       float visorMask = smoothstep(0.001, -0.001, visor);
       col = mix(col, vec3(0.05, 0.15, 0.40), visorMask);
 
-      float weatherCycle = u_time / 60.0;
-      float rainPhase = fract(weatherCycle / 3.0);
+      // A shower late in the morning, about one day in two, lighter or
+      // heavier from one day to the next
+      float rainPhase = fract(u_time / 300.0);
       float rainIntensity = 0.0;
-      if (rainPhase > 0.6 && rainPhase < 0.95) {
-        float rt = (rainPhase - 0.6) / 0.35;
-        rainIntensity = sin(rt * 3.14159265);
+      if (rainPhase > 0.28 && rainPhase < 0.48 && hash(vec2(u_day, 61.0)) > 0.5) {
+        float rt = (rainPhase - 0.28) / 0.20;
+        rainIntensity = sin(rt * 3.14159265) * mix(0.45, 1.0, hash(vec2(u_day, 67.0)));
       }
 
       if (rainIntensity > 0.01) {
@@ -883,16 +1075,26 @@
         float rainbowWidth = 0.04;
         if (rainbowBand < rainbowWidth) {
           float bandT = (rainbowD - rainbowR + rainbowWidth) / (2.0 * rainbowWidth);
-          vec3 rainbowCol;
-          if (bandT < 0.16)      rainbowCol = vec3(0.55, 0.20, 0.70);
-          else if (bandT < 0.33) rainbowCol = vec3(0.30, 0.30, 0.85);
-          else if (bandT < 0.50) rainbowCol = vec3(0.30, 0.75, 0.85);
-          else if (bandT < 0.66) rainbowCol = vec3(0.40, 0.85, 0.40);
-          else if (bandT < 0.83) rainbowCol = vec3(0.95, 0.85, 0.35);
-          else                    rainbowCol = vec3(0.95, 0.45, 0.35);
+          vec3 rainbowCol = mix(vec3(0.55, 0.20, 0.70), vec3(0.30, 0.30, 0.85), smoothstep(0.08, 0.25, bandT));
+          rainbowCol = mix(rainbowCol, vec3(0.30, 0.75, 0.85), smoothstep(0.25, 0.42, bandT));
+          rainbowCol = mix(rainbowCol, vec3(0.40, 0.85, 0.40), smoothstep(0.42, 0.58, bandT));
+          rainbowCol = mix(rainbowCol, vec3(0.95, 0.85, 0.35), smoothstep(0.58, 0.75, bandT));
+          rainbowCol = mix(rainbowCol, vec3(0.95, 0.45, 0.35), smoothstep(0.75, 0.92, bandT));
           float bandFade = smoothstep(rainbowWidth, rainbowWidth * 0.4, rainbowBand);
           col = mix(col, rainbowCol, bandFade * rainbowFactor * 0.55);
         }
+      }
+
+      // Fairy lights: at dusk, for about a minute, on about half the days and
+      // more or less thick from one day to the next. They hover low, over
+      // the water and the hills, not up in the sky.
+      float fireflyK = smoothstep(0.47, 0.53, dayCycleR) * (1.0 - smoothstep(0.64, 0.70, dayCycleR)) *
+                       step(0.5, hash(vec2(u_day, 5.0))) * (0.5 + 0.5 * hash(vec2(u_day, 9.0)));
+      if (fireflyK > 0.01) {
+        float ttF = u_time / 300.0;
+        vec3 fairy = motes(vec2(P.x - flow * 0.01, P.y),  8.0, 100.0,  0.0, 0.15, ttF) * 0.90 +
+                     motes(vec2(P.x - flow * 0.02, P.y), 14.0,  84.0, 31.0, 0.12, ttF) * 0.60;
+        col += fairy * fireflyK * smoothstep(0.80, 0.50, y);
       }
 
       gl_FragColor = vec4(col, 1.0);

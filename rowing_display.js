@@ -16,10 +16,27 @@ var RowingAnimation = (function() {
     var TIME_WRAP = 300.0;
     var FLOW_WRAP = 1000.0;
 
-    // One stroke is a 0..1 cycle: 0 is the catch (start of the drive),
-    // DRIVE_FRACTION is the finish (end of the drive), then the recovery
-    // runs back round to the catch. 1/3 is the usual drive:recovery of 1:2.
+    // One stroke is a 0..1 cycle, linear in time, with the finish (end of
+    // the drive) pinned at FINISH_PHASE. The drive is the driveFraction of
+    // the cycle leading up to it and the recovery is the rest, so the catch
+    // sits at FINISH_PHASE - driveFraction. DRIVE_FRACTION is the reference
+    // drive:recovery of 1:2, at 24 spm.
     var DRIVE_FRACTION = 1.0 / 3.0;
+
+    // The drive takes a larger share of the stroke as the rate goes up
+    // (about 1:2.5 at 18 spm, 1:2 at 24, 1:1.5 at 32, towards 1:1 flat out).
+    var DRIVE_REF_SPM      = 24.0;
+    var DRIVE_PER_SPM      = 0.0085;
+    var DRIVE_FRACTION_MIN = 0.25;
+    var DRIVE_FRACTION_MAX = 0.5;
+    var DRIVE_EASE_RATE    = 0.5;   // 1/s, so a rate change never jerks the pose
+    var driveFraction = DRIVE_FRACTION;
+
+    function driveFractionForSpm(spm) {
+        if (!(spm > 0)) return DRIVE_FRACTION;
+        return Math.min(DRIVE_FRACTION_MAX, Math.max(DRIVE_FRACTION_MIN,
+            DRIVE_FRACTION + (spm - DRIVE_REF_SPM) * DRIVE_PER_SPM));
+    }
 
     // Where those two landmarks sit on the shader's u_phase pose track (8
     // keyframes over 0..1, see rowing_display.html): keyframe 3 is the
@@ -28,11 +45,24 @@ var RowingAnimation = (function() {
     // 0.875..1.0 holds the catch.
     var FINISH_RENDER_PHASE = 0.375;
 
-    function toRenderPhase(a) {
-        return a < DRIVE_FRACTION
-            ? a * (FINISH_RENDER_PHASE / DRIVE_FRACTION)
-            : FINISH_RENDER_PHASE + (a - DRIVE_FRACTION) *
-                ((1.0 - FINISH_RENDER_PHASE) / (1.0 - DRIVE_FRACTION));
+    // Boat surge: the hull speeds up through the drive, is fastest just
+    // after the finish and slows down over the recovery. Averages 1 over a
+    // stroke, so the scenery still covers the same distance.
+    var SURGE_AMOUNT     = 0.2;
+    var SURGE_PEAK_PHASE = DRIVE_FRACTION + 0.08;   // FINISH_PHASE + 0.08
+
+    function surgeFactor(a) {
+        return 1.0 + SURGE_AMOUNT * Math.cos(2.0 * Math.PI * (a - SURGE_PEAK_PHASE));
+    }
+
+    function toRenderPhase(a, drive) {
+        var d = drive === undefined ? DRIVE_FRACTION : drive;
+        var recovery = 1.0 - d;
+        var s = a - FINISH_PHASE;          // cycles since the finish
+        s -= Math.floor(s);
+        return s < recovery
+            ? FINISH_RENDER_PHASE + s * ((1.0 - FINISH_RENDER_PHASE) / recovery)
+            : (s - recovery) * (FINISH_RENDER_PHASE / d);
     }
 
     // ---------------------------------------------------------------------
@@ -198,16 +228,19 @@ var RowingAnimation = (function() {
         var dt = now - lastT;
         lastT = now;
 
-        flow -= dt * currentSpeed * 0.26;
+        flow -= dt * currentSpeed * 0.26 * (currentSpm > 0 ? surgeFactor(animPhase) : 1.0);
         if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
         if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
 
         animPhase = tracker.advance(animPhase, dt, now, currentSpm);
-        var renderPhase = toRenderPhase(animPhase);
+        driveFraction += (driveFractionForSpm(currentSpm) - driveFraction) *
+            Math.min(1.0, dt * DRIVE_EASE_RATE);
+        var renderPhase = toRenderPhase(animPhase, driveFraction);
 
         var timeWrapped = (now - t0) % TIME_WRAP;
 
         gl.uniform1f(uniforms.uTime,   timeWrapped);
+        gl.uniform1f(uniforms.uDay,    Math.floor((now - t0) / TIME_WRAP) % 1000);
         gl.uniform1f(uniforms.uSpeed,  currentSpeed);
         gl.uniform1f(uniforms.uFlow,   flow);
         gl.uniform1f(uniforms.uPhase,  renderPhase);
@@ -268,6 +301,7 @@ var RowingAnimation = (function() {
 
         uniforms = {
             uTime:   gl.getUniformLocation(prog, 'u_time'),
+            uDay:    gl.getUniformLocation(prog, 'u_day'),
             uSpeed:  gl.getUniformLocation(prog, 'u_speed'),
             uFlow:   gl.getUniformLocation(prog, 'u_flow'),
             uPhase:  gl.getUniformLocation(prog, 'u_phase'),
@@ -280,6 +314,7 @@ var RowingAnimation = (function() {
         lastT = t0;
         flow = 0;
         animPhase = 0;
+        driveFraction = DRIVE_FRACTION;
         tracker.reset();
         currentSpeed = 0;
         currentSpm = 0;
@@ -315,6 +350,8 @@ var RowingAnimation = (function() {
         // Exposed for tests/rowing_sync.test.js.
         createPhaseTracker: createPhaseTracker,
         toRenderPhase: toRenderPhase,
+        surgeFactor: surgeFactor,
+        driveFractionForSpm: driveFractionForSpm,
         FINISH_PHASE: FINISH_PHASE,
         initRowing: initRowing,
         stopAllAnimations: function() {

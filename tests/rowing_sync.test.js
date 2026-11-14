@@ -134,6 +134,47 @@ test('render phase is continuous and increasing across the whole cycle', () => {
 // ---------------------------------------------------------------------
 // 2. Tracker, driven by a simulated rower
 // ---------------------------------------------------------------------
+test('the drive takes a larger share of the stroke at higher rates', () => {
+  assert.ok(Math.abs(RA.driveFractionForSpm(24) - 1 / 3) < 1e-9);
+  assert.equal(RA.driveFractionForSpm(0), 1 / 3);
+  assert.ok(RA.driveFractionForSpm(18) < RA.driveFractionForSpm(24));
+  assert.ok(RA.driveFractionForSpm(32) > RA.driveFractionForSpm(24));
+  assert.equal(RA.driveFractionForSpm(5), 0.25);
+  assert.equal(RA.driveFractionForSpm(80), 0.5);
+});
+
+test('whatever the drive share, the finish stays put and the catch leads it', () => {
+  for (const d of [0.25, 1 / 3, 0.42, 0.5]) {
+    assert.ok(Math.abs(RA.toRenderPhase(FINISH, d) - 0.375) < 1e-9, 'finish, d=' + d);
+    // just after the catch the pose is at the start of the track
+    const afterCatch = RA.toRenderPhase(FINISH - d + 1e-6, d);
+    assert.ok(afterCatch >= 0 && afterCatch < 1e-4, 'catch, d=' + d + ': ' + afterCatch);
+    // one lap from the finish: increasing, wrapping once at the catch
+    let last = RA.toRenderPhase(FINISH, d), wraps = 0;
+    for (let i = 1; i <= 2000; i++) {
+      const r = RA.toRenderPhase(FINISH + i / 2000 * 0.9999, d);
+      if (r < last) { wraps++; assert.ok(last > 0.99 && r < 0.01, 'jump at ' + i); }
+      else assert.ok(r - last < 0.005, 'step at ' + i);
+      last = r;
+    }
+    assert.equal(wraps, 1, 'd=' + d);
+  }
+});
+
+test('boat surge peaks just after the finish and averages out over a stroke', () => {
+  let sum = 0, best = 0, worst = 0;
+  const N = 1000;
+  for (let i = 0; i < N; i++) {
+    const f = RA.surgeFactor(i / N);
+    sum += f;
+    if (f > RA.surgeFactor(best)) best = i / N;
+    if (f < RA.surgeFactor(worst)) worst = i / N;
+  }
+  assert.ok(Math.abs(sum / N - 1) < 1e-9, 'mean ' + sum / N);
+  assert.ok(best > FINISH && best < FINISH + 0.15, 'fastest at ' + best);
+  assert.ok(worst > 0.8 || worst < 0.05, 'slowest at ' + worst);  // around the catch
+});
+
 test('free-runs from spm until the first stroke tick', () => {
   const tracker = RA.createPhaseTracker();
   assert.equal(tracker.isLocked(10, 24), false);
