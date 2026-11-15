@@ -229,7 +229,16 @@ var Bridge = (function () {
     // touched the rower. Dropping just that first push (peripherals
     // commonly reply with a cached value the instant you subscribe) avoids
     // that without touching the shared parsing code.
-    if (skipNextFrame) { skipNextFrame = false; return; }
+    //
+    // Recording it into previousData (not just discarding it) matters: some
+    // rowers push that same stale value a second time right after the
+    // subscribe-confirmation push, as a normal periodic tick, before
+    // anything has actually changed. Without this, skipNextFrame only
+    // catches the first of those two and the second sails through the
+    // duplicate check below (previousData was still unset) as if it were
+    // live data - starting the session with the rower apparently already
+    // moving, intermittently, depending on whether that replay happens.
+    if (skipNextFrame) { skipNextFrame = false; previousData = csv; return; }
 
     if (csv === previousData) return; // skip duplicate frames (previousData is never reset)
     previousData = csv;
