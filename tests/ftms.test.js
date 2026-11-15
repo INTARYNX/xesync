@@ -218,6 +218,50 @@ test('rowing again resumes a paused session and excludes paused time', () => {
   assert.ok(paused >= 30000, `paused time should be tracked, got ${paused}`);
 });
 
+test('EXIT SESSION asks for confirmation instead of discarding immediately', () => {
+  const h = startedSession();
+  h.api.ingest(buildFrame({ spm: 24, distance: 100, strokes: 10 }));
+  h.clock.advance(6000);
+  h.tick();
+  assert.strictEqual(h.internals.getPhase(), 'PAUSED');
+
+  h.api.requestExit();
+  assert.strictEqual(h.document._visible('pauseDialog'), false, 'pause dialog steps aside');
+  assert.strictEqual(h.document._visible('exitConfirmDialog'), true);
+  assert.strictEqual(h.internals.getPhase(), 'PAUSED', 'nothing about the session changes yet');
+});
+
+test('cancelling the exit confirmation returns to the pause dialog, session intact', () => {
+  const h = startedSession();
+  h.api.ingest(buildFrame({ spm: 24, distance: 100, strokes: 10 }));
+  h.clock.advance(6000);
+  h.tick();
+
+  h.api.requestExit();
+  h.api.cancelExit();
+  assert.strictEqual(h.document._visible('exitConfirmDialog'), false);
+  assert.strictEqual(h.document._visible('pauseDialog'), true);
+  assert.strictEqual(h.internals.getPhase(), 'PAUSED');
+
+  // Rowing again still resumes normally - cancelling didn't leave the
+  // session in some half-exited state.
+  h.api.ingest(buildFrame({ spm: 24, distance: 110, strokes: 12 }));
+  assert.strictEqual(h.internals.getPhase(), 'ACTIVE');
+});
+
+test('confirming the exit discards the workout, same as the old direct EXIT SESSION', () => {
+  const h = startedSession();
+  h.api.ingest(buildFrame({ spm: 24, distance: 100, strokes: 10 }));
+  h.clock.advance(6000);
+  h.tick();
+
+  h.api.requestExit();
+  h.api.confirmExit();
+  assert.strictEqual(h.document._visible('exitConfirmDialog'), false);
+  assert.strictEqual(h.document._visible('pauseDialog'), false);
+  assert.strictEqual(h.internals.getPhase(), 'IDLE');
+});
+
 // ---------------------------------------------------------------------
 // 5. Sampling
 // ---------------------------------------------------------------------

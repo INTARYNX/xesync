@@ -340,7 +340,7 @@
       +   '</div>'
       +   '<div class="ftms-actions">'
       +     '<button class="ftms-btn primary"   onclick="saveWorkout()">SAVE</button>'
-      +     '<button class="ftms-btn secondary" onclick="exitSession()">EXIT SESSION</button>'
+      +     '<button class="ftms-btn secondary" onclick="requestExitSession()">EXIT SESSION</button>'
       +   '</div>'
       + '</div>';
     document.body.insertAdjacentHTML('beforeend', html);
@@ -358,6 +358,43 @@
   function hidePauseDialog() {
     var el = document.getElementById('pauseDialog');
     if (el) el.classList.remove('visible');
+  }
+
+  // A stray touch on the rowing screen (bumping the phone, the console)
+  // landing on EXIT SESSION used to discard the whole workout with no way
+  // back. This confirmation step is the only thing standing between that
+  // touch and losing the session, so the safe choice (KEEP ROWING) is the
+  // visually prominent one and discarding needs a second, deliberate tap.
+  function ensureExitConfirmDialog() {
+    if (document.getElementById('exitConfirmDialog')) return;
+    var html = ''
+      + '<div id="exitConfirmDialog" class="ftms-overlay">'
+      +   '<div class="ftms-overlay-title">DISCARD THIS WORKOUT?</div>'
+      +   '<div class="ftms-overlay-subtitle">it will not be saved</div>'
+      +   '<div class="ftms-actions">'
+      +     '<button id="exitCancelBtn"  class="ftms-btn primary"   onclick="cancelExitSession()">KEEP ROWING</button>'
+      +     '<button id="exitConfirmBtn" class="ftms-btn secondary" onclick="confirmExitSession()">DISCARD</button>'
+      +   '</div>'
+      + '</div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function requestExitSession() {
+    ensureExitConfirmDialog();
+    hidePauseDialog();
+    document.getElementById('exitConfirmDialog').classList.add('visible');
+  }
+
+  function cancelExitSession() {
+    var el = document.getElementById('exitConfirmDialog');
+    if (el) el.classList.remove('visible');
+    showPauseDialog();
+  }
+
+  function confirmExitSession() {
+    var el = document.getElementById('exitConfirmDialog');
+    if (el) el.classList.remove('visible');
+    exitSession();
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -648,6 +685,9 @@
   window.ingestData       = ingestData;
   window.saveWorkout      = saveWorkout;
   window.exitSession      = exitSession;
+  window.requestExitSession = requestExitSession;
+  window.cancelExitSession  = cancelExitSession;
+  window.confirmExitSession = confirmExitSession;
 
   // Internals, exposed for the unit tests in tests/ and for diagnosing a
   // misbehaving rower from the console. Read-only in spirit: nothing in the

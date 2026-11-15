@@ -140,7 +140,10 @@ function loadFtms(opts) {
       init:     window.initFtmsTracking,
       ingest:   window.ingestData,
       save:     window.saveWorkout,
-      exit:     window.exitSession
+      exit:     window.exitSession,
+      requestExit: window.requestExitSession,
+      cancelExit:  window.cancelExitSession,
+      confirmExit: window.confirmExitSession
     },
     internals: window.FtmsInternals,
     // Drive the inactivity watchdog by hand.

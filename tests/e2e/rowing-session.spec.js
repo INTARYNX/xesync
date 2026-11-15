@@ -72,7 +72,7 @@ test.describe('rowing session (debug simulator)', () => {
     await expect(page.locator('#pw-workouts-btn')).toBeHidden();
   });
 
-  test('EXIT SESSION discards the workout without saving', async ({ page }) => {
+  test('EXIT SESSION asks for confirmation, and cancelling keeps the session', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
     await connectToRower(page);
@@ -80,6 +80,28 @@ test.describe('rowing session (debug simulator)', () => {
     await page.locator('#pauseDialog.visible').waitFor({ state: 'visible', timeout: 30000 });
 
     await page.locator('#pauseDialog .ftms-btn.secondary').click(); // EXIT SESSION
+
+    // A stray tap on EXIT SESSION must not discard the workout outright -
+    // it only opens a confirmation, and the pause dialog underneath is gone
+    // so a second accidental tap in the same spot can't land on anything.
+    await page.locator('#exitConfirmDialog.visible').waitFor({ state: 'visible', timeout: 5000 });
+    await expect(page.locator('#pauseDialog')).not.toHaveClass(/visible/);
+
+    await page.locator('#exitCancelBtn').click(); // KEEP ROWING
+    await page.locator('#pauseDialog.visible').waitFor({ state: 'visible', timeout: 5000 });
+    await expect(page.locator('#exitConfirmDialog')).not.toHaveClass(/visible/);
+  });
+
+  test('confirming EXIT SESSION discards the workout without saving', async ({ page }) => {
+    test.setTimeout(45000);
+    await boot(page);
+    await connectToRower(page);
+    await expect(page.locator('#spm')).not.toHaveText('0', { timeout: 8000 });
+    await page.locator('#pauseDialog.visible').waitFor({ state: 'visible', timeout: 30000 });
+
+    await page.locator('#pauseDialog .ftms-btn.secondary').click(); // EXIT SESSION
+    await page.locator('#exitConfirmDialog.visible').waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('#exitConfirmBtn').click(); // DISCARD
 
     await page.locator('#post-workout.visible').waitFor({ state: 'visible', timeout: 5000 });
     await expect(page.locator('#pw-title')).toHaveText('WORKOUT ENDED');
