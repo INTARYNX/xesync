@@ -399,7 +399,12 @@
           float baseY = horizon + 0.01;
           float ridge = baseY + sin(sc * 44.0 + 2.0) * 0.007 +
                         (noise(vec2(sc * 8.0, baseY * 5.0)) * 0.5 - 0.25) * 0.007;
-          float tx = sc * 55.0;
+          // Individual trees are the only discrete (non-wavy) shapes
+          // scrolling past, so they read as much faster than a hill band
+          // moving at the same speed - a lower density (fewer, wider
+          // trees) keeps them attached to the ridge while cutting how
+          // often a new one flashes by.
+          float tx = sc * 24.0;
           float th = hash(vec2(floor(tx), 77.0));
           float grove = smoothstep(0.45, 0.65, noise(vec2(sc * 5.0, 31.0)));
           float treeH = (0.012 + 0.022 * th) * grove * step(0.3, th);

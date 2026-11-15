@@ -50,6 +50,15 @@ var RowingAnimation = (function() {
     // stroke, so the scenery still covers the same distance.
     var SURGE_AMOUNT     = 0.2;
     var SURGE_PEAK_PHASE = DRIVE_FRACTION + 0.08;   // FINISH_PHASE + 0.08
+    // The scenery speed follows a slew-limited copy of the surge, not the
+    // raw value: animPhase itself can jump (a frame-gap snap, or the first
+    // tick of a fresh lock chasing a still-unverified guess), and without
+    // this the whole scene's scroll speed would jump with it. 12/s settles
+    // in ~0.2s, fast next to a stroke period (>=1s) so the intended pulse
+    // still comes through, slow next to one frame so a phase jump is felt
+    // as a brief smooth ramp instead of a jerk.
+    var SURGE_SLEW_RATE  = 12.0;   // 1/s
+    var displaySurge = 1.0;
 
     function surgeFactor(a) {
         return 1.0 + SURGE_AMOUNT * Math.cos(2.0 * Math.PI * (a - SURGE_PEAK_PHASE));
@@ -184,6 +193,18 @@ var RowingAnimation = (function() {
                 var target = wrap01(FINISH_PHASE + (now - lock.finishT) * f);
                 if (dt > SNAP_DT_S) return target;
 
+                // The very first tick of a fresh lock has only a guessed
+                // period (from spm, or DEFAULT_PERIOD_S), not a measured
+                // one, and the phase it's chasing from is wherever the
+                // free-run happened to be (often frozen at the start, since
+                // spm reads 0 until the machine has something to average).
+                // Chasing that guess at full strength is a one-off, ~1 s
+                // lurch every time a rowing bout starts. Keep free-running
+                // until the second tick lands and lock.period is a real
+                // measured interval; that correction is milder and already
+                // covered by the settling window the tracker is tuned for.
+                if (lock.ticks < 2) return (phase + dt * spm / 60.0) % 1.0;
+
                 // Chase the clock rather than jump to it: each tick nudges
                 // the clock a little, and the drawn rower should absorb
                 // that as a brief speed-up or slow-down, never a snap.
@@ -228,7 +249,9 @@ var RowingAnimation = (function() {
         var dt = now - lastT;
         lastT = now;
 
-        flow -= dt * currentSpeed * 0.26 * (currentSpm > 0 ? surgeFactor(animPhase) : 1.0);
+        var targetSurge = currentSpm > 0 ? surgeFactor(animPhase) : 1.0;
+        displaySurge += (targetSurge - displaySurge) * Math.min(1.0, dt * SURGE_SLEW_RATE);
+        flow -= dt * currentSpeed * 0.26 * displaySurge;
         if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
         if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
 
@@ -315,6 +338,7 @@ var RowingAnimation = (function() {
         flow = 0;
         animPhase = 0;
         driveFraction = DRIVE_FRACTION;
+        displaySurge = 1.0;
         tracker.reset();
         currentSpeed = 0;
         currentSpm = 0;
