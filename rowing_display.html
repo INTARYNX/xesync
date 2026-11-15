@@ -1034,12 +1034,15 @@
       float visorMask = smoothstep(0.001, -0.001, visor);
       col = mix(col, vec3(0.05, 0.15, 0.40), visorMask);
 
-      // A shower late in the morning, about one day in two, lighter or
-      // heavier from one day to the next
+      // A shower late in the morning, most days (75%), lighter or heavier
+      // from one day to the next. Was 50%/20%-of-cycle (~10% of time rains,
+      // feedback: too rare next to the old guaranteed-every-3-minutes loop)
+      // - raised to 75%/24%-of-cycle (~18% of time) to stay occasional
+      // without going back to "it always rains".
       float rainPhase = fract(u_time / 300.0);
       float rainIntensity = 0.0;
-      if (rainPhase > 0.28 && rainPhase < 0.48 && hash(vec2(u_day, 61.0)) > 0.5) {
-        float rt = (rainPhase - 0.28) / 0.20;
+      if (rainPhase > 0.28 && rainPhase < 0.52 && hash(vec2(u_day, 61.0)) > 0.25) {
+        float rt = (rainPhase - 0.28) / 0.24;
         rainIntensity = sin(rt * 3.14159265) * mix(0.45, 1.0, hash(vec2(u_day, 67.0)));
       }
 
