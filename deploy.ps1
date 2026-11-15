@@ -1,7 +1,14 @@
-# Build inline app.html, then deploy the full site to the remote server via SSH/SCP.
+# Deploy the static site (landing pages, workout-history iframe, analytics)
+# to the remote server via SSH/SCP. app.html/rowing_display.* are NOT part of
+# this: Capacitor bundles its own copy inside the APK (see
+# capacitor/build-capacitor.ps1) and nothing - not the Capacitor app, not any
+# page on this site - ever loads the server's app.html. That used to be
+# AI2's WebViewer target; AI2 is retired (see ARCHITECTURE.md/README.md),
+# so deploying a rowing-scene build here was dead weight.
 
 # ── Load local config ─────────────────────────────────────────────────────────
-$configFile = Join-Path (Split-Path -Parent (Resolve-Path 'app.html')) 'deploy.config.ps1'
+$base       = $PSScriptRoot
+$configFile = Join-Path $base 'deploy.config.ps1'
 if (-not (Test-Path $configFile)) {
     Write-Error @"
 Missing deploy.config.ps1. Create one in the project root with:
@@ -26,84 +33,6 @@ foreach ($v in @('SSH_USER', 'SSH_HOST', 'SSH_KEY', 'REMOTE_DIR')) {
     }
 }
 
-$base      = Split-Path -Parent (Resolve-Path 'app.html')
-$utf8      = [System.Text.Encoding]::UTF8
-$utf8NoBom = New-Object System.Text.UTF8Encoding $false
-
-function Read-Utf8($path) {
-    return [IO.File]::ReadAllText($path, $utf8)
-}
-
-function Write-Utf8NoBom($path, $content) {
-    [IO.File]::WriteAllText($path, $content, $utf8NoBom)
-}
-
-function Get-Inlined($path) {
-    if ($path -match '^https?://') {
-        return (Invoke-WebRequest -Uri $path -UseBasicParsing).Content
-    }
-    if (-not [IO.Path]::IsPathRooted($path)) {
-        $path = Join-Path $base $path
-    }
-    return Read-Utf8 $path
-}
-
-# ── Build deploy/app.html ─────────────────────────────────────────────────────
-
-Write-Host "Reading rowing_display.html..."
-$rd = Read-Utf8 (Join-Path $base 'rowing_display.html')
-
-# Inline CSS <link> tags → collect as <style> blocks
-$styles = [System.Collections.Generic.List[string]]::new()
-$rd = [regex]::Replace($rd, '<link[^>]*href=[''"]([^''"]+)[''"][^>]*>', {
-    $css = Get-Inlined $args[0].Groups[1].Value
-    $styles.Add("<style>`n$css`n</style>")
-    ''   # remove from body
-}, 'IgnoreCase')
-
-# Inline JS <script src> tags in rowing_display.html
-$rd = [regex]::Replace($rd, '<script([^>]*)\s+src=[''"]([^''"]+)[''"][^>]*>\s*</script>', {
-    $attrs = $args[0].Groups[1].Value
-    $js = Get-Inlined $args[0].Groups[2].Value
-    "<script$attrs>`n$js`n</script>"
-}, 'IgnoreCase')
-
-# Extract <body> content from rowing_display.html
-$bodyMatch = [regex]::Match($rd, '(?s)<body[^>]*>(.*?)</body>')
-if (-not $bodyMatch.Success) {
-    Write-Error "Could not find <body> in rowing_display.html"
-    exit 1
-}
-$rowingContent = $bodyMatch.Groups[1].Value.Trim()
-
-Write-Host "Reading and processing app.html..."
-$app = Read-Utf8 (Join-Path $base 'app.html')
-
-if ($app -notmatch '<!-- ROWING_DISPLAY -->') {
-    Write-Error "<!-- ROWING_DISPLAY --> marker not found in app.html"
-    exit 1
-}
-
-# Inject rowing CSS into <head>
-$rowingStyles = $styles -join "`n"
-$app = $app -replace '</head>', "$rowingStyles`n</head>"
-
-# Inject rowing HTML at marker
-$app = $app -replace '<!-- ROWING_DISPLAY -->', $rowingContent
-
-# Inline CSS <link> tags in app.html
-$app = [regex]::Replace($app, '<link[^>]*href=[''"]([^''"]+\.css)[''"][^>]*>', {
-    $css = Get-Inlined $args[0].Groups[1].Value
-    "<style>`n$css`n</style>"
-}, 'IgnoreCase')
-
-# Inline JS <script src> tags in app.html
-$app = [regex]::Replace($app, '<script([^>]*)\s+src=[''"]([^''"]+)[''"][^>]*>\s*</script>', {
-    $attrs = $args[0].Groups[1].Value
-    $js = Get-Inlined $args[0].Groups[2].Value
-    "<script$attrs>`n$js`n</script>"
-}, 'IgnoreCase')
-
 # ── Assemble staging (dist/) ──────────────────────────────────────────────────
 
 Write-Host "Assembling dist/..."
@@ -114,17 +43,16 @@ New-Item -ItemType Directory -Force $dist | Out-Null
 # Site pages and assets (including subdirectories like favicon/)
 Get-ChildItem (Join-Path $base 'site') | Copy-Item -Destination $dist -Recurse -Force
 
-# Write built app directly into dist/
-Write-Utf8NoBom (Join-Path $dist 'app.html') $app
-Write-Host "Build complete: $(Join-Path $dist 'app.html')"
-
-# Root-level assets (app.css is inlined into app.html, no need to copy)
+# Root-level assets: home.html is loaded in an iframe by the app (both the
+# Capacitor-bundled copy and, historically, AI2's) for the workout-history
+# view; analytics.html is its own standalone page; the rest are what those
+# two need (config.js for apexHomeUrl-adjacent endpoints, home.css, the font
+# it declares via @font-face). test_app.html is a leftover AI2 bridge-test
+# page, harmless to keep around.
 foreach ($asset in @('SpaceGrotesk-Regular.ttf', 'test_app.html', 'home.html', 'home.css', 'analytics.html', 'config.js')) {
     $src = Join-Path $base $asset
     if (Test-Path $src) { Copy-Item $src $dist }
 }
-
-# debug_sim.js is inlined into app.html via the <script src> regex above
 
 # ── Deploy via SCP ────────────────────────────────────────────────────────────
 
