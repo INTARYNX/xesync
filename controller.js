@@ -216,10 +216,42 @@ function doQuit() {
 // -- Scan ------------------------------------------------------------
 var scanReturnScreen = null;
 
+// Last rower that connected successfully, so the next scan can connect
+// to it automatically instead of making the user tap it again every
+// time - almost everyone only ever has the one rower. localStorage
+// rather than a Bridge round-trip: works the same in the Capacitor
+// WebView, a plain browser, and the debug simulator, with no native
+// plugin involved for what is a pure convenience, not a credential.
+var LAST_DEVICE_KEY = 'xesync_last_device';
+
+function rememberDevice(device) {
+  if (!device || !device.id) return;
+  try {
+    localStorage.setItem(LAST_DEVICE_KEY, JSON.stringify({ id: device.id, name: device.name || '' }));
+  } catch (e) { /* storage unavailable/full - the one-tap convenience just won't persist */ }
+}
+
+function getRememberedDevice() {
+  try {
+    var raw = localStorage.getItem(LAST_DEVICE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+// Set once per scan, so a remembered device found across several
+// scanResult batches is only auto-connected to once.
+var autoConnectTried = false;
+// The device doConnect() is currently attempting, so onConnectResult
+// (which only gets success/error back, not the device) knows what to
+// remember on success.
+var pendingDevice = null;
+
 function startScan() {
   scanReturnScreen = ui.screen;
   ui.scanning = true;
-  renderScanSearching();
+  autoConnectTried = false;
+  var remembered = getRememberedDevice();
+  renderScanSearching(remembered ? remembered.name : null);
   goScreen('scan');
   if (Debug.isOn()) { Debug.fakeScan(showDevices); return; }
   Bridge.send('scan');
@@ -247,12 +279,23 @@ function showDevices(msg) {
     return acc;
   }, []);
   renderDeviceList(devices, doConnect);
+
+  if (!autoConnectTried) {
+    var remembered = getRememberedDevice();
+    if (remembered) {
+      var match = devices.filter(function (d) { return d.id === remembered.id; })[0];
+      // Tapping a different device in the meantime already moved on to
+      // the connecting screen - don't also fire an auto-connect under it.
+      if (match && ui.scanning) { autoConnectTried = true; doConnect(match); }
+    }
+  }
 }
 
 // -- Connect ---------------------------------------------------------
 function doConnect(device) {
   ui.scanning = false;
   reconnectAbandoned = false; // a deliberate, fresh connect attempt
+  pendingDevice = device;
   setConnectingLabel('CONNECTING...');
   goScreen('connecting');
   if (Debug.isOn()) { Debug.fakeConnect(onConnectResult); return; }
@@ -285,6 +328,7 @@ function onConnectResult(msg) {
   }
   if (msg.success) {
     ui.connected = true;
+    rememberDevice(pendingDevice);
     enterRowing();
   } else {
     setConnectingLabel(msg.error || 'CONNECTION FAILED');

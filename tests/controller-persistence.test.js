@@ -9,9 +9,23 @@ const { makeDocument } = require('./harness');
 
 const flush = () => new Promise(setImmediate);
 
+// Minimal in-memory localStorage, backed by a Map a caller can pass back
+// into a second boot() to simulate it surviving an app restart - same
+// pattern as the `storage` Map already does for Preferences.
+function makeLocalStorage(data) {
+  return {
+    getItem(key)    { return data.has(key) ? data.get(key) : null; },
+    setItem(key, v) { data.set(key, String(v)); },
+    removeItem(key) { data.delete(key); }
+  };
+}
+
 // Run the actual controller and Capacitor bridge with only native plugins,
 // network and browser surfaces replaced. Preferences survives simulated restarts.
-async function boot({ storage = new Map(), save, validate, storageFails = false } = {}) {
+async function boot({
+  storage = new Map(), save, validate, storageFails = false,
+  localStorageData = new Map(), bleClient = {}
+} = {}) {
   const timers = new Map();
   const uploads = [];
   let nextTimer = 0;
@@ -20,9 +34,13 @@ async function boot({ storage = new Map(), save, validate, storageFails = false 
   const context = {
     window: { location: { search: '' }, addEventListener() {} },
     navigator: { onLine: true }, document, URLSearchParams, console,
+    localStorage: makeLocalStorage(localStorageData),
     setTimeout(fn, ms) { const id = ++nextTimer; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); },
-    BleClient: { async initialize() {} },
+    BleClient: Object.assign({
+      async initialize() {}, async requestLEScan() {}, async stopLEScan() {},
+      async connect() {}, async startNotifications() {}, async disconnect() {}
+    }, bleClient),
     KeepAwake: { async keepAwake() {} },
     StatusBar: { async setBackgroundColor() {}, async setStyle() {} },
     Style: { Dark: 'dark' }, App: { addListener() {} },
@@ -42,7 +60,13 @@ async function boot({ storage = new Map(), save, validate, storageFails = false 
         return { status: 'success' };
       })
     },
-    Debug: { stopSim() {} }, XESYNC_CONFIG: { apexHomeUrl: 'https://example.test/' }
+    // isOn() false runs connect/scan through the real BleClient stub above
+    // rather than Debug.fakeScan/fakeConnect - this file's whole point is
+    // exercising the real bridge. initRowing/initFtmsTracking/Coaching are
+    // enterRowing()'s only dependencies outside these four files.
+    Debug: { stopSim() {}, isOn() { return false; } },
+    Coaching: { setMode() {}, getMode() { return 'coaching'; } }, initRowing() {}, initFtmsTracking() {},
+    XESYNC_CONFIG: { apexHomeUrl: 'https://example.test/' }
   };
   vm.createContext(context);
   for (const file of ['state.js', 'view.js', 'capacitor/bridge.src.js', 'controller.js']) {
@@ -150,4 +174,86 @@ test('network failure during automatic login preserves credentials and queued wo
   assert.equal(storage.get('token'), 'valid-token');
   assert.equal(storage.has('workout_pending'), true);
   assert.equal(h.uploads.length, 0);
+});
+
+// ---------------------------------------------------------------------
+// Remembered rower: auto-connect on the next scan
+// ---------------------------------------------------------------------
+const ROWER = { id: 'AA:BB:CC:DD:EE:FF', name: 'XEBEX-TEST' };
+
+test('a successful connect remembers the device for next time', async () => {
+  const localStorageData = new Map();
+  const h = await boot({ localStorageData });
+
+  h.context.doConnect({ id: ROWER.id, name: ROWER.name });
+  await flush();
+
+  assert.equal(h.context.ui.connected, true);
+  assert.deepEqual(JSON.parse(localStorageData.get('xesync_last_device')), ROWER);
+});
+
+test('the next scan auto-connects to the remembered device - no tap needed', async () => {
+  // Simulates restarting with the device remembered from a prior session
+  // (same localStorageData a real restart would read back from the WebView).
+  const localStorageData = new Map([['xesync_last_device', JSON.stringify(ROWER)]]);
+  const h = await boot({
+    localStorageData,
+    bleClient: {
+      // A real BLE scan reports results asynchronously; one microtask of
+      // delay here is enough to let the test observe the optimistic label
+      // below before the (stubbed) discovery resolves it.
+      async requestLEScan(opts, cb) {
+        await Promise.resolve();
+        cb({ device: { deviceId: ROWER.id, name: ROWER.name } });
+      }
+    }
+  });
+  const connectCalls = [];
+  h.context.doConnect = (device) => connectCalls.push(device); // spy: don't need a real connect to prove this
+
+  h.context.startScan();
+  assert.equal(h.document._text('scan-label'), 'LOOKING FOR ' + ROWER.name.toUpperCase() + '...');
+  await flush();
+
+  // Round-trip through JSON: these objects were built inside the vm
+  // context's own realm, so deepStrictEqual's prototype check against a
+  // plain object literal here would fail despite matching structure.
+  assert.deepEqual(JSON.parse(JSON.stringify(connectCalls)), [ROWER]);
+});
+
+test('scanning without a matching remembered device does not auto-connect', async () => {
+  const localStorageData = new Map([['xesync_last_device', JSON.stringify(ROWER)]]);
+  const h = await boot({
+    localStorageData,
+    bleClient: {
+      async requestLEScan(opts, cb) { cb({ device: { deviceId: '11:22:33:44:55:66', name: 'XEBEX-OTHER' } }); }
+    }
+  });
+  const connectCalls = [];
+  h.context.doConnect = (device) => connectCalls.push(device);
+
+  h.context.startScan();
+  await flush();
+
+  assert.deepEqual(connectCalls, []);
+});
+
+test('with no remembered device, scanning just lists results as before', async () => {
+  const h = await boot({
+    bleClient: {
+      async requestLEScan(opts, cb) {
+        await Promise.resolve();
+        cb({ device: { deviceId: ROWER.id, name: ROWER.name } });
+      }
+    }
+  });
+  const connectCalls = [];
+  h.context.doConnect = (device) => connectCalls.push(device);
+
+  h.context.startScan();
+  assert.equal(h.document._text('scan-label'), 'SCANNING...');
+  await flush();
+
+  assert.deepEqual(connectCalls, []);
+  assert.equal(h.document._text('scan-label'), 'SELECT ROWER');
 });

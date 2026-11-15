@@ -108,11 +108,17 @@ function hideLoadingOverlay() {
   if (el) el.classList.remove('visible');
 }
 
-// Render the scanning sub-view in its "searching" state
-function renderScanSearching() {
+// Render the scanning sub-view in its "searching" state. `rememberedName`,
+// when given, is the last rower that connected successfully - shown as a
+// hint while controller.js looks for it to auto-connect; the device list
+// still fills in as usual underneath, so tapping a different one works
+// exactly as before.
+function renderScanSearching(rememberedName) {
   document.getElementById('device-list').innerHTML = '';
   document.getElementById('pulse-ring').style.display = '';
-  document.getElementById('scan-label').textContent = 'SCANNING...';
+  document.getElementById('scan-label').textContent = rememberedName
+    ? 'LOOKING FOR ' + rememberedName.toUpperCase() + '...'
+    : 'SCANNING...';
 }
 
 // Render the list of found devices; onPick(device) is called on tap
