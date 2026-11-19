@@ -313,6 +313,18 @@ Elles **respirent** maintenant : quand la chaîne monte, les collines ondulent p
 les pins se penchent dans le vent. Un test le vérifie en ne comparant que **la moitié
 haute de l'image** — si les collines ne bougeaient pas, rien en haut ne changerait.
 
+Et elles **prennent des angles**. La crête a toujours été une sinusoïde : des dômes, rien
+d'autre. Maintenant elle glisse vers un profil triangulaire — mêmes crans, même longueur
+d'onde, même amplitude — donc la montagne ne change pas de taille, elle change de forme.
+Les pins suivent la crête sur laquelle ils poussent, ils ne se détachent jamais.
+
+Mais **lentement**. La forme du relief n'est pas un réflexe : elle suit la chaîne avec une
+constante de temps d'une trentaine de secondes, et elle ne va jamais au bout du chemin (75 %
+au maximum — les pics prennent des angles, ils ne deviennent pas une scie). La montagne
+change de forme comme un paysage change au fil d'une matinée, pas comme un interrupteur.
+
+![collines rondes / pics anguleux](images/scene-peaks.png)
+
 ### Ce que l'habillage n'est pas
 
 - **Pas un magasin.** Rien ne s'achète, rien ne se configure, il n'y a pas de menu de
