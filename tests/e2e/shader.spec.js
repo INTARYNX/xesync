@@ -210,11 +210,11 @@ test('the ghost changes what the scene looks like', async ({ page }) => {
 // but u_chain, and the pixels of the LAND (the top half of the frame)
 // are compared. If the hills did not breathe, nothing up there would
 // move.
-test('the land answers the chain', async ({ page }) => {
-  const shaders = readShaders();
-
-  await page.goto('about:blank');
-  const diff = await page.evaluate(({ vs, fs }) => {
+// Draws the land twice, with the uniforms of each draw given, and
+// reports how many pixels of the top half moved. The chain and the
+// sharpness are the only things that can differ.
+async function landDiff(page, shaders, a, b) {
+  return page.evaluate(({ vs, fs, a, b }) => {
     const W = 480, H = 300;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
@@ -252,7 +252,7 @@ test('the land answers the chain', async ({ page }) => {
     const u = (n) => gl.getUniformLocation(prog, n);
     const pixels = new Uint8Array(W * H * 4);
 
-    function draw(chain) {
+    function draw(o) {
       gl.viewport(0, 0, W, H);
       gl.uniform1f(u('u_time'), 42.0);
       gl.uniform1f(u('u_day'), 3.0);
@@ -262,7 +262,8 @@ test('the land answers the chain', async ({ page }) => {
       gl.uniform1f(u('u_spm'), 24.0);
       gl.uniform1f(u('u_scale'), 0.6);
       gl.uniform1f(u('u_aspect'), W / H);
-      gl.uniform1f(u('u_chain'), chain);
+      gl.uniform1f(u('u_chain'), o.chain || 0);
+      gl.uniform1f(u('u_sharp'), o.sharp || 0);
       gl.uniform3f(u('u_hullA'), 0.75, 0.92, 0.70);
       gl.uniform3f(u('u_hullB'), 0.30, 0.50, 0.30);
       gl.uniform3f(u('u_shirt'), 0.85, 0.20, 0.15);
@@ -279,8 +280,8 @@ test('the land answers the chain', async ({ page }) => {
       return pixels.slice();
     }
 
-    const calm = draw(0.0);
-    const chained = draw(1.0);
+    const calm = draw(a);
+    const chained = draw(b);
 
     // Only the top half: that is the sky and the land. The boat and
     // the water are the lower half, and they answer the chain already.
@@ -299,10 +300,36 @@ test('the land answers the chain', async ({ page }) => {
       }
     }
     return { changed, total, maxDelta };
-  }, shaders);
+  }, { vs: shaders.vs, fs: shaders.fs, a, b });
+}
+
+test('the land answers the chain', async ({ page }) => {
+  const shaders = readShaders();
+
+  await page.goto('about:blank');
+  const diff = await landDiff(page, shaders, { chain: 0 }, { chain: 1 });
 
   expect(diff.error).toBeUndefined();
   // The ridge's edge moves: a band of pixels along the hills, not the
+  // whole sky.
+  expect(diff.changed).toBeGreaterThan(diff.total * 0.005);
+  expect(diff.maxDelta).toBeGreaterThan(8);
+});
+
+// The shape of the range, not only its size. The two draws below are
+// identical but for u_sharp: the chain is down in both, so the hills
+// breathe exactly the same. If the pixels move, the peaks have taken
+// angles - and nothing else could have moved them.
+test('the peaks sharpen when the rower is pushing', async ({ page }) => {
+  const shaders = readShaders();
+
+  await page.goto('about:blank');
+  const diff = await landDiff(page, shaders,
+    { chain: 0, sharp: 0 },
+    { chain: 0, sharp: 1 });
+
+  expect(diff.error).toBeUndefined();
+  // A ridge's edge moves along the hills: a band of pixels, not the
   // whole sky.
   expect(diff.changed).toBeGreaterThan(diff.total * 0.005);
   expect(diff.maxDelta).toBeGreaterThan(8);

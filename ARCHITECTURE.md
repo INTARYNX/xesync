@@ -108,6 +108,14 @@ and derives the eight bands between them, which is what makes the
 distance read. `u_chain` also agitates the ridge, so the land answers the
 chain like the water already did.
 
+The ridge also takes a shape from the chain. `u_sharp` (0..1) moves the
+crest from a sine - round domes - to a triangle - straight flanks and a
+point at the top - keeping the same rhythm, the same length of wave and
+the same amplitude, so the range changes its shape without changing its
+size. It is not a reflex: `rowing_display.js` slews it with a thirty
+second time constant and caps it at 0.75, and the pines use the same
+profile as the band they stand on.
+
 Nothing here is configurable, and nothing here says anything: the livery
 changes when the history crosses a threshold, and the only announcement
 is a sweep of light along the hull (`u_livery`, 2.2 s on the real clock).

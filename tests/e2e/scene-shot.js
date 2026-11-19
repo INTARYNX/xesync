@@ -127,6 +127,8 @@ const SHOTS = [
       gl.uniform1f(u('u_scale'), 0.6 * (1 + 0.12 * pulse));
       gl.uniform1f(u('u_aspect'), W / H);
       gl.uniform1f(u('u_chain'), chain);
+      // The peaks follow the chain, exactly as the renderer sends them.
+      gl.uniform1f(u('u_sharp'), chain * 0.75);
       gl.uniform1f(u('u_ghostX'), ghostX);
       gl.uniform1f(u('u_ghostPhase'), 0.08);
       gl.uniform1f(u('u_ghostOn'), ghost);
@@ -186,6 +188,34 @@ const SHOTS = [
       ctx.fillText(labels[i], x, 12);
     }
     out.compare = sheet.toDataURL('image/png');
+
+    // And the same for the shape of the range: the hills alone, rounded
+    // and angular, side by side. That is the part of the scene the
+    // chain changes the shape of.
+    const PEAKS = { x: 30, y: 55, w: 230, h: 105 }, PZOOM = 1.6;
+    const peakNames = ['calm', 'chain'];
+    const peakLabels = ['collines rondes', 'pics anguleux'];
+    const psheet = document.createElement('canvas');
+    psheet.width = (PEAKS.w * PZOOM) * peakNames.length + PAD * (peakNames.length + 1);
+    psheet.height = PEAKS.h * PZOOM + PAD * 2;
+    const pctx = psheet.getContext('2d');
+    pctx.fillStyle = '#0e1016';
+    pctx.fillRect(0, 0, psheet.width, psheet.height);
+    pctx.fillStyle = '#d2d7e6';
+    pctx.font = '13px sans-serif';
+    for (let i = 0; i < peakNames.length; i++) {
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('image load failed'));
+        im.src = out[peakNames[i]];
+      });
+      const x = PAD + i * (PEAKS.w * PZOOM + PAD);
+      pctx.drawImage(img, PEAKS.x, PEAKS.y, PEAKS.w, PEAKS.h,
+        x, PAD, PEAKS.w * PZOOM, PEAKS.h * PZOOM);
+      pctx.fillText(peakLabels[i], x, 12);
+    }
+    out.peaks = psheet.toDataURL('image/png');
     return out;
   }, { vs: shaders.vs, fs: shaders.fs, shots: SHOTS });
 
@@ -198,5 +228,8 @@ const SHOTS = [
   const compare = path.join(OUT, 'scene-compare.png');
   fs.writeFileSync(compare, Buffer.from(pngs.compare.split(',')[1], 'base64'));
   console.log('écrit', path.relative(ROOT, compare));
+  const peaks = path.join(OUT, 'scene-peaks.png');
+  fs.writeFileSync(peaks, Buffer.from(pngs.peaks.split(',')[1], 'base64'));
+  console.log('écrit', path.relative(ROOT, peaks));
   await browser.close();
 })();

@@ -123,6 +123,7 @@
     uniform float u_day;   // index of the current 300 s day cycle, for per-day variation
     uniform float u_speed;
     uniform float u_chain;  // 0..1, how well the rower is holding above their own pace
+    uniform float u_sharp;  // 0..1, how angular the peaks are (the chain's answer)
     uniform float u_flow;
     uniform float u_phase;
     uniform float u_spm;
@@ -180,6 +181,21 @@
     }
 
     const float TAU = 6.2831853;
+
+    // The shape of a range.
+    //
+    // A sine is round: the hills are domes, and they always have been.
+    // A triangle has straight flanks and a point at the top: that is
+    // what an angular peak looks like from the water.
+    //
+    // The two share the same rhythm and the same length of wave, so the
+    // range does not change size when it changes shape - the hills can
+    // go from one to the other without the land jumping under the boat.
+    float peakProfile(float x, float sharp) {
+      float rounded = sin(x);
+      float tri = abs(fract((x + 1.5707963) / TAU + 0.5) - 0.5) * 4.0 - 1.0;
+      return mix(rounded, tri, sharp);
+    }
 
     // One layer of fairy lights: soft glowing motes drifting upward. A cell
     // holds at most one mote, kept inside the cell, so one lookup per layer
@@ -436,7 +452,8 @@
           float baseY = horizon + BASE; \
           float scrolled = u - flow * SPD; \
           float n = noise(vec2(scrolled * 8.0, baseY * 5.0)) * 0.5 - 0.25; \
-          float wave = (sin(scrolled * FREQ + PHASE) + n) * AMP * agitation; \
+          float s = peakProfile(scrolled * FREQ + PHASE, u_sharp); \
+          float wave = (s + n) * AMP * agitation; \
           float lineY = baseY + wave; \
           if (y < lineY) { \
             float t = clamp((lineY - y) / (lineY - horizon + 0.001), 0.0, 1.0); \
@@ -463,8 +480,9 @@
           float sc = u - flow * 0.40;
           float baseY = horizon + 0.01;
           // The same ridge as the nearest band, and the same agitation:
-          // the pines must not detach from the hill they stand on.
-          float ridge = baseY + (sin(sc * 44.0 + 2.0) +
+          // the pines must not detach from the hill they stand on. And
+          // the same profile: a sharp peak takes its pines with it.
+          float ridge = baseY + (peakProfile(sc * 44.0 + 2.0, u_sharp) +
                         (noise(vec2(sc * 8.0, baseY * 5.0)) * 0.5 - 0.25)) * 0.007 * agitation;
           // Individual trees are the only discrete (non-wavy) shapes
           // scrolling past, so they read as much faster than a hill band

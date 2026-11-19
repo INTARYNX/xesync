@@ -75,6 +75,14 @@ var RowingAnimation = (function() {
     // an earthquake.
     var PULSE_S = 0.45;
     var PULSE_SCALE = 0.12;
+    // How quickly the shape of the range follows the chain. The land is
+    // not a reflex: the peaks take their angles over about a minute, and
+    // they give them back just as slowly.
+    var SHARP_SLEW = 1 / 30;
+    // How far the peaks ever go. They take angles, they do not turn into
+    // a saw blade: the range keeps some of its softness.
+    var SHARP_MAX = 0.75;
+    var sharpLevel = 0;
 
     function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
 
@@ -487,6 +495,13 @@ var RowingAnimation = (function() {
         gl.uniform1f(uniforms.uDay,    dayBase + Math.floor(sceneClock / TIME_WRAP) % 1000);
         gl.uniform1f(uniforms.uSpeed,  currentSpeed);
         gl.uniform1f(uniforms.uChain,  chainLevel);
+        // The peaks answer the chain too: the hills are round while the
+        // rower is at their own pace, and they take angles when they
+        // hold above it. The shape of the land is not a reflex, though -
+        // it moves on a long leash, so the range evolves over a minute
+        // rather than jumping from one shape to the next.
+        sharpLevel += (chainLevel - sharpLevel) * Math.min(1, dt * SHARP_SLEW);
+        gl.uniform1f(uniforms.uSharp,  sharpLevel * SHARP_MAX);
         gl.uniform1f(uniforms.uFlow,   flow);
         gl.uniform1f(uniforms.uPhase,  renderPhase);
         gl.uniform1f(uniforms.uSpm,    currentSpm);
@@ -685,6 +700,7 @@ var RowingAnimation = (function() {
             uDay:    gl.getUniformLocation(prog, 'u_day'),
             uSpeed:  gl.getUniformLocation(prog, 'u_speed'),
             uChain:  gl.getUniformLocation(prog, 'u_chain'),
+            uSharp:  gl.getUniformLocation(prog, 'u_sharp'),
             uFlow:   gl.getUniformLocation(prog, 'u_flow'),
             uPhase:  gl.getUniformLocation(prog, 'u_phase'),
             uSpm:    gl.getUniformLocation(prog, 'u_spm'),
