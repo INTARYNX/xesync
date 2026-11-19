@@ -279,7 +279,10 @@
     setText('strokes',     totalStrokes());
     setText('elapsedtime', fmtTime(sessionSeconds()));
     if (typeof setConsoleSpeedAndSpm === 'function') {
-      setConsoleSpeedAndSpm(paceToAnimSpeed(session.rollingPace), lastPacket.spm);
+      // The distance and the session clock go along: the ghost of the
+      // best run is placed against them.
+      setConsoleSpeedAndSpm(paceToAnimSpeed(session.rollingPace), lastPacket.spm,
+                            totalDistance(), sessionSeconds());
     }
   }
 
@@ -650,10 +653,15 @@
     notifyLeave();
     var payload = buildPayload();
     // Lets controller.js attach payload.splitsTable / payload.coachingSummary
-    // (computed from Coaching's session journal) while session.samples is
-    // still intact - goIdle() below wipes it.
+    // / payload.runScore (computed from the coaching journal and the game
+    // layer's state) while session.samples is still intact - goIdle() below
+    // wipes it.
     if (typeof window.onBeforeSave === 'function') window.onBeforeSave(payload);
-    var extra = { splitsTable: payload.splitsTable || null, coachingSummary: payload.coachingSummary || null };
+    var extra = {
+      splitsTable: payload.splitsTable || null,
+      coachingSummary: payload.coachingSummary || null,
+      runScore: payload.runScore || null
+    };
     var tag = workoutTag();
     goIdle();
 

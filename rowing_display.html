@@ -12,6 +12,30 @@
     <div id="wrapper">
       <canvas id="glCanvas"></canvas>
       <div id="gl-loading"></div>
+      <div id="phase-strip"></div>
+
+      <!-- Game layer: score, chain ring and lift. Hidden in the calm mode. -->
+      <div id="run-hud">
+        <div class="run-ring-wrap">
+          <svg viewBox="0 0 64 64" aria-hidden="true">
+            <circle class="run-ring-track" cx="32" cy="32" r="26"></circle>
+            <circle id="run-chain-ring" class="run-ring-fill" cx="32" cy="32" r="26"></circle>
+            <!-- The course of the day: a notch at the angle where today's
+                 chain par sits. Drawn by run_view.js, no label. -->
+            <line id="run-chain-par" class="run-ring-par" x1="32" y1="9" x2="32" y2="3"></line>
+          </svg>
+          <div id="run-chain-mult">&times;1</div>
+        </div>
+        <div class="run-score-block">
+          <div id="run-score-value">0</div>
+          <div class="run-label">SCORE</div>
+          <!-- One dot per push the day asks for. -->
+          <div id="run-push-dots" class="run-push-dots"></div>
+        </div>
+        <div id="run-lift" title="how far above your own pace you are">
+          <div id="run-lift-fill"></div>
+        </div>
+      </div>
 
       <div class="hud-corner tl">
         <div class="hud-tile" style="--accent:#ff4d6d;">
@@ -98,11 +122,27 @@
     uniform float u_time;
     uniform float u_day;   // index of the current 300 s day cycle, for per-day variation
     uniform float u_speed;
+    uniform float u_chain;  // 0..1, how well the rower is holding above their own pace
     uniform float u_flow;
     uniform float u_phase;
     uniform float u_spm;
     uniform float u_scale;
     uniform float u_aspect;
+    // The ghost: your own best run, replayed on the same water.
+    uniform float u_ghostX;      // its offset from the player, in scene units
+    uniform float u_ghostPhase;  // its own stroke phase
+    uniform float u_ghostOn;     // 0 when there is no ghost to draw
+    uniform vec3  u_hullA;       // the top of the hull's colour (the livery)
+    uniform vec3  u_hullB;       // the bottom of the hull's colour (the livery)
+    uniform vec3  u_shirt;       // the rower's jersey (the kit)
+    uniform vec3  u_shorts;      // the rower's shorts (the kit)
+    uniform vec3  u_cap;         // the rower's cap (the kit)
+    uniform vec3  u_tint;        // the theme of the hour, over the whole frame
+    uniform float u_livery;      // 0 = still, 0..1 = a sweep of light along the hull
+    uniform vec3  u_ridgeFar;    // the far mountains (the biome)
+    uniform vec3  u_ridgeNear;   // the near mountains (the biome)
+    uniform vec3  u_tree;        // the pines along the ridge (the biome)
+    uniform float u_treeDensity;  // how much of the ridge is planted
 
     // Wrap large coordinates before feeding them into hash/noise so float
     // precision stays usable on mobile GPUs over long sessions.
@@ -215,6 +255,15 @@
     void main(){
       float u = v_uv.x;
       float y = v_uv.y;
+
+      // How fast the boat is actually going.
+      float speedFactor = clamp(u_speed, 0.0, 1.0);
+      // The chain: how well the rower is holding above their own pace.
+      // It does NOT make the boat faster - the boat is exactly as fast
+      // as it is measured. It makes the boat's trace fuller and
+      // brighter, so a good run looks like a good run.
+      float chainFactor = clamp(u_chain, 0.0, 1.0);
+      float traceFactor = clamp(speedFactor + chainFactor * 0.45, 0.0, 1.0);
       float horizon = 0.5;
       float flow = u_flow;
       vec2 P = vec2(u, y);
@@ -367,38 +416,56 @@
 
         float darknessFactor = smoothstep(0.55, 0.75, dayCycle) *
                               (1.0 - smoothstep(0.95, 1.0, dayCycle));
-        #define LAYER(BASE, AMP, FREQ, PHASE, TOPR, TOPG, TOPB, BOTR, BOTG, BOTB, SPD) \
+        // The sweep of light that crosses the world when the land (or
+        // the livery) changes. It is the one moment the game announces
+        // itself, and it says it with light, not with words.
+        float sweepX = (u_livery - 0.5) * 3.0;
+        float worldSweep = exp(-pow((u - sweepX) * 4.5, 2.0)) * step(0.001, u_livery);
+
+        // The ridge answers the chain: the hills breathe more when the
+        // rower is holding above their own pace. The land is not a
+        // backdrop that waits - it is part of the answer.
+        float agitation = 1.0 + u_chain * 0.7;
+
+        // The colours of the land come from the biome (costume.js): two
+        // ends of a range, and the eight bands between them. DEPTH is
+        // the distance, not the index - the layers get closer together
+        // as they come forward, which is what makes the distance read.
+        #define LAYER(BASE, AMP, FREQ, PHASE, DEPTH, SPD) \
         { \
           float baseY = horizon + BASE; \
           float scrolled = u - flow * SPD; \
           float n = noise(vec2(scrolled * 8.0, baseY * 5.0)) * 0.5 - 0.25; \
-          float wave = sin(scrolled * FREQ + PHASE) * AMP + n * AMP; \
+          float wave = (sin(scrolled * FREQ + PHASE) + n) * AMP * agitation; \
           float lineY = baseY + wave; \
           if (y < lineY) { \
             float t = clamp((lineY - y) / (lineY - horizon + 0.001), 0.0, 1.0); \
-            vec3 topC = vec3(TOPR, TOPG, TOPB); \
-            vec3 botC = vec3(BOTR, BOTG, BOTB); \
+            vec3 topC = mix(u_ridgeFar, u_ridgeNear, DEPTH); \
+            vec3 botC = topC * 0.82; \
             vec3 layerCol = mix(topC, botC, t); \
             layerCol = mix(layerCol, layerCol * vec3(0.25, 0.25, 0.40), darknessFactor); \
+            layerCol += vec3(1.0, 0.95, 0.85) * worldSweep * 0.20; \
             col = mix(col, layerCol, 1.0); \
           } \
         }
-        LAYER(0.18, 0.020, 18.0, 0.0,  0.78, 0.55, 0.65,  0.62, 0.42, 0.55,  0.10)
-        LAYER(0.15, 0.018, 22.0, 1.5,  0.70, 0.46, 0.58,  0.55, 0.36, 0.50,  0.14)
-        LAYER(0.12, 0.016, 26.0, 3.0,  0.62, 0.38, 0.52,  0.48, 0.30, 0.46,  0.18)
-        LAYER(0.09, 0.014, 28.0, 0.5,  0.54, 0.32, 0.48,  0.42, 0.26, 0.42,  0.22)
-        LAYER(0.07, 0.012, 32.0, 2.5,  0.46, 0.28, 0.44,  0.36, 0.22, 0.38,  0.26)
-        LAYER(0.05, 0.010, 36.0, 1.0,  0.38, 0.24, 0.40,  0.30, 0.20, 0.34,  0.30)
-        LAYER(0.03, 0.008, 40.0, 4.0,  0.30, 0.20, 0.34,  0.24, 0.18, 0.30,  0.34)
-        LAYER(0.01, 0.007, 44.0, 2.0,  0.22, 0.18, 0.30,  0.18, 0.16, 0.26,  0.40)
+        LAYER(0.18, 0.020, 18.0, 0.0,  0.00, 0.10)
+        LAYER(0.15, 0.018, 22.0, 1.5,  0.20, 0.14)
+        LAYER(0.12, 0.016, 26.0, 3.0,  0.37, 0.18)
+        LAYER(0.09, 0.014, 28.0, 0.5,  0.51, 0.22)
+        LAYER(0.07, 0.012, 32.0, 2.5,  0.63, 0.26)
+        LAYER(0.05, 0.010, 36.0, 1.0,  0.76, 0.30)
+        LAYER(0.03, 0.008, 40.0, 4.0,  0.90, 0.34)
+        LAYER(0.01, 0.007, 44.0, 2.0,  1.00, 0.40)
 
         // Pines along the nearest ridge (same line as the last LAYER), in
         // scattered groves
         {
           float sc = u - flow * 0.40;
           float baseY = horizon + 0.01;
-          float ridge = baseY + sin(sc * 44.0 + 2.0) * 0.007 +
-                        (noise(vec2(sc * 8.0, baseY * 5.0)) * 0.5 - 0.25) * 0.007;
+          // The same ridge as the nearest band, and the same agitation:
+          // the pines must not detach from the hill they stand on.
+          float ridge = baseY + (sin(sc * 44.0 + 2.0) +
+                        (noise(vec2(sc * 8.0, baseY * 5.0)) * 0.5 - 0.25)) * 0.007 * agitation;
           // Individual trees are the only discrete (non-wavy) shapes
           // scrolling past, so they read as much faster than a hill band
           // moving at the same speed - a lower density (fewer, wider
@@ -407,10 +474,13 @@
           float tx = sc * 24.0;
           float th = hash(vec2(floor(tx), 77.0));
           float grove = smoothstep(0.45, 0.65, noise(vec2(sc * 5.0, 31.0)));
-          float treeH = (0.012 + 0.022 * th) * grove * step(0.3, th);
+          // How much of the ridge is planted is part of the place: a
+          // clearing is thinner than a forest.
+          float treeH = (0.012 + 0.022 * th) * grove * step(u_treeDensity, th);
           float treeTop = ridge + treeH * (1.0 - 2.0 * abs(fract(tx) - 0.5));
           if (y >= ridge - 0.001 && y < treeTop) {
-            vec3 pine = vec3(0.19, 0.16, 0.28);
+            vec3 pine = u_tree;
+            pine += vec3(1.0, 0.95, 0.85) * worldSweep * 0.28;
             col = mix(pine, pine * vec3(0.25, 0.25, 0.40), darknessFactor);
           }
         }
@@ -676,15 +746,14 @@
           float hullRefMask = smoothstep(0.002, -0.002, hullR);
           vec3 reflectCol = vec3(0.20, 0.18, 0.25);
           col = mix(col, reflectCol, refMask * reflectAtten * 0.35);
-          col = mix(col, vec3(0.18, 0.30, 0.20), hullRefMask * reflectAtten * 0.40);
+          col = mix(col, u_hullB * 0.6, hullRefMask * reflectAtten * 0.40);
         }
       }
 
-      float speedFactor = clamp(u_speed, 0.0, 1.0);
       vec2 stern = boatCenter + vec2(-0.55 * u_scale, 0.0);
-      float wakeLength = mix(0.20, 0.80, speedFactor) * u_scale;
+      float wakeLength = mix(0.20, 0.80, traceFactor) * u_scale;
       float wakeT = clamp((stern.x - P.x) / wakeLength, 0.0, 1.0);
-      float wakeMaxW = mix(0.015, 0.060, speedFactor);
+      float wakeMaxW = mix(0.015, 0.060, traceFactor);
       float wakeHalfW = mix(0.006, wakeMaxW, wakeT) * u_scale;
       float wakeDist = abs(y - stern.y);
       float wakeShape = smoothstep(wakeHalfW, wakeHalfW * 0.3, wakeDist);
@@ -694,7 +763,7 @@
       float wakeNoise = fbm(vec2((u - flow * 0.3) * 30.0, y * 80.0 + u_time * 0.5));
       float wakeFoam = wakeShape * wakeLong * (0.4 + 0.6 * wakeNoise);
       float wakeEdges = wakeBand * wakeShape * wakeLong * 0.6;
-      float wakeIntensity = mix(0.6, 1.0, speedFactor);
+      float wakeIntensity = mix(0.6, 1.0, traceFactor);
       col = mix(col, vec3(0.95, 0.97, 1.0), wakeFoam * 0.7 * wakeIntensity);
       col = mix(col, vec3(1.0, 1.0, 1.0), wakeEdges * 0.9 * wakeIntensity);
 
@@ -760,12 +829,62 @@
                   oarBMask * smoothstep(0.0, oarBHalfW, oarBPerp));
       }
 
+      // ============ THE GHOST ============
+      // Your own best run, replayed on the same water. A translucent
+      // silhouette, in its own stroke cycle - it is not a twin of you,
+      // it is what you did last time. It says everything it has to say
+      // by being where it is.
+      //
+      // Everything here is in the player's own units: the pose keyframes
+      // live in a 0..1.55 space scaled by `scale`, so the ghost is the
+      // same size as the boat it is racing.
+      if (u_ghostOn > 0.5) {
+        float gCycle = 0.5 - 0.5 * cos(u_ghostPhase * TAU);   // catch -> finish
+        vec2 gOrigin = origin + vec2(u_ghostX, 0.0);
+        vec2 gBoat = boatCenter + vec2(u_ghostX, 0.0);
+        vec2 gK = (P - gOrigin) / scale;
+
+        // The hull.
+        float gHull = sdEllipse(P - gBoat, vec2(0.55, 0.014) * u_scale);
+        float gHullMask = smoothstep(0.002, -0.002, gHull);
+
+        // The rower, in the ghost's own cycle.
+        vec2 gSeat = vec2(0.0, 0.0);
+        vec2 gTorso = vec2(0.05 + 0.26 * gCycle, 0.95);
+        vec2 gHead = vec2(0.36 + 0.14 * gCycle, 1.36);
+        vec2 gHands = vec2(mix(-0.60, 1.05, gCycle), 0.45);
+        // The blade is on the opposite side of the lock from the hands:
+        // hands back means the blade is planted ahead in the water,
+        // hands forward means it has left the water behind.
+        vec2 gBlade = vec2(mix(3.2, -3.0, gCycle),
+                           mix(-0.80, 0.60, smoothstep(0.55, 0.95, gCycle)));
+
+        float gBody = sdSegment(gK, gSeat, gTorso) - 0.17;
+        float gArm = sdSegment(gK, gTorso, gHands) - 0.10;
+        float gHeadD = length(gK - gHead) - 0.20;
+        float gOar = sdSegment(gK, gHands, gBlade) - 0.05;
+
+        float gSil = max(max(gHullMask, smoothstep(0.03, -0.03, gBody)),
+                         max(smoothstep(0.03, -0.03, gArm),
+                             max(smoothstep(0.03, -0.03, gHeadD),
+                                 smoothstep(0.03, -0.03, gOar))));
+        // A cold blue, unmistakably not the player: it has to read as
+        // another boat, not as a smudge on the water.
+        col = mix(col, vec3(0.45, 0.68, 1.0), gSil * 0.62);
+      }
+
       vec2 hp = P - boatCenter;
       float hullShape = sdEllipse(hp, vec2(0.55, 0.012) * u_scale);
       float hullMask = smoothstep(0.002, -0.002, hullShape);
       float hullShade = smoothstep(-0.012 * u_scale, 0.012 * u_scale, hp.y);
-      vec3 hullCol = mix(vec3(0.75, 0.92, 0.70),
-                         vec3(0.30, 0.50, 0.30), hullShade);
+      vec3 hullCol = mix(u_hullA, u_hullB, hullShade);
+      // The sweep of light that runs along the hull when the livery
+      // changes. The one thing the game ever announces by itself: no
+      // words, no notification, just the boat showing off for a moment.
+      float liveryX = hp.x / (0.55 * u_scale);
+      float sweepPos = (u_livery - 0.5) * 3.4;
+      float liverySweep = exp(-pow((liveryX - sweepPos) * 2.6, 2.0)) * step(0.001, u_livery);
+      hullCol += vec3(1.0, 0.96, 0.88) * liverySweep * 0.45;
       float waterline = smoothstep(0.003, 0.0, abs(hp.y - 0.004 * u_scale));
       hullCol = mix(hullCol, vec3(0.15, 0.10, 0.08), waterline * 0.5);
       col = mix(col, hullCol, hullMask);
@@ -788,8 +907,8 @@
 
       float deckLine = boatCenter.y + 0.002;
       vec3 skinCol = vec3(0.92, 0.75, 0.62);
-      vec3 shortsCol = vec3(0.15, 0.15, 0.18);
-      vec3 shirtCol = vec3(0.85, 0.20, 0.15);
+      vec3 shortsCol = u_shorts;
+      vec3 shirtCol = u_shirt;
 
       float thighD = sdSegment(P, hip, knee);
       float thighMask = smoothstep(0.012 * u_scale, 0.010 * u_scale, thighD);
@@ -943,12 +1062,12 @@
         if (bladeBelow > 0.5 && phase < finishPhase + 0.06) {
           float driveT = min(phase / finishPhase, 1.0) *
                          (1.0 - smoothstep(finishPhase, finishPhase + 0.06, phase));
-          float trailLen = mix(0.10, 0.60, speedFactor) * u_scale;
+          float trailLen = mix(0.10, 0.60, traceFactor) * u_scale;
           float trailAlong = P.x - crossPt.x;
           float trailPerp = abs(y - crossPt.y);
           if (trailAlong > 0.0 && trailAlong < trailLen && y < oarWaterline + 0.002) {
             float tt = trailAlong / trailLen;
-            float trailHalfW = mix(0.003, mix(0.012, 0.035, speedFactor), tt) * u_scale;
+            float trailHalfW = mix(0.003, mix(0.012, 0.035, traceFactor), tt) * u_scale;
             float trailNoise = fbm(vec2(u * 80.0 - u_time * 2.0, y * 100.0));
             float sharpness = mix(0.2, 0.8, tt);
             float trailShape = smoothstep(trailHalfW, trailHalfW * sharpness, trailPerp);
@@ -1028,7 +1147,7 @@
       float capDist = distance(P, head);
       float capR = capHeadR + 0.002 * u_scale;
       float capMask = smoothstep(capR, capR - 0.001, capDist) * step(head.y, P.y);
-      col = mix(col, vec3(0.10, 0.25, 0.55), capMask);
+      col = mix(col, u_cap, capMask);
       vec2 visorCenter = head + capFaceDir * 0.014 * u_scale + vec2(0.0, 0.002 * u_scale);
       float visor = sdEllipse(P - visorCenter, vec2(0.012, 0.003) * u_scale);
       float visorMask = smoothstep(0.001, -0.001, visor);
@@ -1105,6 +1224,16 @@
         col += fairy * fireflyK * smoothstep(0.80, 0.50, y);
       }
 
+      // The theme of the hour, laid over the frame the way a grade is
+      // laid over a picture. Gentle by design: a few percent.
+      //
+      // An unset uniform is zero, and a grade of zero would black the
+      // whole frame out. A tool that draws the scene by hand - the
+      // offline pictures - must set the theme, but a forgotten one
+      // should cost a grade, not the picture.
+      vec3 themeTint = u_tint;
+      if (themeTint.r + themeTint.g + themeTint.b < 0.0001) themeTint = vec3(1.0);
+      col = clamp(col * themeTint, 0.0, 1.0);
       gl_FragColor = vec4(col, 1.0);
     }
   </script>

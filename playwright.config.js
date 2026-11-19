@@ -31,13 +31,20 @@ module.exports = defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
-  // Each rowing-session test runs a real WebGL context (rowing_display.js).
-  // Confirmed by hand: run alone, debug_sim's first packet lands with
-  // nonzero spm/watts immediately; run under 2+ parallel workers, Chromium
-  // logs "GPU stall due to ReadPixels" and setInterval-driven debug_sim
-  // ticks fall far enough behind to blow through 8s budgets. Serial
-  // execution costs wall-clock time, not correctness - worth it over a
-  // suite that fails depending on how many workers happened to be busy.
+  // Each rowing-session test runs the real animation stack
+  // (rowing_display.js). Confirmed by hand: run alone, debug_sim's first
+  // packet lands with nonzero spm/watts immediately; run under 2+ parallel
+  // workers, Chromium logs "GPU stall due to ReadPixels" and setInterval-
+  // driven debug_sim ticks fall far enough behind to blow through 8s
+  // budgets. Serial execution costs wall-clock time, not correctness -
+  // worth it over a suite that fails depending on how many workers
+  // happened to be busy.
+  //
+  // The scene itself is drawn by the shader-free 'phases' renderer (see
+  // tests/e2e/build-app.js): the real GLSL fragment shader needs a GPU,
+  // and without one it is expensive enough to starve the event loop -
+  // the page then stops answering Playwright's queries and the spec times
+  // out waiting for a screen that is already there.
   workers: 1,
 
   projects: [

@@ -6,6 +6,8 @@ dist/
 # tracked - gitignore can't un-ignore a path whose parent directory is
 # itself excluded, so keeping dev/ as a whole ignored wasn't an option.
 dev/postgresql.md
+# PostgREST binary, downloaded by dev/dev-stack.sh
+dev/.postgrest/
 SpaceGrotesk-Regular.ttf
 deploy.config.ps1
 server-config/

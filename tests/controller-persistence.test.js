@@ -66,6 +66,18 @@ async function boot({
     // enterRowing()'s only dependencies outside these four files.
     Debug: { stopSim() {}, isOn() { return false; } },
     Coaching: { setMode() {}, getMode() { return 'coaching'; } }, initRowing() {}, initFtmsTracking() {},
+    // The game layer (run_score.js / run_view.js). Stubbed like Coaching:
+    // this file is about the save path, not about the score.
+    RunScore: {
+      createRun() { return { score: 0, multiplier: 1, heat: 0, liftSpm: 0, events: [] }; },
+      reset(s) { return s; },
+      tick() { return null; },
+      summarize() { return null; },
+      setDailyPar() {}
+    },
+    RunView: { mount() {}, render() {}, reset() {}, setVisible() {}, setDailyCourse() {} },
+    // The course of the day (daily_course.js).
+    DailyCourse: { forDate() { return null; }, parFraction() { return 0; } },
     XESYNC_CONFIG: { apexHomeUrl: 'https://example.test/' }
   };
   vm.createContext(context);

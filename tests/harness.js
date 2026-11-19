@@ -51,8 +51,12 @@ function makeElement(id) {
     scrollHeight: 0,
     style: { cssText: '' },
     children: [],
-    classes: new Set()
+    classes: new Set(),
+    attributes: new Map()
   };
+  el.setAttribute = (name, value) => { el.attributes.set(name, String(value)); };
+  el.getAttribute = (name) => (el.attributes.has(name) ? el.attributes.get(name) : null);
+  el.removeAttribute = (name) => { el.attributes.delete(name); };
   el.classList = {
     add: (c) => el.classes.add(c),
     remove: (c) => el.classes.delete(c),

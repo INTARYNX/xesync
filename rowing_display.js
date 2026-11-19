@@ -12,6 +12,112 @@ var RowingAnimation = (function() {
     var loadingEl = null;
     var shaderReadySent = false;
 
+    // -- the chain, the scene's half of the game layer ------------------
+    //
+    // The chain is the game layer's state (run_score.js): how well the
+    // rower is holding above their own recent pace, as a 0..1 level.
+    // controller.js feeds it in; the scene answers it.
+    //
+    // The answer is never a number and never a word. It is the world
+    // moving: the scenery scrolls faster, the day turns sooner, the
+    // weather changes more often, and the boat's trace grows fuller. A
+    // good run LOOKS like a good run - that is the whole incentive, and
+    // it costs the rower nothing.
+    var chainLevel = 0;
+    var chainPulse = 0;
+    var sceneClock = 0;
+    // The day's weather. The course of the day (daily_course.js) draws
+    // this from the local date and hour, so everyone rowing at the same
+    // moment starts under the same sky. The session's own day counter
+    // then runs on top of it, faster while the chain is up.
+    var dayBase = 0;
+
+    // The ghost: your own best run, replayed on the same water. The
+    // profile is the distance-time curve of that run; the ghost is
+    // placed against the player at the same elapsed time.
+    var ghostProfile = null;
+    var ghostOn = 0;
+    var ghostOffset = 0;
+    var ghostPhase = 0;
+    // How far, in metres, the ghost can be and still be drawn. Beyond
+    // that it has left the screen, and there is nothing to look at.
+    var GHOST_MAX_GAP_M = 400;
+    // How many metres make one unit of the screen's width. Tuned so
+    // that a hundred metres is a visible distance on a phone.
+    var GHOST_UV_PER_M = 0.0005;
+    // The dressing. The livery of the boat and the kit of the rower
+    // come from costume.js, which reads them off the rower's history;
+    // the theme is the grade of the hour. The scene only wears them.
+    //
+    // The scene is dressed as soon as it loads, not when the GL program
+    // is linked: a WebGL uniform starts at zero, and a theme of zero
+    // would multiply the whole frame by nothing - a black picture. The
+    // 'phases' renderer never links a program at all, and still has to
+    // know what the boat wears.
+    var costume = defaultCostume();
+    var costumeKey = costume.livery.key;
+    // The sweep of light that runs along the hull when the livery
+    // changes. It is the only thing the game says by itself, and it
+    // says it with light rather than with words.
+    var liverySweep = 0;
+    var liverySweepT = 0;
+    var LIVERY_SWEEP_S = 2.2;
+
+    // The player's own distance and session clock, for the ghost to be
+    // measured against.
+    var currentDistance = 0;
+    var sessionElapsed = 0;
+
+    // How much faster the world runs at a full chain.
+    var CHAIN_TIME_SCALE = 0.5;     // the day turns, the water moves
+    var CHAIN_SCROLL_SCALE = 0.35;  // the scenery scrolls
+    // A tier up gives the scene a short bump: a surge of the boat, not
+    // an earthquake.
+    var PULSE_S = 0.45;
+    var PULSE_SCALE = 0.12;
+
+    function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+
+    // The outfit the scene starts in: the club livery and no grade over
+    // the frame. The controller replaces it as soon as it knows the
+    // rower's history and the hour's weather.
+    function defaultCostume() {
+        if (typeof Costume !== 'undefined') return Costume.outfit(0, null);
+        return {
+            livery: { key: 'club', hull: [[0.75, 0.92, 0.70], [0.30, 0.50, 0.30]],
+                      shirt: [0.85, 0.20, 0.15], shorts: [0.15, 0.15, 0.18],
+                      cap: [0.10, 0.25, 0.55] },
+            biome: { key: 'conifers', ridgeFar: [0.78, 0.55, 0.65],
+                     ridgeNear: [0.22, 0.18, 0.30], tree: [0.19, 0.16, 0.28],
+                     density: 0.3 },
+            theme: { key: 'clear', tint: [1, 1, 1] }
+        };
+    }
+
+    // Put the outfit on the GPU: the colours of the livery, the colours
+    // of the land, and the theme's grade. Called when the program is
+    // linked - a WebGL uniform starts at zero, and a tint of zero would
+    // make the whole frame black - and then every frame, which is cheap
+    // and cannot go stale.
+    function dressScene() {
+        if (!gl || !uniforms || !costume) return;
+        var lv = costume.livery;
+        var bm = costume.biome;
+        var th = costume.theme;
+        gl.uniform3f(uniforms.uHullA,  lv.hull[0][0], lv.hull[0][1], lv.hull[0][2]);
+        gl.uniform3f(uniforms.uHullB,  lv.hull[1][0], lv.hull[1][1], lv.hull[1][2]);
+        gl.uniform3f(uniforms.uShirt,  lv.shirt[0], lv.shirt[1], lv.shirt[2]);
+        gl.uniform3f(uniforms.uShorts, lv.shorts[0], lv.shorts[1], lv.shorts[2]);
+        gl.uniform3f(uniforms.uCap,    lv.cap[0], lv.cap[1], lv.cap[2]);
+        gl.uniform3f(uniforms.uTint,   th.tint[0], th.tint[1], th.tint[2]);
+        if (bm) {
+            gl.uniform3f(uniforms.uRidgeFar,  bm.ridgeFar[0], bm.ridgeFar[1], bm.ridgeFar[2]);
+            gl.uniform3f(uniforms.uRidgeNear, bm.ridgeNear[0], bm.ridgeNear[1], bm.ridgeNear[2]);
+            gl.uniform3f(uniforms.uTree,      bm.tree[0], bm.tree[1], bm.tree[2]);
+            gl.uniform1f(uniforms.uTreeDensity, typeof bm.density === 'number' ? bm.density : 0.3);
+        }
+    }
+
     var SPEED_NORMALIZE = 5.0;
     var TIME_WRAP = 300.0;
     var FLOW_WRAP = 1000.0;
@@ -72,6 +178,84 @@ var RowingAnimation = (function() {
         return s < recovery
             ? FINISH_RENDER_PHASE + s * ((1.0 - FINISH_RENDER_PHASE) / recovery)
             : (s - recovery) * (FINISH_RENDER_PHASE / d);
+    }
+
+    // ---------------------------------------------------------------------
+    // Rowing phases
+    //
+    // The stroke cycle is made of four phases, in this order:
+    //
+    //   1. Prise d'eau (ou attaque) / Catch     / transition avant
+    //   2. Propulsion (ou appui)    / Drive     / phase motrice
+    //   3. Dégagement               / Finish    / transition arrière
+    //   4. Replacement (ou retour)  / Recovery  / phase de glisse
+    //
+    // Catch and Finish are landmarks - the instant the blade enters the
+    // water and the instant it leaves it. The table gives them a transition
+    // character of their own, so each gets a short window on the pose
+    // track. Drive is the effort between the two; Recovery is the glide
+    // back to the next catch.
+    //
+    // The pose track (see toRenderPhase) runs 0..1 with the catch at 0 and
+    // the finish at FINISH_RENDER_PHASE - which is exactly the order the
+    // four phases appear in. So the phase of a frame is read straight off
+    // the pose track, the same value the shader is fed: no second clock to
+    // keep in sync with the first.
+    // ---------------------------------------------------------------------
+    var PHASES = [
+        {
+            order:    1,
+            name:     'Prise d\'eau (ou attaque)',
+            english:  'Catch',
+            type:     'Transition avant',
+            role:     'Immerger la palette',
+            segments: 'Tibias verticaux, tronc penché, bras tendus',
+            action:   'Relever les mains pour entrer la pelle à la verticale (au carré)'
+        },
+        {
+            order:    2,
+            name:     'Propulsion (ou appui)',
+            english:  'Drive',
+            type:     'Phase motrice',
+            role:     'Faire avancer le bateau',
+            segments: 'Jambes -> Tronc -> Bras',
+            action:   'Pousser sur les cale-pieds, ouvrir le buste, tirer les poignées aux côtés'
+        },
+        {
+            order:    3,
+            name:     'Dégagement',
+            english:  'Finish',
+            type:     'Transition arrière',
+            role:     'Sortir la palette',
+            segments: 'Jambes tendues, tronc incliné en arrière',
+            action:   'Abaisser les mains vers les cuisses et mettre la pelle à plat'
+        },
+        {
+            order:    4,
+            name:     'Replacement (ou retour)',
+            english:  'Recovery',
+            type:     'Phase de glisse',
+            role:     'Revenir à l\'attaque et récupérer',
+            segments: 'Bras -> Tronc -> Jambes',
+            action:   'Tendre les bras, basculer le buste en avant, fléchir les genoux'
+        }
+    ];
+
+    var PHASE_CATCH = 0, PHASE_DRIVE = 1, PHASE_FINISH = 2, PHASE_RECOVERY = 3;
+
+    // Width of the two transition windows on the pose track, as a share of
+    // it. Catch and finish are instants; the windows are what makes them
+    // readable as phases of their own instead of single frames.
+    var CATCH_WINDOW  = 0.06;
+    var FINISH_WINDOW = 0.06;
+
+    // Which phase a pose track position falls in.
+    function phaseAt(pose) {
+        var p = pose - Math.floor(pose);        // 0..1
+        if (p < CATCH_WINDOW) return PHASE_CATCH;
+        if (p < FINISH_RENDER_PHASE) return PHASE_DRIVE;
+        if (p < FINISH_RENDER_PHASE + FINISH_WINDOW) return PHASE_FINISH;
+        return PHASE_RECOVERY;
     }
 
     // ---------------------------------------------------------------------
@@ -243,15 +427,52 @@ var RowingAnimation = (function() {
         gl.viewport(0, 0, canvas.width, canvas.height);
     }
 
+    // Where the ghost is, right now. Its distance at this moment of the
+    // session, against the player's distance at the same moment - the
+    // only comparison that means anything.
+    function updateGhost() {
+      if (!ghostProfile) {
+        ghostOn = 0;
+        return;
+      }
+      var gap = Ghost.gapMetres(ghostProfile, sessionElapsed, currentDistance);
+      if (Ghost.isVisible(ghostProfile, sessionElapsed, gap, GHOST_MAX_GAP_M)) {
+        ghostOn = 1;
+        ghostOffset = gap * GHOST_UV_PER_M;
+        ghostPhase = Ghost.phaseAt(ghostProfile, sessionElapsed);
+      } else {
+        ghostOn = 0;
+      }
+    }
+
     function frame() {
         resize();
         var now = performance.now() / 1000;
         var dt = now - lastT;
         lastT = now;
 
+        updateGhost();
+
+        // The scene's own clock. It runs faster while the chain is up, so
+        // the water moves, the day turns and the weather changes more
+        // often. The stroke tracker below keeps using the real clock:
+        // the animation's sync with the rower must not be a game effect.
+        sceneClock += dt * (1.0 + chainLevel * CHAIN_TIME_SCALE);
+        chainPulse = Math.max(0, chainPulse - dt / PULSE_S);
+        // The sweep runs on the real clock: it is a moment of the game
+        // showing off, not part of the world that speeds up with the
+        // chain.
+        if (liverySweepT > 0) {
+            liverySweepT = Math.max(0, liverySweepT - dt / LIVERY_SWEEP_S);
+            liverySweep = liverySweepT;
+        } else if (liverySweep !== 0) {
+            liverySweep = 0;
+        }
+
         var targetSurge = currentSpm > 0 ? surgeFactor(animPhase) : 1.0;
         displaySurge += (targetSurge - displaySurge) * Math.min(1.0, dt * SURGE_SLEW_RATE);
-        flow -= dt * currentSpeed * 0.26 * displaySurge;
+        flow -= dt * currentSpeed * 0.26 * displaySurge *
+                (1.0 + chainLevel * CHAIN_SCROLL_SCALE);
         if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
         if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
 
@@ -260,16 +481,22 @@ var RowingAnimation = (function() {
             Math.min(1.0, dt * DRIVE_EASE_RATE);
         var renderPhase = toRenderPhase(animPhase, driveFraction);
 
-        var timeWrapped = (now - t0) % TIME_WRAP;
+        var timeWrapped = sceneClock % TIME_WRAP;
 
         gl.uniform1f(uniforms.uTime,   timeWrapped);
-        gl.uniform1f(uniforms.uDay,    Math.floor((now - t0) / TIME_WRAP) % 1000);
+        gl.uniform1f(uniforms.uDay,    dayBase + Math.floor(sceneClock / TIME_WRAP) % 1000);
         gl.uniform1f(uniforms.uSpeed,  currentSpeed);
+        gl.uniform1f(uniforms.uChain,  chainLevel);
         gl.uniform1f(uniforms.uFlow,   flow);
         gl.uniform1f(uniforms.uPhase,  renderPhase);
         gl.uniform1f(uniforms.uSpm,    currentSpm);
-        gl.uniform1f(uniforms.uScale,  spriteScale);
+        gl.uniform1f(uniforms.uScale,  spriteScale * (1.0 + chainPulse * PULSE_SCALE));
         gl.uniform1f(uniforms.uAspect, gl.canvas.clientWidth / gl.canvas.clientHeight);
+        gl.uniform1f(uniforms.uGhostX,     ghostOffset);
+        gl.uniform1f(uniforms.uGhostPhase, ghostPhase);
+        gl.uniform1f(uniforms.uGhostOn,    ghostOn);
+        dressScene();
+        gl.uniform1f(uniforms.uLivery, liverySweep);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
         if (!shaderReadySent) {
@@ -289,10 +516,141 @@ var RowingAnimation = (function() {
         rafId = requestAnimationFrame(frame);
     }
 
+    // ---------------------------------------------------------------------
+    // Phase strip - the shader-free renderer
+    //
+    // renderMode 'phases' replaces the WebGL scene with the stroke cycle
+    // itself: the same tracker, the same pose track, the same surge and
+    // drive-fraction easing, drawn as the four phases instead of pixels.
+    // Everything the animation decides is still decided here; only the
+    // rasterization is gone. That is what lets the end-to-end suite run on
+    // a machine with no GPU (CI, a container, a software rasterizer) where
+    // the fragment shader is expensive enough to starve the event loop.
+    // ---------------------------------------------------------------------
+    var stripEl = null;
+    var stripCards = [];
+    var stripDetail = null;
+    var stripPhase = -1;
+
+    function buildPhaseStrip() {
+        stripEl = document.getElementById('phase-strip');
+        if (!stripEl) return;
+
+        // The strip is display:none in CSS: it only exists in 'phases'
+        // mode, and the canvas is hidden in the same breath.
+        stripEl.style.display = 'flex';
+
+        var cards = '';
+        for (var i = 0; i < PHASES.length; i++) {
+            var p = PHASES[i];
+            cards += '<div class="phase-card" data-phase-order="' + p.order + '"' +
+                     ' data-phase="' + p.english.toLowerCase() + '">' +
+                     '<div class="phase-order">' + p.order + '</div>' +
+                     '<div class="phase-name">' + p.name + '</div>' +
+                     '<div class="phase-english">' + p.english + '</div>' +
+                     '<div class="phase-type">' + p.type + '</div>' +
+                     '</div>';
+        }
+        stripEl.innerHTML = '<div class="phase-cards">' + cards + '</div>' +
+            '<div class="phase-detail" id="phase-detail"></div>';
+
+        stripCards = stripEl.querySelectorAll('.phase-card');
+        stripDetail = document.getElementById('phase-detail');
+    }
+
+    function renderPhaseStrip(index) {
+        if (!stripEl || index === stripPhase) return;
+        stripPhase = index;
+
+        for (var i = 0; i < stripCards.length; i++) {
+            if (i === index) stripCards[i].classList.add('active');
+            else stripCards[i].classList.remove('active');
+        }
+
+        var p = PHASES[index];
+        stripEl.setAttribute('data-phase', p.english.toLowerCase());
+        stripEl.setAttribute('data-phase-order', String(p.order));
+        if (stripDetail) {
+            stripDetail.innerHTML =
+                '<span class="phase-detail-role">' + p.role + '</span>' +
+                '<span class="phase-detail-segments">' + p.segments + '</span>' +
+                '<span class="phase-detail-action">' + p.action + '</span>';
+        }
+    }
+
+    // Which renderer the page should use. 'webgl' is the real scene;
+    // 'phases' is the shader-free stand-in used by the test build.
+    function renderMode() {
+        if (typeof XESYNC_CONFIG !== 'undefined' && XESYNC_CONFIG.renderMode) {
+            return XESYNC_CONFIG.renderMode;
+        }
+        return 'webgl';
+    }
+
+    function initPhases() {
+        var canvas = document.getElementById('glCanvas');
+        if (canvas) canvas.style.display = 'none';
+
+        buildPhaseStrip();
+
+        t0 = performance.now() / 1000;
+        lastT = t0;
+        flow = 0;
+        animPhase = 0;
+        driveFraction = DRIVE_FRACTION;
+        displaySurge = 1.0;
+        tracker.reset();
+        currentSpeed = 0;
+        currentSpm = 0;
+        shaderReadySent = false;
+        loadingEl = document.getElementById('gl-loading');
+
+        framePhases();
+    }
+
+    function framePhases() {
+        var now = performance.now() / 1000;
+        var dt = now - lastT;
+        lastT = now;
+
+        var targetSurge = currentSpm > 0 ? surgeFactor(animPhase) : 1.0;
+        displaySurge += (targetSurge - displaySurge) * Math.min(1.0, dt * SURGE_SLEW_RATE);
+        flow -= dt * currentSpeed * 0.26 * displaySurge;
+        if (flow < -FLOW_WRAP) flow += FLOW_WRAP;
+        if (flow >  FLOW_WRAP) flow -= FLOW_WRAP;
+
+        animPhase = tracker.advance(animPhase, dt, now, currentSpm);
+        driveFraction += (driveFractionForSpm(currentSpm) - driveFraction) *
+            Math.min(1.0, dt * DRIVE_EASE_RATE);
+
+        renderPhaseStrip(phaseAt(toRenderPhase(animPhase, driveFraction)));
+
+        if (!shaderReadySent) {
+            shaderReadySent = true;
+            window.parent.postMessage({ type: 'shaderReady' }, '*');
+        }
+
+        if (loadingEl) {
+            var el = loadingEl;
+            loadingEl = null;
+            el.classList.add('fade-out');
+            el.addEventListener('transitionend', function() {
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, { once: true });
+        }
+
+        rafId = requestAnimationFrame(framePhases);
+    }
+
     function initRowing() {
         if (rafId) {
             cancelAnimationFrame(rafId);
             rafId = null;
+        }
+
+        if (renderMode() === 'phases') {
+            initPhases();
+            return;
         }
 
         var canvas = document.getElementById('glCanvas');
@@ -326,15 +684,35 @@ var RowingAnimation = (function() {
             uTime:   gl.getUniformLocation(prog, 'u_time'),
             uDay:    gl.getUniformLocation(prog, 'u_day'),
             uSpeed:  gl.getUniformLocation(prog, 'u_speed'),
+            uChain:  gl.getUniformLocation(prog, 'u_chain'),
             uFlow:   gl.getUniformLocation(prog, 'u_flow'),
             uPhase:  gl.getUniformLocation(prog, 'u_phase'),
             uSpm:    gl.getUniformLocation(prog, 'u_spm'),
             uScale:  gl.getUniformLocation(prog, 'u_scale'),
-            uAspect: gl.getUniformLocation(prog, 'u_aspect')
+            uAspect: gl.getUniformLocation(prog, 'u_aspect'),
+            uGhostX:     gl.getUniformLocation(prog, 'u_ghostX'),
+            uGhostPhase: gl.getUniformLocation(prog, 'u_ghostPhase'),
+            uGhostOn:    gl.getUniformLocation(prog, 'u_ghostOn'),
+            uHullA:      gl.getUniformLocation(prog, 'u_hullA'),
+            uHullB:      gl.getUniformLocation(prog, 'u_hullB'),
+            uShirt:      gl.getUniformLocation(prog, 'u_shirt'),
+            uShorts:     gl.getUniformLocation(prog, 'u_shorts'),
+            uCap:        gl.getUniformLocation(prog, 'u_cap'),
+            uTint:       gl.getUniformLocation(prog, 'u_tint'),
+            uLivery:     gl.getUniformLocation(prog, 'u_livery'),
+            uRidgeFar:   gl.getUniformLocation(prog, 'u_ridgeFar'),
+            uRidgeNear:  gl.getUniformLocation(prog, 'u_ridgeNear'),
+            uTree:       gl.getUniformLocation(prog, 'u_tree'),
+            uTreeDensity: gl.getUniformLocation(prog, 'u_treeDensity')
         };
+
+        // The scene never waits to be dressed: it shows the boat as it
+        // always was, and changes when the history says so.
+        dressScene();
 
         t0 = performance.now() / 1000;
         lastT = t0;
+        sceneClock = 0;
         flow = 0;
         animPhase = 0;
         driveFraction = DRIVE_FRACTION;
@@ -361,7 +739,9 @@ var RowingAnimation = (function() {
             document.getElementById('cals').textContent = cals;
             document.getElementById('strokes').textContent = strokes;
         },
-        setConsoleSpeedAndSpm: function(speed, spm) {
+        setConsoleSpeedAndSpm: function(speed, spm, distance, elapsedSeconds) {
+            if (typeof distance === 'number' && isFinite(distance)) currentDistance = distance;
+            if (typeof elapsedSeconds === 'number' && isFinite(elapsedSeconds)) sessionElapsed = elapsedSeconds;
             currentSpeed = Math.min(speed / SPEED_NORMALIZE, 1.0);
             currentSpm = spm;
         },
@@ -371,12 +751,84 @@ var RowingAnimation = (function() {
         noteStroke: function(count, gapS) {
             tracker.stroke(performance.now() / 1000, count, gapS, currentSpm);
         },
+        // The chain level, 0..1. Called by controller.js on every packet,
+        // from the game layer's state (run_score.js).
+        setChainLevel: function(level) {
+            chainLevel = (typeof level === 'number' && isFinite(level))
+                ? clamp01(level)
+                : 0;
+        },
+        // A tier up: a short surge of the boat.
+        pulseChain: function() {
+            chainPulse = 1;
+        },
+        // The ghost of the best run. The profile comes from ghost.js,
+        // built from the samples the server already has.
+        setGhostProfile: function(profile) {
+            ghostProfile = profile || null;
+            ghostOn = 0;
+            ghostOffset = 0;
+        },
+        // The day's conditions: the index the shader uses to pick the
+        // weather. The day's own index, so the sky is the same for
+        // everyone rowing at this hour.
+        setSceneDay: function(index) {
+            dayBase = (typeof index === 'number' && isFinite(index))
+                ? Math.floor(index)
+                : 0;
+        },
+        // The dressing. The outfit comes from costume.js: the livery of
+        // the boat, the kit of the rower, and the theme of the hour.
+        // When the livery is a different one from the one the scene was
+        // already wearing, a sweep of light runs along the hull - the
+        // only announcement the game makes by itself.
+        setCostume: function(outfit) {
+            if (!outfit || !outfit.livery || !outfit.theme) return;
+            var wasKey = costumeKey;
+            costume = outfit;
+            costumeKey = outfit.livery.key;
+            if (wasKey !== null && wasKey !== costumeKey) {
+                liverySweepT = 1;
+                liverySweep = 1;
+            }
+        },
+        // Exposed for tests: the scene's half of the game layer, so a
+        // test can check that the chain really reaches the renderer.
+        _internals: {
+            chainLevel: function () { return chainLevel; },
+            chainPulse: function () { return chainPulse; },
+            sceneClock: function () { return sceneClock; },
+            dayBase: function () { return dayBase; },
+            ghostOn: function () { return ghostOn; },
+            ghostOffset: function () { return ghostOffset; },
+            ghostPhase: function () { return ghostPhase; },
+            ghostProfile: function () { return ghostProfile; },
+            costume: function () { return costume; },
+            costumeKey: function () { return costumeKey; },
+            liverySweep: function () { return liverySweep; },
+            updateGhost: updateGhost,
+            sessionElapsed: function () { return sessionElapsed; },
+            currentDistance: function () { return currentDistance; },
+            CHAIN_TIME_SCALE: CHAIN_TIME_SCALE,
+            CHAIN_SCROLL_SCALE: CHAIN_SCROLL_SCALE,
+            PULSE_S: PULSE_S,
+            PULSE_SCALE: PULSE_SCALE
+        },
         // Exposed for tests/rowing_sync.test.js.
         createPhaseTracker: createPhaseTracker,
         toRenderPhase: toRenderPhase,
         surgeFactor: surgeFactor,
         driveFractionForSpm: driveFractionForSpm,
         FINISH_PHASE: FINISH_PHASE,
+        // The four phases of the stroke, and which one a pose track
+        // position falls in. Exposed for tests/rowing_phases.test.js.
+        PHASES: PHASES,
+        phaseAt: phaseAt,
+        PHASE_CATCH: PHASE_CATCH,
+        PHASE_DRIVE: PHASE_DRIVE,
+        PHASE_FINISH: PHASE_FINISH,
+        PHASE_RECOVERY: PHASE_RECOVERY,
+        FINISH_RENDER_PHASE: FINISH_RENDER_PHASE,
         initRowing: initRowing,
         stopAllAnimations: function() {
             if (rafId) {
@@ -391,3 +843,8 @@ var initRowing = RowingAnimation.initRowing;
 var setConsoleValues = RowingAnimation.setConsoleValues;
 var setConsoleSpeedAndSpm = RowingAnimation.setConsoleSpeedAndSpm;
 var noteStroke = RowingAnimation.noteStroke;
+var setChainLevel = RowingAnimation.setChainLevel;
+var pulseChain = RowingAnimation.pulseChain;
+var setSceneDay = RowingAnimation.setSceneDay;
+var setGhostProfile = RowingAnimation.setGhostProfile;
+var setCostume = RowingAnimation.setCostume;

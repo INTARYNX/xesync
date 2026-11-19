@@ -13,6 +13,15 @@ var XESYNC_CONFIG = {
   // Leave false in prod — at ~2 req/sec per user it adds a lot of noise.
   logRawData: false,
 
+  // Which renderer the rowing scene uses:
+  //   'webgl'  - the real GLSL scene. Default, and what ships.
+  //   'phases' - the shader-free stand-in: the same stroke cycle, tracker and
+  //              pose track, drawn as the four phases of the stroke instead
+  //              of pixels. The test build uses it (tests/e2e/build-app.js),
+  //              where the fragment shader is too expensive to run without a
+  //              GPU and starves the event loop.
+  renderMode: 'webgl',
+
   // Shown on the login screen and useful in bug reports. Must match
   // capacitor/android/app/build.gradle's versionName — bump both together
   // on every release, there is no build step that syncs them automatically.

@@ -17,7 +17,24 @@
 // Output goes to tests/e2e/.build/, never dist/ - that directory is
 // deploy.ps1's own, and this script must not touch it.
 //
-// Usage:  node tests/e2e/build-app.js [--api-base-url=<url>]
+// It also patches three config.js values before inlining:
+//
+// - apiBaseUrl - overridden per project (see playwright.config.js), so tests
+//   never depend on whatever happens to be in the committed config.js.
+// - apexHomeUrl - always forced to about:blank. The real value points at
+//   production, and showHome() sets it as an <iframe src> directly; without
+//   this override, a successful login in a test would fetch the live site.
+// - renderMode - forced to 'phases' unless the caller says otherwise. The
+//   real rowing scene is a ~900-line GLSL fragment shader; without a GPU
+//   (CI, a container, a software rasterizer) it is expensive enough to
+//   starve the event loop, and the page then stops answering Playwright's
+//   queries - the spec times out waiting for a screen that is, in fact,
+//   already there. The 'phases' renderer keeps the whole stroke cycle
+//   (tracker, pose track, surge, drive fraction) and drops only the
+//   rasterization. APP_RENDER_MODE=webgl restores the real scene on a
+//   machine that has a GPU.
+//
+// Usage:  node tests/e2e/build-app.js [--api-base-url=<url>] [--render-mode=<phases|webgl>]
 // =====================================================================
 
 'use strict';
@@ -55,7 +72,10 @@ function inlineScripts(html, base) {
 // (Playwright starts all of them in parallel), so a single shared output
 // path would race two builds writing the same file with different config
 // baked in, and whichever finished last would silently win for both ports.
-function build(apiBaseUrl, outDir, homeUrl) {
+function build(apiBaseUrl, outDir, homeUrl, renderMode) {
+  // The default is 'phases' (see the header): a test build that needs a
+  // GPU is a test build that times out on a machine without one.
+  renderMode = renderMode || 'phases';
   // -- rowing_display.html: CSS -> <style> list, JS inlined, body extracted --
   let rd = readUtf8(path.join(ROOT, 'rowing_display.html'));
   const styles = [];
@@ -102,6 +122,17 @@ function build(apiBaseUrl, outDir, homeUrl) {
     if (app === before) throw new Error('apexHomeUrl pattern was not found in config.js');
   }
 
+  // Which renderer the rowing scene uses. Defaults to 'phases' (no GPU
+  // needed); APP_RENDER_MODE=webgl puts the real GLSL scene back.
+  if (renderMode) {
+    const before = app;
+    app = app.replace(
+      /renderMode:\s*(['"]).*?\1/,
+      `renderMode: '${renderMode}'`
+    );
+    if (app === before) throw new Error('renderMode override requested but the pattern was not found in config.js');
+  }
+
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, 'app.html'), app, 'utf8');
@@ -111,7 +142,8 @@ function build(apiBaseUrl, outDir, homeUrl) {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(outDir, asset));
   }
 
-  console.log('Built', path.join(outDir, 'app.html'), apiBaseUrl ? `(apiBaseUrl=${apiBaseUrl})` : '');
+  console.log('Built', path.join(outDir, 'app.html'), apiBaseUrl ? `(apiBaseUrl=${apiBaseUrl})` : '',
+              renderMode ? `(renderMode=${renderMode})` : '');
 }
 
 function argValue(flag, fallback) {
@@ -123,7 +155,8 @@ if (require.main === module) {
   build(
     argValue('--api-base-url', process.env.APP_API_BASE_URL || null),
     argValue('--out-dir', path.join(__dirname, '.build')),
-    argValue('--home-url', process.env.APP_HOME_URL || null)
+    argValue('--home-url', process.env.APP_HOME_URL || null),
+    argValue('--render-mode', process.env.APP_RENDER_MODE || 'phases')
   );
 }
 

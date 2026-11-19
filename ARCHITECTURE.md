@@ -21,6 +21,156 @@ Each file has one responsibility. Dependencies flow one way:
 | `ftms_integration.js` | FTMS packet parsing + workout session state machine. Delegates saving via callbacks. | `view` helpers |
 | `debug_sim.js` | Generates fake FTMS data for debug mode. | - |
 | `controller.js` | Orchestration. Handles user actions and bridge messages, mutates state, calls view/api/bridge. | all |
+| `rowing_display.js` | The rowing scene: stroke cycle, pose track, and the two renderers (`webgl`, `phases`). | - |
+| `run_score.js` | The game layer: the run's score, the chain and the lift, measured against the rower's own recent norm. Pure rules, no DOM. | - |
+| `run_view.js` | The game layer's DOM: the score chip, the chain ring, the lift bar. Decides nothing. | - |
+
+## The game layer
+
+Two modules, same contract as the coaching pair: `run_score.js` holds the
+rules, `run_view.js` draws them, and `controller.js` feeds one the
+snapshot `ftms_integration.js` already builds.
+
+```
+packet ─▶ ftms_integration.js ─▶ controller.js ─▶ run_score.js ─▶ run_view.js
+                                        │
+                                        └─▶ coaching.js ─▶ coaching_view.js
+```
+
+Both layers read the same measures and neither knows about the other. The
+score is attached to the saved workout as `payload.runScore`, alongside
+`splitsTable` and `coachingSummary`.
+
+## The rowing scene
+
+`rowing_display.js` owns the stroke cycle: the tracker that locks the cycle
+onto the rower's stroke ticks, the pose track the shader reads, the boat
+surge and the drive fraction. It has two renderers, picked by
+`config.js`'s `renderMode`:
+
+- **`webgl`** (default, ships) — the GLSL scene, drawn on `#glCanvas`.
+- **`phases`** — the same cycle, drawn as the four phases of the stroke
+  (Catch, Drive, Finish, Recovery) instead of pixels, with the current
+  phase exposed as `data-phase` on `#phase-strip`. The fragment shader
+  needs a GPU; without one it is expensive enough to starve the browser's
+  event loop, and the end-to-end suite cannot run. The test build selects
+  it (`tests/e2e/build-app.js`); `APP_RENDER_MODE=webgl` selects the real
+  scene.
+
+The phase table is data, not code: `RowingPhases.PHASES` carries each
+phase's order, name, english term, type, role, segment order and key
+action, and `phaseAt()` maps a pose track position to a phase.
+`tests/rowing_phases.test.js` pins it.
+
+### The scene answers the chain
+
+The scene is the game's display, not a decoration. `run_score.js` turns the
+rower's hold above their own pace into a single number, `RunScore.chainLevel(state)`
+(0..1), and `controller.js` hands it to the renderer on every packet:
+
+```
+packet ─▶ run_score.js ─▶ chainLevel(0..1) ─▶ controller.js ─▶ setChainLevel()
+                                                              └─▶ u_chain (shader)
+```
+
+`rowing_display.js` keeps the level, smooths it, and uses it for three things:
+the scene clock and the scroll run faster (`CHAIN_TIME_SCALE`,
+`CHAIN_SCROLL_SCALE`), the wake and the trail grow (`traceFactor`), and a
+tier up gives the rower a short swell (`pulseChain()` -> `u_scale` x1.12 for
+`PULSE_S` seconds). All of it is bounded and reversible: when the chain
+falls, the world slows down with it.
+
+The shader is verified without a GPU in `tests/e2e/shader.spec.js`: the GLSL
+is compiled and linked for real, `u_chain` is checked to be an active,
+settable uniform, and the same scene is drawn twice - identical except for
+`u_chain` - to prove the chain changes the pixels. The JavaScript side is
+covered by `tests/scene_chain.test.js`.
+
+### The dressing of the scene
+
+The boat's livery, the rower's kit and the theme of the hour are decided
+by `costume.js`, a pure module: the count of sessions done in, the
+outfit comes out. The count comes from the same `list_workouts` call the
+ghost uses, and is cached on the phone so a session without a network
+still wears the right livery.
+
+The scene only wears it: ten uniforms (`u_hullA`, `u_hullB`, `u_shirt`,
+`u_shorts`, `u_cap`, `u_tint`, `u_livery`, `u_ridgeFar`, `u_ridgeNear`,
+`u_tree`) replace constants that used to be written into the GLSL. A
+WebGL uniform starts at zero, so the scene dresses itself with the club
+livery as it loads - a theme of zero would multiply the whole frame by
+nothing.
+
+The land follows the same progression as the boat, on purpose: a new
+livery is also a new place. The shader does not hold eight palettes any
+more - it holds the two ends of the ridge (the far haze, the near band)
+and derives the eight bands between them, which is what makes the
+distance read. `u_chain` also agitates the ridge, so the land answers the
+chain like the water already did.
+
+Nothing here is configurable, and nothing here says anything: the livery
+changes when the history crosses a threshold, and the only announcement
+is a sweep of light along the hull (`u_livery`, 2.2 s on the real clock).
+
+## The course of the day
+
+`daily_course.js` is a third pure module, next to `run_score.js` and
+`run_view.js`. It takes a date and returns the day: the conditions (the
+weather index the shader reads as `u_day`) and the par (the chain
+multiplier and the number of pushes the day asks for).
+
+```
+date ─▶ daily_course.js ─▶ { dayIndex, chainPar, pushPar }
+                │                    │
+                │                    ├─▶ RunScore.setDailyPar()  (the rule)
+                │                    └─▶ RunView.setDailyCourse() (the mark)
+                └─▶ setSceneDay() → u_day (the sky)
+```
+
+The hash is FNV-1a over `YYYY-MM-DD`, so the course of a day is the same
+on every device without a server: that is what makes it a shared
+challenge rather than a personal one. The par is a mark, never a
+condition - the rules that decide it live in `run_score.js`, which
+reports it as `event.parReached` and archives it in the run summary.
+
+### The ghost of your best run
+
+`ghost.js` is a fourth pure module. It takes the user's past sessions and
+returns a distance-time profile the scene can replay.
+
+```
+list_workouts(token) ─▶ the sessions, with their 500 m split
+        │
+        ▼
+  Ghost.bestRun()  ─▶ the fastest one long enough to be a session
+        │
+        ▼
+get_workout(token, id) ─▶ its samples [t, distance, spm, ...]
+        │
+        ▼
+  Ghost.buildProfile() ─▶ { points, duration, distance }
+        │
+        ▼
+  setGhostProfile() ─▶ u_ghostX, u_ghostPhase, u_ghostOn
+```
+
+The ghost is placed against the player at the *same elapsed time*, not the
+same distance: `Ghost.gapMetres()` gives the metres between the two, and
+the scene turns that into a horizontal offset. Its stroke phase is
+integrated from its own cadence in the same profile, so it rows at its own
+pace instead of mirroring the player.
+
+No new server data is involved: `list_workouts` already returns the split,
+`get_workout` already returns the samples. The whole feature is a read.
+
+The profile is also cached in `localStorage`, so a session started
+without a network still has a ghost to race; the server's version
+replaces it when it answers.
+
+When the session ends, the race is settled: `Ghost.finalGap()` compares
+the two runs at the same elapsed time - the shorter of the two - so
+nobody can win by rowing longer. The result is carried by the run score
+(`runScore.ghost`) and shown on the post-workout screen.
 
 ## State
 

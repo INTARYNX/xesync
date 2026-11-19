@@ -349,6 +349,38 @@ body.rowing-dashboard {
   text-align: center;
 }
 
+/* The run's score, on the right of the card header. Only present on
+   workouts saved with the game layer; the space is left empty otherwise
+   rather than showing a dash. */
+.card-score {
+  float: right;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+/* The course of that day was met: a small gold mark on the card. The
+   only colour in the history that is not a number. */
+.card-par {
+  display: inline-flex;
+  align-items: center;
+  color: #ffd76a;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.card-par svg {
+  width: 15px;
+  height: 15px;
+}
+
+.card-score span {
+  color: #666;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-size: 0.85em;
+}
+
 .card-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.75rem; }
 
 .stat {

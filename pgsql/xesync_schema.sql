@@ -58,6 +58,20 @@ CREATE TABLE IF NOT EXISTS xesync.workouts (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- The game layer's score for the run (docs/GAMIFICATION.md). The full
+-- run summary is archived verbatim in workout_data; this column is the
+-- one number the app needs to sort or display, kept next to the other
+-- headline figures so the list query stays a single scan.
+ALTER TABLE xesync.workouts
+    ADD COLUMN IF NOT EXISTS run_score INTEGER;
+
+-- Whether the course of that day was met (the chain par and the pushes
+-- the day asked for). NULL when the session predates the course of the
+-- day, or when there was no course that day. Kept next to the other
+-- headline figures for the same reason as run_score.
+ALTER TABLE xesync.workouts
+    ADD COLUMN IF NOT EXISTS daily_par_reached BOOLEAN;
+
 CREATE INDEX IF NOT EXISTS idx_workouts_user ON xesync.workouts (user_id);
 CREATE INDEX IF NOT EXISTS idx_workouts_date ON xesync.workouts (workout_date);
 
@@ -639,7 +653,8 @@ BEGIN
     INSERT INTO xesync.workouts (
         workout_id, user_id, data_version,
         duration_sec, distance_m, total_strokes,
-        calories, avg_spm, avg_pace_sec, avg_watts, avg_hr
+        calories, avg_spm, avg_pace_sec, avg_watts, avg_hr,
+        run_score, daily_par_reached
     ) VALUES (
         workout,
         v_user_id,
@@ -651,7 +666,16 @@ BEGIN
         NULLIF((v_summary ->> 'avgSpm'),   '')::NUMERIC,
         NULLIF((v_summary ->> 'avgPace'),  '')::INTEGER,
         NULLIF((v_summary ->> 'avgWatts'), '')::INTEGER,
-        NULLIF((v_summary ->> 'avgHr'),    '')::INTEGER
+        NULLIF((v_summary ->> 'avgHr'),    '')::INTEGER,
+        -- NULL when the session predates the game layer.
+        NULLIF(data -> 'runScore' ->> 'score', '')::INTEGER,
+        -- NULL when the session predates the course of the day, or when
+        -- the day had no par to chase.
+        CASE
+            WHEN (data -> 'runScore' -> 'dailyPar' ->> 'reached') = 'true'
+                THEN TRUE
+            ELSE NULL
+        END
     );
 
     -- stroke_number is this row's sequence position within the workout
@@ -892,6 +916,72 @@ $$;
 -- GET WORKOUT DETAIL
 -- Returns the full sample list for a single workout owned by the token's user.
 -- ============================================================================
+
+-- The run scores of the account's workouts, as a separate call.
+--
+-- Deliberately additive: list_workouts' return type cannot change in
+-- place (Postgres refuses CREATE OR REPLACE on a different result type),
+-- and dropping a working endpoint to add one column is not worth it. The
+-- card list asks for the rows and for the scores, and merges them.
+CREATE OR REPLACE FUNCTION xesync.list_workout_scores(token TEXT)
+RETURNS TABLE (
+    workout_id  TEXT,
+    run_score   INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+BEGIN
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        w.workout_id::TEXT,
+        w.run_score
+    FROM xesync.workouts w
+    WHERE w.user_id = v_user_id
+      AND w.run_score IS NOT NULL
+    ORDER BY w.workout_date DESC;
+END;
+$$;
+
+
+-- Which sessions met the course of their day. Separate from
+-- list_workouts, which cannot change its return type.
+CREATE OR REPLACE FUNCTION xesync.list_workout_daily_pars(token TEXT)
+RETURNS TABLE (
+    workout_id          TEXT,
+    daily_par_reached  BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+BEGIN
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        w.workout_id::TEXT,
+        w.daily_par_reached
+    FROM xesync.workouts w
+    WHERE w.user_id = v_user_id
+      AND w.daily_par_reached IS NOT NULL
+    ORDER BY w.workout_date DESC;
+END;
+$$;
+
 
 CREATE OR REPLACE FUNCTION xesync.get_workout(token TEXT, workout TEXT)
 RETURNS TABLE (
@@ -1273,6 +1363,8 @@ GRANT EXECUTE ON FUNCTION xesync.reset_password_with_token(TEXT, TEXT)  TO web_a
 GRANT EXECUTE ON FUNCTION xesync.validate_token(TEXT)                   TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.save_workout(TEXT, TEXT, JSONB)        TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.list_workouts(TEXT)                    TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.list_workout_scores(TEXT)              TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.list_workout_daily_pars(TEXT)          TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)                TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.delete_account(TEXT, TEXT)             TO web_anon;

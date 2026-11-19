@@ -142,10 +142,12 @@ function renderDeviceList(devices, onPick) {
 }
 
 // Fill the post-workout overlay text + workouts button visibility, plus the
-// coaching highlights and splits table when the session produced them.
-// splitsTable/coachingSummary are undefined for a workout saved before this
-// feature existed - both render blocks just stay hidden in that case.
-function renderPostWorkout(savedState, hasToken, splitsTable, coachingSummary) {
+// coaching highlights, the run score and the splits table when the session
+// produced them.
+// splitsTable/coachingSummary/runScore are undefined for a workout saved
+// before these features existed - the render blocks just stay hidden in
+// that case.
+function renderPostWorkout(savedState, hasToken, splitsTable, coachingSummary, runScore) {
   var title = document.getElementById('pw-title');
   var sub   = document.getElementById('pw-subtitle');
   if (savedState === 'online') {
@@ -164,7 +166,47 @@ function renderPostWorkout(savedState, hasToken, splitsTable, coachingSummary) {
   document.getElementById('pw-workouts-btn').style.display = hasToken ? '' : 'none';
 
   renderCoachingSummary(coachingSummary);
+  renderRunScore(runScore);
   renderSplitsTable(splitsTable);
+}
+
+// The run's score. One line, no fuss: the score is a number the rower
+// earned, not a compliment. A run that never built a chain still shows
+// its base score - the game never says "you failed".
+function renderRunScore(runScore) {
+  var el = document.getElementById('pw-run-score');
+  if (!el) return;
+  if (!runScore || !runScore.score) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  var bits = '<span class="pw-run-score-value">' + Math.round(runScore.score) + '</span>' +
+             '<span class="pw-run-score-label">SCORE</span>';
+  if (runScore.maxMultiplier > 1) {
+    bits += '<span class="pw-run-score-x">×' + runScore.maxMultiplier + ' best chain</span>';
+  }
+  // The course of the day, if it was met. A mark, like the rest: no
+  // congratulation, no "you missed it".
+  if (runScore.dailyPar && runScore.dailyPar.reached) {
+    bits += '<span class="pw-run-score-x">daily par reached</span>';
+  }
+  // The race against the ghost of the best run. The only place in the
+  // app where the two are compared in metres: the scene could only
+  // show it by being where it was.
+  // The livery, when it changed during the run. The game says this once,
+  // in its own words, and never again.
+  if (runScore.livery && runScore.livery.changed && runScore.livery.name) {
+    bits += '<span class="pw-run-score-x">new livery: ' + escHtml(runScore.livery.name) + '</span>';
+  }
+  if (runScore.ghost && typeof runScore.ghost.gapM === 'number') {
+    var gap = runScore.ghost.gapM;
+    bits += '<span class="pw-run-score-x">' +
+      (gap >= 0 ? gap + ' m ahead of ghost' : (-gap) + ' m behind ghost') +
+      '</span>';
+  }
+  el.innerHTML = bits;
+  el.style.display = '';
 }
 
 // Same stroke-line SVG style as the HUD tiles (rowing_display.html) - not a

@@ -204,3 +204,36 @@
   font-style: italic;
   font-size: 0.9em;
 }
+
+/* The run's score, shown once at the end of a session. It sits above the
+   two columns: one number, one label, and the best chain if there was
+   one. No praise, no comment - the rower reads their own number. */
+#pw-run-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 10px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.pw-run-score-value {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.pw-run-score-label {
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #666;
+}
+.pw-run-score-x {
+  margin-left: auto;
+  font-size: 0.8em;
+  color: #4ade80;
+  letter-spacing: 0.04em;
+}

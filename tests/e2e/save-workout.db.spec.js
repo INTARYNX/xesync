@@ -103,5 +103,26 @@ test.describe('save_workout against real PostgREST', () => {
     expect(latest.distance_m).toBeGreaterThan(0);
     expect(latest.total_strokes).toBeGreaterThan(0);
     expect(latest.workout_id).toMatch(/^workout_\d{14}_[0-9a-f]{12}$/);
+
+    // The game layer's score went through the same save, and is readable
+    // back from the server.
+    const scoreRes = await request.post(`${postgrestUrl}/rpc/list_workout_scores`, { data: { token } });
+    const scores = await scoreRes.json();
+    const mine = scores.find(s => s.workout_id === latest.workout_id);
+    expect(mine, 'the saved workout has a run score').toBeTruthy();
+    expect(mine.run_score).toBeGreaterThan(0);
+
+    // The course of the day went through the same save. A short debug
+    // session does not meet the day's par, so there is nothing to show -
+    // but the column is there, and the endpoint answers, which is what
+    // the history needs to render.
+    const parRes = await request.post(`${postgrestUrl}/rpc/list_workout_daily_pars`, { data: { token } });
+    expect(parRes.ok(), 'the daily par endpoint answers').toBeTruthy();
+    const pars = await parRes.json();
+    expect(Array.isArray(pars)).toBeTruthy();
+    for (const p of pars) {
+      expect(typeof p.workout_id).toBe('string');
+      expect(typeof p.daily_par_reached).toBe('boolean');
+    }
   });
 });

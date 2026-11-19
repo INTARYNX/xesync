@@ -61,6 +61,90 @@
 })();
 
 var bootTimer = null;
+
+// The game layer's state for the current run. One object, created once
+// and reset at every session start - run_score.js owns everything else
+// about it.
+var runState = RunScore.createRun();
+
+// The course of the day: the same conditions and the same par for
+// everyone rowing today. Drawn from the local date and hour, so no
+// server is involved and every device agrees.
+var dailyCourse = null;
+
+// The profile of the ghost of the best run, once it has been fetched.
+var ghostProfile = null;
+
+// --- The dressing ----------------------------------------------------
+//
+// What the boat wears is read off the rower's history: how many
+// sessions they have done (see costume.js). The count is cached on the
+// phone, so a session started without a network still wears the right
+// livery, and the server's count replaces it as soon as it answers.
+var sessionCount = 0;
+var currentLivery = null;
+
+function sessionCountKey() { return 'xesync.sessionCount.v1'; }
+
+function loadCachedSessionCount() {
+  try {
+    var raw = parseInt(localStorage.getItem(sessionCountKey()), 10);
+    return (isFinite(raw) && raw > 0) ? raw : 0;
+  } catch (e) { return 0; }
+}
+
+function saveCachedSessionCount(n) {
+  try { localStorage.setItem(sessionCountKey(), String(n)); } catch (e) {}
+}
+
+// Put the outfit on the scene: the livery the history has earned, and
+// the theme of the hour. Returns whether the livery changed - the one
+// thing the game announces by itself.
+function applyCostume(count, course) {
+  if (typeof Costume === 'undefined') return false;
+  var outfit = Costume.outfit(count, course);
+  var previous = currentLivery;
+  currentLivery = outfit.livery;
+  if (typeof setCostume === 'function') setCostume(outfit);
+  var changed = Costume.changed(previous, outfit.livery);
+  if (typeof RunScore !== 'undefined') {
+    RunScore.setLivery(runState, {
+      key: outfit.livery.key,
+      name: outfit.livery.name,
+      changed: changed
+    });
+  }
+  return changed;
+}
+
+// The count of sessions done, from the server.
+function setSessionCount(n) {
+  if (typeof n !== 'number' || !isFinite(n) || n < 0) return;
+  var count = Math.floor(n);
+  if (count === sessionCount) return;
+  sessionCount = count;
+  saveCachedSessionCount(count);
+  applyCostume(sessionCount, dailyCourse);
+}
+
+// The ghost is kept on the phone as well as on the server. The profile
+// comes from the server, but a session started without a network should
+// still have something to race against - the cached profile of the last
+// known best run.
+function ghostCacheKey() { return 'xesync.ghostProfile.v1'; }
+function loadCachedGhost() {
+  try {
+    var raw = localStorage.getItem(ghostCacheKey());
+    if (!raw) return null;
+    var profile = JSON.parse(raw);
+    return (profile && profile.points && profile.points.length) ? profile : null;
+  } catch (e) { return null; }
+}
+function saveCachedGhost(profile) {
+  try {
+    if (profile) localStorage.setItem(ghostCacheKey(), JSON.stringify(profile));
+  } catch (e) {}
+}
 function finishBoot() {
   if (bootTimer) { clearTimeout(bootTimer); bootTimer = null; }
   hideBootSplash();
@@ -502,7 +586,10 @@ window.onLeaveRowing = function () {
 };
 
 window.onWorkoutComplete = function (savedState, extra) {
-  renderPostWorkout(savedState, !!ui.token, extra && extra.splitsTable, extra && extra.coachingSummary);
+  renderPostWorkout(savedState, !!ui.token,
+                    extra && extra.splitsTable,
+                    extra && extra.coachingSummary,
+                    extra && extra.runScore);
   openOverlay('postWorkout');
 };
 
@@ -527,12 +614,84 @@ function toggleCoachingMode() {
   Coaching.setMode(next);
   saveCoachingMode(next);
   if (next === 'justRow') CoachingView.reset();
+  // The calm mode promises a screen with nothing but the measures, so the
+  // score chip goes with it. The run keeps being scored and saved - only
+  // the display is quiet.
+  RunView.setVisible(next !== 'justRow');
   render();
+}
+
+// The ghost of your best run.
+//
+// Fetched in the background, and never waited for: the session starts
+// whether or not the ghost is there. If there is no account, no
+// network, or no past run long enough to be worth racing, there is
+// simply no ghost - and the game says nothing about it either way.
+function loadGhost() {
+  if (!ui.token || typeof Ghost === 'undefined') return;
+  Api.listWorkouts(ui.token)
+    .then(function (rows) {
+      var list = rows || [];
+      // The same list tells the boat how many sessions the rower has
+      // done, which is what the livery is read from.
+      setSessionCount(list.length);
+      var best = Ghost.bestRun(list);
+      if (!best) return null;
+      return Api.getWorkout(ui.token, best.workout_id)
+        .then(function (row) {
+          if (!row || !row.samples || !row.samples.length) return null;
+          var profile = Ghost.buildProfile(row.samples);
+          if (profile) {
+            ghostProfile = profile;
+            saveCachedGhost(profile);
+            if (typeof setGhostProfile === 'function') setGhostProfile(profile);
+          }
+          return profile;
+        });
+    })
+    .catch(function () { /* no ghost today */ });
 }
 
 window.onFtmsSessionStart = function () {
   Coaching.reset();
   Coaching.setMode(loadCoachingMode());
+  // A new session is a new run: the score, the chain and the lift all
+  // start from zero.
+  RunScore.reset(runState);
+  RunView.mount();
+  RunView.reset();
+  RunView.setVisible(Coaching.getMode() !== 'justRow');
+  // A new run starts with an empty chain, and the scene with it.
+  if (typeof setChainLevel === 'function') setChainLevel(0);
+
+  // The course of the day. Two marks in the HUD - a notch on the ring
+  // and the push dots - and a sky that is the same for everyone rowing
+  // at this hour. No words, no setup, nothing to configure.
+  dailyCourse = (typeof DailyCourse !== 'undefined')
+    ? DailyCourse.forDate(new Date())
+    : null;
+  RunScore.setDailyPar(runState, dailyCourse);
+  RunView.setDailyCourse(dailyCourse);
+  if (dailyCourse && typeof setSceneDay === 'function') {
+    setSceneDay(dailyCourse.dayIndex);
+  }
+
+  // The dressing: the livery the history has earned, and the theme of
+  // the hour. The cached count goes on straight away, so a session
+  // without a network still wears the right livery.
+  sessionCount = loadCachedSessionCount();
+  currentLivery = null;
+  applyCostume(sessionCount, dailyCourse);
+
+  // And the ghost of the best run. The cached one is put in place
+  // straight away, so a session without a network still has a ghost;
+  // the fresh one replaces it a moment later if the server knows better.
+  var cached = loadCachedGhost();
+  if (cached) {
+    ghostProfile = cached;
+    if (typeof setGhostProfile === 'function') setGhostProfile(cached);
+  }
+  loadGhost();
 };
 window.onFtmsPause = function () {
   Coaching.onPause();
@@ -543,6 +702,28 @@ window.onFtmsTick = function (snapshot) {
   var evt = Coaching.tick(snapshot);
   if (evt) CoachingView.showMessage(CoachingText.resolve(evt.textKey, evt.textArgs));
   CoachingView.renderChallenge(Coaching.getChallenge());
+
+  // The game layer runs off the same snapshot. It never blocks the
+  // coaching layer and vice versa: both are just readers of the same
+  // measures.
+  var runEvt = RunScore.tick(runState, snapshot);
+  RunView.render(runState);
+
+  // The scene's half of the game layer: the chain level goes to the
+  // renderer, which answers it by moving the world. A tier up gets a
+  // short surge of the boat.
+  if (typeof setChainLevel === 'function') {
+    setChainLevel(RunScore.chainLevel(runState));
+  }
+  if (runEvt && runEvt.type === 'chain_up' && typeof pulseChain === 'function') {
+    pulseChain();
+  }
+  // Reaching the day's par gets the same visual beat: a short swell of
+  // the boat. Nothing is said, nothing is awarded - the mark on the
+  // ring is enough.
+  if (runEvt && runEvt.parReached && typeof pulseChain === 'function') {
+    pulseChain();
+  }
 };
 window.onBeforeSave = function (payload) {
   var session = window.FtmsInternals.getSession();
@@ -550,6 +731,18 @@ window.onBeforeSave = function (payload) {
   // exists) - challenge results are reported separately, in coachingSummary.
   payload.splitsTable = Splits.computeSplitsTable(session.samples, payload.summary.duration);
   payload.coachingSummary = summarizeCoaching(Coaching.getSessionEvents());
+  // The race against the ghost of the best run, settled at the same
+  // elapsed time for both - so nobody gets to row longer and still be
+  // ahead. This is the ghost's payoff: on the water it only spoke by
+  // being where it was.
+  if (ghostProfile && typeof Ghost !== 'undefined') {
+    var race = Ghost.finalGap(ghostProfile, session.samples);
+    if (race) RunScore.setGhostResult(runState, race);
+  }
+  // The run's score. The payload is archived verbatim in
+  // xesync.workout_data, so this is stored as-is - no schema change
+  // needed for the data itself.
+  payload.runScore = RunScore.summarize(runState);
 };
 
 // Best sprint time per exact target distance, per account. A same-device

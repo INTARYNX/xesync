@@ -66,7 +66,7 @@ function loadApp(opts) {
   vm.createContext(sandbox);
 
   // Same load order as app.html.
-  const files = ['state.js', 'view.js', 'coaching_text.js', 'coaching.js', 'splits.js', 'coaching_view.js', 'ftms_integration.js', 'controller.js'];
+  const files = ['state.js', 'view.js', 'coaching_text.js', 'coaching.js', 'splits.js', 'coaching_view.js', 'ftms_integration.js', 'run_score.js', 'run_view.js', 'controller.js'];
   for (const f of files) {
     const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     vm.runInContext(src, sandbox, { filename: f });

@@ -72,6 +72,8 @@ debug.js              # Debug-mode fakes (fake scan/connect)
 controller.js         # Orchestration: actions, bridge messages, state changes
 ftms_integration.js   # FTMS session tracking, state machine, save flow
 debug_sim.js          # Fake FTMS data generator for debug mode
+run_score.js          # Game layer: the run's score, chain and lift (pure rules)
+run_view.js           # Game layer's DOM: score chip, chain ring, lift bar
 rowing_display.html   # WebGL rowing scene (injected at build time)
 rowing_display.css    # Styles for the rowing display
 rowing_display.js     # WebGL init, animation loop, uniforms
@@ -206,7 +208,8 @@ dependent.
 Covered: packet decoding against a hand-checked fixture frame, malformed-frame
 rejection, activity detection, session start/pause/resume, mid-session counter
 resets, the sampling rate limit and cap, pace derivation, workout-id
-uniqueness, payload shape, and bridge message dispatch.
+uniqueness, payload shape, bridge message dispatch, and the four phases of the
+rowing stroke (`tests/rowing_phases.test.js`).
 
 ### End-to-end (Playwright)
 
@@ -238,6 +241,43 @@ Run one project at a time with `npx playwright test --project=client` /
 `--project=db-integration`. See [tests/e2e/README.md](tests/e2e/README.md)
 for how the two Chromium builds and the fake-vs-real backend split work.
 
+**No GPU?** The rowing scene is a ~900-line GLSL fragment shader, and
+without a GPU (CI, a container, a software rasterizer) it is expensive
+enough to starve the browser's event loop: the page stops answering
+Playwright's queries and the spec times out waiting for a screen that is
+already there. So the test build runs `renderMode: 'phases'` — the same
+stroke cycle (tracker, pose track, surge, drive fraction), drawn as the
+four phases of the stroke (Catch, Drive, Finish, Recovery) instead of
+pixels. `APP_RENDER_MODE=webgl` puts the real scene back on a machine that
+has a GPU.
+
+**The shader is still checked.** The scene is where the game layer shows
+itself, so it cannot be left untested just because it needs a GPU:
+`tests/e2e/shader.spec.js` compiles and links the real GLSL in a headless
+WebGL context (0 errors), checks that `u_chain` is an active, settable
+uniform, and draws the same scene twice — identical except for the chain —
+to prove the chain changes the pixels. It runs in ~5 s, with no GPU.
+
+### Balancing the game (`dev/`)
+
+The constants in `run_score.js` are parameters of a game, not physiological
+thresholds, and they were set by measurement rather than by feel:
+
+```bash
+node dev/sim_session.js --sweep-lift          # what each threshold does to a session
+node dev/sim_session.js --sweep                # the noise sensitivity grid
+node dev/sim_session.js --out session.json     # one synthetic session
+node dev/calibrate.js session.json --compare   # replay it in the real scoring code
+```
+
+`dev/sim_session.js` builds a session with a known shape and a known
+noise: correlated jitter (an erg's stroke rate drifts, it does not
+jitter like white noise), the machine's quantisation, the flywheel's
+inertia, and a profile with a warm-up, a body, a push and a cool-down.
+`dev/calibrate.js` replays any session - the app's saved payload, the
+`workout_data` blob, or a synthetic one - through the real scoring code
+and reports what the thresholds should be.
+
 ### Local database (`dev/docker-compose.yml`)
 
 A disposable Postgres 16 + PostgREST 12.2.3 stack, pinned to the exact
@@ -259,6 +299,16 @@ Applying `pgsql/xesync_schema.sql` against this stack is exactly what
 `pgsql/migrate.sh` does against production — reapply the whole idempotent
 file — so it's a faithful rehearsal of a real migration, permission checks
 included.
+
+No container runtime? `dev/dev-stack.sh` brings the same stack up natively —
+PostgreSQL 16 + PostgREST 12.2.3, same ports, same schema, same seed user:
+
+```bash
+./dev/dev-stack.sh up      # start (downloads PostgREST on first run)
+./dev/dev-stack.sh status  # what is running, and a real login round-trip
+./dev/dev-stack.sh down    # stop
+./dev/dev-stack.sh reset   # stop, wipe the data, start over
+```
 
 ---
 
@@ -288,6 +338,23 @@ XEBEX air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
 - [x] Default-deny permissions + auth-before-write on every mutating RPC
 - [x] Automated tests: `tests/*.test.js` (Node, no deps) + `tests/e2e/` (Playwright)
 - [x] Local dev stack (`dev/docker-compose.yml`) for rehearsing schema changes before prod
+- [x] Game layer: score, chain and elevation in the HUD, persisted server-side
+      ([docs/GAMIFICATION.md](docs/GAMIFICATION.md))
+- [x] The scene answers the chain: faster world, longer trail, a tier-up swell
+- [x] The game calibrated on a faithful simulator (`dev/sim_session.js`,
+      `dev/calibrate.js`): the chain rewards intensity, not duration
+- [x] The course of the day (`daily_course.js`): the same sky and the same
+      par for everyone rowing today, shown as a mark on the ring
+- [x] The ghost of your best run (`ghost.js`): replayed in the scene, read
+      from the sessions the server already has — no new data, no migration
+- [x] The loop closed: the race settled at the end of the session, the
+      ghost kept offline, and the day's par traced on the session card
+- [x] The dressing (`costume.js`): a livery earned by coming back, a kit
+      that goes with it, a theme that follows the hour — automatic, never
+      configured, never spoken of
+- [x] The land answers too: the ridge and the pines take the colours of
+      the biome the history has earned, and they breathe when the chain
+      is up — the ambiance Alto makes, without a word
 - [x] Android Play Store release (production; versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 
