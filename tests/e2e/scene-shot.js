@@ -84,7 +84,7 @@ const SHOTS = [
   await page.goto('about:blank');
 
   const pngs = await page.evaluate(async ({ vs, fs, shots }) => {
-    const W = 520, H = 330;
+    let W = 520, H = 330;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
@@ -190,14 +190,23 @@ const SHOTS = [
     out.compare = sheet.toDataURL('image/png');
 
     // And the same for the shape of the range: the hills alone, rounded
-    // and angular, side by side. That is the part of the scene the
-    // chain changes the shape of.
-    const PEAKS = { x: 30, y: 55, w: 230, h: 105 }, PZOOM = 1.6;
+    // and angular, side by side. Drawn twice the size, because a picture
+    // that is zoomed out of a small render is a picture full of blocks.
     const peakNames = ['calm', 'chain'];
     const peakLabels = ['collines rondes', 'pics anguleux'];
+    W = 1040; H = 660;
+    canvas.width = W; canvas.height = H;
+    gl.viewport(0, 0, W, H);
+    const big = {};
+    for (const s of shots) {
+      if (peakNames.indexOf(s.name) < 0) continue;
+      big[s.name] = shot(s.chain, s.pulse, s.ghost, s.ghostX, s.livery, s.tint, s.biome);
+    }
+
+    const PEAKS = { x: 60, y: 110, w: 460, h: 210 };
     const psheet = document.createElement('canvas');
-    psheet.width = (PEAKS.w * PZOOM) * peakNames.length + PAD * (peakNames.length + 1);
-    psheet.height = PEAKS.h * PZOOM + PAD * 2;
+    psheet.width = PEAKS.w * peakNames.length + PAD * (peakNames.length + 1);
+    psheet.height = PEAKS.h + PAD * 2;
     const pctx = psheet.getContext('2d');
     pctx.fillStyle = '#0e1016';
     pctx.fillRect(0, 0, psheet.width, psheet.height);
@@ -208,11 +217,11 @@ const SHOTS = [
         const im = new Image();
         im.onload = () => resolve(im);
         im.onerror = () => reject(new Error('image load failed'));
-        im.src = out[peakNames[i]];
+        im.src = big[peakNames[i]];
       });
-      const x = PAD + i * (PEAKS.w * PZOOM + PAD);
+      const x = PAD + i * (PEAKS.w + PAD);
       pctx.drawImage(img, PEAKS.x, PEAKS.y, PEAKS.w, PEAKS.h,
-        x, PAD, PEAKS.w * PZOOM, PEAKS.h * PZOOM);
+        x, PAD, PEAKS.w, PEAKS.h);
       pctx.fillText(peakLabels[i], x, 12);
     }
     out.peaks = psheet.toDataURL('image/png');
