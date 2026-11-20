@@ -116,14 +116,22 @@ if ($Release) {
 } else {
     $variant = 'assembleDebug'
 }
-$cmd = @"
-set -e
-cd /work/capacitor
-if [ ! -d android ]; then npx cap add android; fi
-npx cap sync android
-cd android
-./gradlew $variant
-"@
+# Written to a file with explicit LF joins, not passed inline as a
+# herestring: PowerShell 5.1 herestrings carry this .ps1 file's own CRLF
+# line endings, and podman run hands the string straight to the
+# container's `bash -lc` entrypoint - the embedded \r breaks `set -e`
+# ("invalid option") and the `if` block ("unexpected end of file") (hit
+# this the first time this script ran end to end). The file is written
+# under $capDir, which is already bind-mounted at /work/capacitor.
+$cmdLines = @(
+    'set -e',
+    'cd /work/capacitor',
+    'if [ ! -d android ]; then npx cap add android; fi',
+    'npx cap sync android',
+    'cd android',
+    "./gradlew $variant"
+)
+Write-Utf8NoBom (Join-Path $capDir 'build-cmd.sh') (($cmdLines -join "`n") + "`n")
 
 Write-Host "Running Android build ($variant) in container..."
 podman run --rm `
@@ -131,7 +139,7 @@ podman run --rm `
     -v "xesync-gradle-cache:/root/.gradle" `
     -v "xesync-android-home:/root/.android" `
     -w /work/capacitor `
-    $image $cmd
+    $image 'bash /work/capacitor/build-cmd.sh'
 if ($LASTEXITCODE -ne 0) { Write-Error "Android build failed"; exit 1 }
 
 if ($Release) {

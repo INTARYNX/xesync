@@ -23,6 +23,7 @@ capacitor/android/local.properties
 capacitor/node_modules/
 capacitor/www/
 capacitor/.platform-tools-win/
+capacitor/build-cmd.sh
 
 # Root-level test tooling (tests/*.test.js + Playwright)
 node_modules/
