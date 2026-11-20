@@ -3,6 +3,10 @@
 > Proposition produit — 19 novembre 2026. Elle prolonge `AMELIORATIONS_PRODUIT.md` (qui
 > décrit l’accompagnement et les jalons, déjà implémentés) en ajoutant une couche de jeu.
 > Idées à tester, pas fonctionnalités déjà disponibles.
+>
+> **Pour l’état actuel du jeu, lire [CONCEPT.md](CONCEPT.md)** : une lecture courte de
+> l’idée, après les lots 1 à 5. Ce document-ci garde la conception détaillée, les
+> mesures de calibration et l’historique des lots.
 
 ## La contrainte qui commande tout
 

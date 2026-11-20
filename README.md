@@ -359,6 +359,8 @@ XEBEX air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
 - [x] The koi: the push calls it, the chain keeps it for fifteen seconds,
       and it is worth points — the collectible the game was missing
       ([docs/GAMIFICATION.md](docs/GAMIFICATION.md))
+- [x] The concept of the game layer, in one reading, after lots 1 to 5
+      ([docs/CONCEPT.md](docs/CONCEPT.md))
 - [x] Android Play Store release (production; versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 
