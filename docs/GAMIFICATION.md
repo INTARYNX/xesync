@@ -437,12 +437,24 @@ rameur est renseigné sans un mot, dans la langue que la scène parle déjà.
 ![la carpe, seule et tenue pleine](images/scene-koi-compare.png)
 
 *À gauche la carpe ; à droite, la tenue pleine : elle prend la lumière.*
+*(régénérée par `node tests/e2e/koi-shot.js` - la vraie page, pas le shader.)*
 
-Le rendu est dans le shader, comme le fantôme : `u_fishOn`, `u_fishX`,
-`u_fishHold` et `u_fishFade`, et une carpe faite de SDF — le corps en deux
-ellipses pour qu'il fuse vers la queue, la queue en deux lobes, la nageoire
-dorsale, l'œil. Le tout dans un `if (u_fishOn > 0.5)`, pour ne payer le coût
-que quand elle est là.
+À la différence du fantôme, la carpe n'est **pas** dans le shader. Une
+première version l'y avait mise (SDF unionnées, comme le rameur) ; la forme
+ne se laissait pas dessiner correctement à la main de cette façon-là (la
+nageoire dorsale s'est retrouvée à l'envers deux fois de suite), et rien
+dans ce rendu n'avait vraiment besoin du compositing fin que le shader
+offre (reflet, pluie, teinte de l'heure). Elle est maintenant un second
+`<canvas>` 2D (`koiCanvas`) posé par-dessus le canvas WebGL, dessiné en JS
+ordinaire par `drawKoi()` dans `rowing_display.js` : vrais chemins et
+courbes de Bézier, queue en voile longue qui ondule (le battement et un
+battement d'ourlet secondaire croissent de la racine vers la pointe, pour
+qu'elle pivote contre le corps au lieu de glisser en bloc rigide), taches
+kohaku en dégradés radiaux à bord doux, halo doré qui ne s'allume qu'avec
+la tenue, quelques étincelles une fois la tenue bien avancée. Sa position
+suit exactement le même calcul de centre du bateau (`origin`, `boatCenter`,
+le tangage) que le shader utilisait, convertie en pixels de l'overlay, pour
+qu'elle garde sa station à côté du bateau sans dérive.
 
 La position suit la largeur de la scène : sur un écran étroit, la carpe nage
 plus près du bateau, sinon elle sort du cadre.

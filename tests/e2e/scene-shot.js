@@ -14,13 +14,17 @@
 // docs/GAMIFICATION.md was made - the uniforms are set by hand, so these
 // are stills of the shader, not screenshots of the running app.
 //
+// The koi is NOT drawn here any more: it moved off the shader onto its own
+// 2D canvas overlay (koiCanvas, drawn by rowing_display.js's drawKoi()).
+// For koi stills, run tests/e2e/koi-shot.js instead - it screenshots the
+// real page (koiCanvas composited over the WebGL one), since there is no
+// offscreen GLSL to draw the koi with any more.
+//
 //   node tests/e2e/scene-shot.js
 //
 // Writes: docs/images/scene-calm.png, scene-chain.png, scene-surge.png,
-//         scene-koi.png, ... (one per shot), scene-compare.png (the three
-//         side by side, zoomed on the boat), scene-peaks.png (the shape
-//         of the range) and scene-koi-compare.png (the koi, alone and
-//         with the hold full)
+//         ... (one per shot), scene-compare.png (the three side by side,
+//         zoomed on the boat) and scene-peaks.png (the shape of the range)
 // =====================================================================
 
 const { chromium } = require('@playwright/test');
@@ -77,11 +81,7 @@ const SHOTS = [
   // The land in the autumn, with the chain up: the ridge breathes.
   { name: 'biome', chain: 1.0, pulse: 0, ghost: 0.0, ghostX: 0.0, biome: AUTUMN },
   // And in the snow, where the forest is thinner.
-  { name: 'snow', chain: 0.2, pulse: 0, ghost: 0.0, ghostX: 0.0, biome: SNOW },
-  // The koi, the creature the chain calls: beside the boat, and taking
-  // the light as the hold fills.
-  { name: 'koi', chain: 0.4, pulse: 0, ghost: 0.0, ghostX: 0.0, fish: 1.0, fishHold: 0.0 },
-  { name: 'koi-held', chain: 0.4, pulse: 0, ghost: 0.0, ghostX: 0.0, fish: 1.0, fishHold: 0.9 }
+  { name: 'snow', chain: 0.2, pulse: 0, ghost: 0.0, ghostX: 0.0, biome: SNOW }
 ];
 
 (async () => {
@@ -123,7 +123,7 @@ const SHOTS = [
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
     const u = (n) => gl.getUniformLocation(prog, n);
 
-    function shot(chain, pulse, ghost, ghostX, livery, tint, biome, fish, fishHold) {
+    function shot(chain, pulse, ghost, ghostX, livery, tint, biome) {
       gl.viewport(0, 0, W, H);
       gl.uniform1f(u('u_time'), 96.0);
       gl.uniform1f(u('u_day'), 3.0);
@@ -139,12 +139,6 @@ const SHOTS = [
       gl.uniform1f(u('u_ghostX'), ghostX);
       gl.uniform1f(u('u_ghostPhase'), 0.08);
       gl.uniform1f(u('u_ghostOn'), ghost);
-      // The koi, when the shot has one: beside the boat, and taking the
-      // light as the hold fills.
-      gl.uniform1f(u('u_fishOn'), fish || 0.0);
-      gl.uniform1f(u('u_fishX'), 0.24);
-      gl.uniform1f(u('u_fishHold'), fishHold || 0.0);
-      gl.uniform1f(u('u_fishFade'), 1.0);
       // The dressing: the livery and the theme, the same values the
       // scene sends.
       const lv = livery || shots[0].livery || {
@@ -172,8 +166,7 @@ const SHOTS = [
 
     const out = {};
     for (const s of shots) {
-      out[s.name] = shot(s.chain, s.pulse, s.ghost, s.ghostX, s.livery, s.tint, s.biome,
-        s.fish, s.fishHold);
+      out[s.name] = shot(s.chain, s.pulse, s.ghost, s.ghostX, s.livery, s.tint, s.biome);
     }
 
     // The three side by side, zoomed on the boat and its wake - that is
@@ -203,33 +196,6 @@ const SHOTS = [
       ctx.fillText(labels[i], x, 12);
     }
     out.compare = sheet.toDataURL('image/png');
-
-    // The koi, beside the boat: alone, and taking the light as the
-    // hold fills. Zoomed on the water it swims in.
-    const koiNames = ['koi', 'koi-held'];
-    const koiLabels = ['la carpe', 'la carpe, tenue pleine'];
-    const KOI_CROP = { x: 270, y: 200, w: 110, h: 70 }, KOI_ZOOM = 3;
-    const koiSheet = document.createElement('canvas');
-    koiSheet.width = KOI_CROP.w * KOI_ZOOM * koiNames.length + PAD * (koiNames.length + 1);
-    koiSheet.height = KOI_CROP.h * KOI_ZOOM + PAD * 2;
-    const kctx = koiSheet.getContext('2d');
-    kctx.fillStyle = '#0e1016';
-    kctx.fillRect(0, 0, koiSheet.width, koiSheet.height);
-    kctx.fillStyle = '#d2d7e6';
-    kctx.font = '13px sans-serif';
-    for (let i = 0; i < koiNames.length; i++) {
-      const img = await new Promise((resolve, reject) => {
-        const im = new Image();
-        im.onload = () => resolve(im);
-        im.onerror = () => reject(new Error('image load failed'));
-        im.src = out[koiNames[i]];
-      });
-      const x = PAD + i * (KOI_CROP.w * KOI_ZOOM + PAD);
-      kctx.drawImage(img, KOI_CROP.x, KOI_CROP.y, KOI_CROP.w, KOI_CROP.h,
-        x, PAD, KOI_CROP.w * KOI_ZOOM, KOI_CROP.h * KOI_ZOOM);
-      kctx.fillText(koiLabels[i], x, 12);
-    }
-    out.koiCompare = koiSheet.toDataURL('image/png');
 
     // And the same for the shape of the range: the hills alone, rounded
     // and angular, side by side. Drawn twice the size, because a picture
@@ -282,8 +248,5 @@ const SHOTS = [
   const peaks = path.join(OUT, 'scene-peaks.png');
   fs.writeFileSync(peaks, Buffer.from(pngs.peaks.split(',')[1], 'base64'));
   console.log('écrit', path.relative(ROOT, peaks));
-  const koiCompare = path.join(OUT, 'scene-koi-compare.png');
-  fs.writeFileSync(koiCompare, Buffer.from(pngs.koiCompare.split(',')[1], 'base64'));
-  console.log('écrit', path.relative(ROOT, koiCompare));
   await browser.close();
 })();

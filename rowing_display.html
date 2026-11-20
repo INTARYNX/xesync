@@ -11,6 +11,8 @@
   <div id="main-container">
     <div id="wrapper">
       <canvas id="glCanvas"></canvas>
+      <canvas id="sceneryCanvas"></canvas>
+      <canvas id="koiCanvas"></canvas>
       <div id="gl-loading"></div>
       <div id="phase-strip"></div>
 
@@ -133,12 +135,6 @@
     uniform float u_ghostX;      // its offset from the player, in scene units
     uniform float u_ghostPhase;  // its own stroke phase
     uniform float u_ghostOn;     // 0 when there is no ghost to draw
-    // The koi: the creature the chain calls. It swims beside the boat,
-    // and it takes the light as the hold fills.
-    uniform float u_fishOn;      // 0 when there is no koi to draw
-    uniform float u_fishX;       // its offset from the boat, in scene units
-    uniform float u_fishHold;    // 0..1: how close it is to being landed
-    uniform float u_fishFade;    // 1 while it is there, 0 as it swims away
     uniform vec3  u_hullA;       // the top of the hull's colour (the livery)
     uniform vec3  u_hullB;       // the bottom of the hull's colour (the livery)
     uniform vec3  u_shirt;       // the rower's jersey (the kit)
@@ -463,7 +459,7 @@
           float lineY = baseY + wave; \
           if (y < lineY) { \
             float t = clamp((lineY - y) / (lineY - horizon + 0.001), 0.0, 1.0); \
-            vec3 topC = mix(u_ridgeFar, u_ridgeNear, DEPTH); \
+            vec3 topC = DEPTH > 0.99 ? u_tree : mix(u_ridgeFar, u_ridgeNear, DEPTH); \
             vec3 botC = topC * 0.82; \
             vec3 layerCol = mix(topC, botC, t); \
             layerCol = mix(layerCol, layerCol * vec3(0.25, 0.25, 0.40), darknessFactor); \
@@ -836,80 +832,9 @@
         }
       }
 
-      // ============ LA CARPE ============
-      // The creature the chain calls. It swims ahead of the boat, and it
-      // takes the light as the hold fills: the red of it warms towards
-      // the gold as the rower keeps the chain up.
-      //
-      // Nothing is written about it. The koi is the whole message.
-      if (u_fishOn > 0.5) {
-        float fade = clamp(u_fishFade, 0.0, 1.0);
-        float swim = u_time * 2.2;
-        // It swims on the swell, a little below the boat's line.
-        float koiBob = sin(swim * 0.55) * 0.006;
-        float koiYaw = sin(swim * 0.42) * 0.08;
-        vec2 koiPos = boatCenter + vec2(u_fishX, 0.030 + koiBob);
-        vec2 dK = P - koiPos;
-        float cK = cos(koiYaw), sK = sin(koiYaw);
-        vec2 dKL = vec2(cK * dK.x + sK * dK.y, -sK * dK.x + cK * dK.y);
-        // The colour of the water it is in, so that it does not look
-        // pasted on top of the scene.
-        vec3 water = col;
-
-        // The fin on its back, behind the body, tilted back.
-        vec2 fd = dKL - vec2(0.008, 0.013);
-        float fc = cos(0.42), fs = sin(0.42);
-        float dorsalD = sdEllipse(vec2(fc * fd.x + fs * fd.y, -fs * fd.x + fc * fd.y),
-                                  vec2(0.015, 0.0038));
-        float dorsalMask = smoothstep(0.0012, -0.0012, dorsalD);
-        col = mix(col, mix(vec3(0.95, 0.68, 0.36), water, 0.15), dorsalMask * 0.9 * fade);
-
-        // The tail: two lobes, and the beat travels from the root to
-        // the tips, so the tail is a wave and not a flag. Its root is
-        // inside the body, so that it is joined to it and not floating
-        // behind it.
-        float beat = sin(swim * 1.9) * 0.011;
-        float tailU = clamp((-0.040 - dKL.x) / 0.028, 0.0, 1.0);
-        float tailY = dKL.y - beat * tailU;
-        float lobeY = 0.012 * tailU;
-        float lobeR = 0.0035 + 0.004 * tailU;
-        float tailX = max(dKL.x + 0.040, -0.068 - dKL.x);
-        float upLobe = max(tailX, abs(tailY - lobeY) - lobeR);
-        float loLobe = max(tailX, abs(tailY + lobeY) - lobeR);
-        float tailMask = smoothstep(0.0012, -0.0012, min(upLobe, loLobe));
-        col = mix(col, mix(vec3(0.93, 0.64, 0.32), water, 0.15), tailMask * 0.92 * fade);
-
-        // The body: two ellipses, so that it tapers towards the tail
-        // instead of being an egg. The white of a kohaku, a little of
-        // the water in it.
-        float headD = sdEllipse(dKL - vec2(0.014, 0.0), vec2(0.030, 0.014));
-        float tailD2 = sdEllipse(dKL - vec2(-0.016, 0.0), vec2(0.026, 0.010));
-        float bodyD = min(headD, tailD2);
-        float bodyMask = smoothstep(0.0013, -0.0013, bodyD);
-        vec3 koiBody = mix(vec3(0.97, 0.95, 0.91), water, 0.10);
-        col = mix(col, koiBody, bodyMask * fade);
-
-        // The red of it: a patch over the shoulder, one at the tail.
-        float patch1 = smoothstep(0.0013, -0.0013,
-          sdEllipse(dKL - vec2(0.018, -0.002), vec2(0.016, 0.009)));
-        float patch2 = smoothstep(0.0013, -0.0013,
-          sdEllipse(dKL - vec2(-0.022, 0.002), vec2(0.011, 0.006)));
-        // The hold fills: the koi takes the light, and the red of it
-        // warms towards the gold.
-        vec3 koiRed = mix(vec3(0.90, 0.24, 0.13), vec3(1.0, 0.70, 0.26),
-                          clamp(u_fishHold, 0.0, 1.0) * 0.8);
-        col = mix(col, koiRed, max(patch1, patch2) * bodyMask * fade);
-
-        // The belly, the eye, and the gleam along the back.
-        float belly = bodyMask * smoothstep(0.0, -0.008, dKL.y);
-        col = mix(col, mix(vec3(0.99, 0.97, 0.94), water, 0.10), belly * 0.6 * fade);
-        float eyeD = distance(dKL, vec2(0.030, 0.0035));
-        float eyeMask = smoothstep(0.0034, 0.0016, eyeD) * bodyMask;
-        col = mix(col, vec3(0.04, 0.04, 0.05), eyeMask * fade);
-        float gleam = smoothstep(0.004, 0.0, abs(dKL.y - 0.008)) * bodyMask;
-        col = mix(col, vec3(1.0, 0.96, 0.88),
-                  gleam * (0.20 + clamp(u_fishHold, 0.0, 1.0) * 0.5) * fade);
-      }
+      // The koi used to be drawn here, in the fragment shader. It is now
+      // a plain 2D canvas overlay (koiCanvas, drawn by rowing_display.js)
+      // positioned from the same boat-center math - see drawKoi() there.
 
       vec2 oarlockB = boatCenter + vec2(-0.040, 0.005) * u_scale;
       vec2 handB = hand + vec2(0.0, 0.005 * u_scale);
@@ -1054,15 +979,24 @@
       col = mix(col, shirtCol * 1.3,
                 shirtMask * step(deckLine, y) * smoothstep(0.0, -0.012 * u_scale, torsoSide));
 
+      // The raw (uncurved) side coordinate, not torsoSide: the curve
+      // offset warps by almost a full stripe period over the torso's
+      // length, and at this frequency that turns straight stripes into
+      // a dashed/sheared texture instead of lines running top to bottom.
       float stripeFreq = 1.0 / (0.005 * u_scale);
-      float stripe = step(0.5, fract(torsoSide * stripeFreq));
+      float stripe = step(0.5, fract(torsoSideRaw * stripeFreq));
       col = mix(col, shirtCol * 0.55,
                 shirtMask * step(deckLine, y) * stripe * 0.6);
 
+      // Wide enough to survive rasterization at the sprite's actual
+      // size: the old 0.0012*u_scale width was under a pixel on screen,
+      // so the line only lit a pixel where it happened to land near a
+      // sample point - everywhere else, nothing crossed the threshold,
+      // which is what read as a dashed line instead of a solid one.
       float stripeOffset = 0.004 * u_scale;
-      float stripeWidth = 0.0012 * u_scale;
-      float ws1 = smoothstep(stripeWidth, stripeWidth - 0.0006, abs(torsoSide - stripeOffset));
-      float ws2 = smoothstep(stripeWidth, stripeWidth - 0.0006, abs(torsoSide + stripeOffset));
+      float stripeWidth = 0.0032 * u_scale;
+      float ws1 = smoothstep(stripeWidth, stripeWidth - 0.0016, abs(torsoSide - stripeOffset));
+      float ws2 = smoothstep(stripeWidth, stripeWidth - 0.0016, abs(torsoSide + stripeOffset));
       col = mix(col, vec3(1.0, 1.0, 1.0),
                 shirtMask * step(deckLine, y) * max(ws1, ws2));
 
@@ -1092,13 +1026,21 @@
       col = mix(col, shirtCol * 0.7,
                 sleeveCap * upperArmMask * smoothstep(0.0, 0.012 * u_scale, uaSide));
 
+      // Same fix as the torso's racing stripes: the old width was under
+      // a pixel at this sprite's scale, so the ring round the sleeve
+      // only lit up where it happened to land near a sample point and
+      // read as a dashed cuff instead of a solid one.
       float sStripeOff = 0.0030 * u_scale;
-      float sStripeW = 0.0010 * u_scale;
+      float sStripeW = 0.0024 * u_scale;
       float sBand = sleeveLen - 0.003 * u_scale;
-      float ss1 = smoothstep(sStripeW, sStripeW - 0.0005, abs(uaAlong - (sBand - sStripeOff)));
-      float ss2 = smoothstep(sStripeW, sStripeW - 0.0005, abs(uaAlong - (sBand + sStripeOff)));
+      float ss1 = smoothstep(sStripeW, sStripeW - 0.0012, abs(uaAlong - (sBand - sStripeOff)));
+      float ss2 = smoothstep(sStripeW, sStripeW - 0.0012, abs(uaAlong - (sBand + sStripeOff)));
+      // sleeveBody alone (a capsule distance) does not fade along the
+      // arm the way sleeveMaskUA does - the wider ring now reaches past
+      // sleeveLen, and without this it would paint onto bare forearm
+      // past where the sleeve itself has already faded out.
       col = mix(col, vec3(1.0, 1.0, 1.0),
-                (sleeveBody + sleeveCap) * upperArmMask * max(ss1, ss2));
+                (sleeveBody * sleeveMaskUA + sleeveCap * upperArmMask) * max(ss1, ss2));
 
       float forearmD = sdSegment(P, elbow, hand);
       float forearmLen = length(hand - elbow);

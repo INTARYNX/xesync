@@ -11,6 +11,15 @@ var RowingAnimation = (function() {
     var rafId = null;
     var loadingEl = null;
     var shaderReadySent = false;
+    // The koi lives on its own 2D canvas, drawn over the WebGL one with
+    // plain paths - see drawKoi() below.
+    var koiCanvasEl = null;
+    var koiCtx = null;
+    // So does the scenery along the ridge (villages, mills, churches) -
+    // see drawScenery() below. Its own canvas, under the koi's, over the
+    // WebGL one.
+    var sceneryCanvasEl = null;
+    var sceneryCtx = null;
 
     // -- the chain, the scene's half of the game layer ------------------
     //
@@ -64,6 +73,682 @@ var RowingAnimation = (function() {
         }
         return Math.min(FISH_X, Math.max(0.10, aspect * 0.33));
     }
+
+    // -- the koi's own drawing: plain 2D canvas paths, not a shader -----
+    //
+    // The koi used to be signed-distance-field math inside the fragment
+    // shader, unioned and smoothstepped pixel by pixel - hard to sketch,
+    // hard to fix (the dorsal fin ended up pointing the wrong way twice).
+    // It is now ordinary paths on their own <canvas id="koiCanvas">,
+    // stacked over the WebGL one. The body outline below is in the same
+    // local units the shader version used (nose at x=0.056, tail
+    // peduncle at x=-0.040), so the proportions already worked out
+    // carry over; only the mechanism changed.
+
+    function smoothstep01(edge0, edge1, x) {
+        var t = clamp01((x - edge0) / (edge1 - edge0));
+        return t * t * (3 - 2 * t);
+    }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    // A point on a flowing veil (tail/fin edge): t runs 0 at the root to
+    // 1 at the tip, so the beat and a faster secondary flutter both
+    // grow from nothing at the root to their full swing at the tip -
+    // the fin pivots and ripples like silk instead of swinging as one
+    // rigid flag or tearing away from the body.
+    function veilPoint(rootX, tipX, x, y, beat, swim, phase, rippleAmp) {
+        var t = clamp01((rootX - x) / (rootX - tipX));
+        var flutter = rippleAmp * t * Math.sin(swim * 3.3 + t * 3.0 + phase);
+        return [x, y + beat * t + flutter];
+    }
+
+    // The tail: a long forked veil, not a stubby fork - two ribbons that
+    // taper to a point and flutter, sharing a root fixed at the body's
+    // peduncle so no seam opens as they sway.
+    function pathKoiTail(ctx, beat, swim) {
+        var R = -0.040, T = -0.148;
+        function vp(x, y, phase) { return veilPoint(R, T, x, y, beat, swim, phase, 0.007); }
+
+        var a = vp(-0.040, 0.009, 0.0), c1 = vp(-0.078, 0.036, 0.0),
+            c2 = vp(-0.112, 0.028, 0.0), tip = vp(-0.148, 0.013, 0.0),
+            c2i = vp(-0.118, 0.006, 0.5), c1i = vp(-0.082, 0.010, 0.5),
+            ri = vp(-0.040, 0.002, 0.5);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], tip[0], tip[1]);
+        ctx.bezierCurveTo(c2i[0], c2i[1], c1i[0], c1i[1], ri[0], ri[1]);
+        ctx.closePath();
+
+        var a2 = vp(-0.040, -0.009, 0.0), c1b = vp(-0.078, -0.036, 0.0),
+            c2b = vp(-0.112, -0.028, 0.0), tipb = vp(-0.148, -0.013, 0.0),
+            c2ib = vp(-0.118, -0.006, 0.5), c1ib = vp(-0.082, -0.010, 0.5),
+            rib = vp(-0.040, -0.002, 0.5);
+        ctx.moveTo(a2[0], a2[1]);
+        ctx.bezierCurveTo(c1b[0], c1b[1], c2b[0], c2b[1], tipb[0], tipb[1]);
+        ctx.bezierCurveTo(c2ib[0], c2ib[1], c1ib[0], c1ib[1], rib[0], rib[1]);
+        ctx.closePath();
+    }
+
+    function pathKoiPectoral(ctx, swim) {
+        var beat = 0.012 * Math.sin(swim * 1.7 + 1.3);
+        var tipX = 0.000 + beat, tipY = -0.036 - 0.004 * Math.sin(swim * 2.1);
+        ctx.beginPath();
+        ctx.moveTo(0.024, -0.004);
+        ctx.quadraticCurveTo(0.024, -0.022, tipX, tipY);
+        ctx.quadraticCurveTo(0.014, -0.016, 0.009, -0.003);
+        ctx.closePath();
+        return [[0.024, -0.004], [tipX, tipY]];
+    }
+
+    // A steep leading edge near the head, a long trailing slope down to
+    // the tail side - a sail that leans back, not forward - swept into a
+    // flowing tip rather than a stiff triangle.
+    function pathKoiDorsal(ctx, swim) {
+        var sway = 0.006 * Math.sin(swim * 2.6 + 0.8);
+        var tipX = -0.006 + sway, tipY = 0.044 + 0.004 * Math.sin(swim * 1.6);
+        ctx.beginPath();
+        ctx.moveTo(0.015, 0.014);
+        ctx.quadraticCurveTo(0.012, 0.030, tipX, tipY);
+        ctx.quadraticCurveTo(-0.016, 0.026, -0.026, 0.008);
+        ctx.quadraticCurveTo(-0.004, 0.015, 0.015, 0.014);
+        ctx.closePath();
+        return [[0.015, 0.014], [tipX, tipY]];
+    }
+
+    function pathKoiBody(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(0.058, 0.000);
+        ctx.bezierCurveTo(0.054, 0.014, 0.036, 0.018, 0.010, 0.017);
+        ctx.bezierCurveTo(-0.012, 0.016, -0.030, 0.012, -0.041, 0.005);
+        ctx.lineTo(-0.041, -0.004);
+        ctx.bezierCurveTo(-0.028, -0.010, -0.006, -0.013, 0.014, -0.012);
+        ctx.bezierCurveTo(0.034, -0.011, 0.050, -0.008, 0.058, 0.000);
+        ctx.closePath();
+    }
+
+    function pathKoiBarbels(ctx, swim) {
+        var sway = Math.sin(swim * 1.3) * 0.004;
+        ctx.beginPath();
+        ctx.moveTo(0.051, -0.003);
+        ctx.quadraticCurveTo(0.060, -0.014 + sway, 0.053, -0.027 + sway * 1.4);
+        ctx.moveTo(0.047, -0.006);
+        ctx.quadraticCurveTo(0.052, -0.018 - sway, 0.041, -0.029 - sway * 1.4);
+    }
+
+    // A soft blotch with no hard edge: a radial gradient of one colour,
+    // opaque at the centre and fading to nothing at the rim, scaled into
+    // an ellipse. Kohaku markings are blotches, not stencilled ovals.
+    function softPatch(ctx, cx, cy, rx, ry, rgb, alpha) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(rx, ry);
+        var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        var a = typeof alpha === 'number' ? alpha : 0.95;
+        g.addColorStop(0, rgbaStr(rgb, a));
+        g.addColorStop(0.65, rgbaStr(rgb, a * 0.9));
+        g.addColorStop(1, rgbaStr(rgb, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // The aura: a creature the chain calls should not look like it was
+    // pasted onto the water. A soft warm glow, invisible until the hold
+    // starts filling, then brightening as it nears being landed.
+    function drawKoiAura(ctx, hold) {
+        if (hold <= 0.02) return;
+        var r = 0.052 + hold * 0.028;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        softPatch(ctx, 0.000, 0.000, r, r * 0.62, [255, 205, 120], 0.16 * hold);
+        softPatch(ctx, 0.000, 0.000, r * 0.6, r * 0.4, [255, 225, 160], 0.14 * hold);
+        ctx.restore();
+    }
+
+    function drawKoiSparkle(ctx, x, y, size, alpha) {
+        if (alpha <= 0.01) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.globalAlpha *= alpha;
+        ctx.fillStyle = rgbaStr([255, 250, 230], 0.95);
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size * 0.22, -size * 0.22);
+        ctx.lineTo(size, 0);
+        ctx.lineTo(size * 0.22, size * 0.22);
+        ctx.lineTo(0, size);
+        ctx.lineTo(-size * 0.22, size * 0.22);
+        ctx.lineTo(-size, 0);
+        ctx.lineTo(-size * 0.22, -size * 0.22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Motes of light, only once the hold is worth announcing - the koi
+    // "takes the light" as it is nearly landed.
+    function drawKoiSparkles(ctx, hold, swim) {
+        if (hold <= 0.12) return;
+        var pts = [[0.032, 0.021], [-0.012, 0.026], [0.048, -0.008], [-0.040, -0.012]];
+        for (var k = 0; k < pts.length; k++) {
+            var tw = 0.5 + 0.5 * Math.sin(swim * 2.3 + k * 2.1);
+            drawKoiSparkle(ctx, pts[k][0], pts[k][1], 0.0032 * (0.6 + 0.4 * tw), hold * tw);
+        }
+    }
+
+    var KOI_SCALE = 1.25;
+    var KOI_FIN_BASE = [242, 173, 92];
+    var KOI_FIN_TIP = [255, 228, 180];
+    var KOI_OUTLINE_RGB = [59, 33, 20];
+    var KOI_OUTLINE_ALPHA = 0.55;
+
+    function finGradient(ctx, root, tip, tipAlpha) {
+        var g = ctx.createLinearGradient(root[0], root[1], tip[0], tip[1]);
+        g.addColorStop(0, rgbaStr(KOI_FIN_BASE, 0.95));
+        g.addColorStop(1, rgbaStr(KOI_FIN_TIP, tipAlpha));
+        return g;
+    }
+
+    function drawKoi(timeWrapped) {
+        if (!koiCtx || !koiCanvasEl) return;
+        var ctx = koiCtx;
+        var W = koiCanvasEl.width, H = koiCanvasEl.height;
+        ctx.clearRect(0, 0, W, H);
+
+        var fade = clamp01(fishFade);
+        if (fade <= 0.002 || W <= 0 || H <= 0) return;
+
+        // The same boat-centre math the shader uses (scale, bob, origin),
+        // so the koi keeps station against the boat exactly as before.
+        var uScaleNow = spriteScale * (1.0 + chainPulse * PULSE_SCALE);
+        var idle = 1 - smoothstep01(0, 8, currentSpm);
+        var bob = Math.sin(2 * Math.PI * timeWrapped / 300 * 60) *
+                  0.0035 * uScaleNow * lerp(0.5, 1.0, idle);
+        var originY = 0.5 * 0.5 + bob;
+        var boatCenterY = originY + 0.012 * uScaleNow;
+
+        var swim = timeWrapped * 2.2;
+        var koiBob = Math.sin(swim * 0.55) * 0.006;
+        var koiYaw = Math.sin(swim * 0.42) * 0.08;
+        var koiPosX = 0.5 + fishX;
+        var koiPosY = boatCenterY + 0.030 + koiBob;
+
+        // P-space -> pixels: x is aspect-corrected in the shader, so
+        // undoing that and using the canvas height as the common unit
+        // (for x and y alike) lines the koi up with the boat exactly.
+        var aspect = koiCanvasEl.clientHeight > 0 ?
+            koiCanvasEl.clientWidth / koiCanvasEl.clientHeight : 1.5;
+        var u = (koiPosX - 0.5) / aspect + 0.5;
+        var px = u * W;
+        var py = (1 - koiPosY) * H;
+        var s = H * KOI_SCALE;
+
+        var beatTail = Math.sin(swim * 1.9) * 0.011;
+        var hold = clamp01(fishHold);
+        var holdWarm = hold * 0.8;
+        var koiRedRGB = [
+            Math.round(lerp(0.90, 1.00, holdWarm) * 255),
+            Math.round(lerp(0.24, 0.70, holdWarm) * 255),
+            Math.round(lerp(0.13, 0.26, holdWarm) * 255)
+        ];
+
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(px, py);
+        ctx.rotate(-koiYaw);
+        ctx.scale(s, -s);
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 1.3 / s;
+
+        drawKoiAura(ctx, hold);
+
+        // Fins first, so the body drawn over them hides each root and
+        // leaves only the part that should stick out past the silhouette.
+        pathKoiTail(ctx, beatTail, swim);
+        ctx.fillStyle = finGradient(ctx, [-0.040, 0], [-0.148, 0], 0.30);
+        ctx.fill();
+        ctx.strokeStyle = rgbaStr(KOI_OUTLINE_RGB, KOI_OUTLINE_ALPHA); ctx.stroke();
+
+        var pecPts = pathKoiPectoral(ctx, swim);
+        ctx.fillStyle = finGradient(ctx, pecPts[0], pecPts[1], 0.35);
+        ctx.fill();
+        ctx.strokeStyle = rgbaStr(KOI_OUTLINE_RGB, KOI_OUTLINE_ALPHA); ctx.stroke();
+
+        var dorPts = pathKoiDorsal(ctx, swim);
+        ctx.fillStyle = finGradient(ctx, dorPts[0], dorPts[1], 0.35);
+        ctx.fill();
+        ctx.strokeStyle = rgbaStr(KOI_OUTLINE_RGB, KOI_OUTLINE_ALPHA); ctx.stroke();
+
+        // The body: a soft vertical shade (not a flat fill), over the
+        // fin roots, and its kohaku markings as soft blotches clipped to
+        // its own silhouette so they never spill past the outline.
+        pathKoiBody(ctx);
+        var bodyGrad = ctx.createLinearGradient(0, 0.018, 0, -0.013);
+        bodyGrad.addColorStop(0, rgbStr([224, 217, 203]));
+        bodyGrad.addColorStop(0.45, rgbStr([250, 246, 238]));
+        bodyGrad.addColorStop(1, rgbStr([255, 253, 249]));
+        ctx.fillStyle = bodyGrad;
+        ctx.fill();
+        ctx.save();
+        pathKoiBody(ctx);
+        ctx.clip();
+        softPatch(ctx, 0.028, -0.001, 0.019, 0.0078, koiRedRGB);
+        softPatch(ctx, 0.000, 0.007, 0.010, 0.0048, koiRedRGB);
+        softPatch(ctx, -0.021, 0.002, 0.012, 0.0058, koiRedRGB);
+        // A sheen along the spine, the way light sits on wet scales.
+        softPatch(ctx, 0.004, 0.012, 0.036, 0.0035, [255, 251, 244], 0.35);
+        ctx.restore();
+        pathKoiBody(ctx);
+        ctx.strokeStyle = rgbaStr(KOI_OUTLINE_RGB, KOI_OUTLINE_ALPHA);
+        ctx.stroke();
+
+        pathKoiBarbels(ctx, swim);
+        ctx.strokeStyle = rgbaStr([205, 150, 85], 0.55);
+        ctx.lineWidth = 1.0 / s;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // The eye: a thin gold ring around the dark iris, with a glint -
+        // the one detail that makes it read as a creature, not a sticker.
+        ctx.beginPath();
+        ctx.ellipse(0.046, 0.003, 0.0040, 0.0040, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = rgbaStr([255, 212, 128], 0.85);
+        ctx.lineWidth = 0.9 / s;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0.046, 0.003, 0.0028, 0.0028, 0, 0, Math.PI * 2);
+        ctx.fillStyle = rgbStr([10, 10, 12]);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(0.0475, 0.0045, 0.0009, 0.0009, 0, 0, Math.PI * 2);
+        ctx.fillStyle = rgbaStr([255, 255, 255], 0.85);
+        ctx.fill();
+
+        drawKoiSparkles(ctx, hold, swim);
+
+        ctx.restore();
+    }
+
+    // -- the scenery along the ridge: villages, mills, churches ---------
+    //
+    // Alto's Adventure is the reference: landmarks silhouetted on the
+    // ridge, among the trees, scrolling past at the same pace as the
+    // land they stand on. Like the koi, these are plain 2D canvas paths
+    // on their own <canvas id="sceneryCanvas"> - the shader's forest is
+    // noise thresholded into a jagged band (see the GLSL "Pines along
+    // the nearest ridge" block), which gives a forest its texture but
+    // cannot give a windmill its blades or a church its spire.
+    //
+    // Placement has to land exactly on that same noisy ridge line, or a
+    // building floats above the hill or sinks into it - so the handful
+    // of GLSL functions that shape it (hash, noise, peakProfile) are
+    // ported here verbatim rather than approximated.
+
+    function fractJS(x) { return x - Math.floor(x); }
+
+    function hashJS(x, y) {
+        var wx = ((x % 1024) + 1024) % 1024;
+        var wy = ((y % 1024) + 1024) % 1024;
+        var px = fractJS(wx * 123.34);
+        var py = fractJS(wy * 456.21);
+        var d = px * (px + 45.32) + py * (py + 45.32);
+        px += d; py += d;
+        return fractJS(px * py);
+    }
+
+    function noiseJS(x, y) {
+        var wx = ((x % 1024) + 1024) % 1024;
+        var wy = ((y % 1024) + 1024) % 1024;
+        var ix = Math.floor(wx), iy = Math.floor(wy);
+        var fx = wx - ix, fy = wy - iy;
+        var ux = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+        var uy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+        var h00 = hashJS(ix, iy), h10 = hashJS(ix + 1, iy);
+        var h01 = hashJS(ix, iy + 1), h11 = hashJS(ix + 1, iy + 1);
+        return lerp(lerp(h00, h10, ux), lerp(h01, h11, ux), uy);
+    }
+
+    var TAU_JS = Math.PI * 2;
+    function peakProfileJS(x, sharp) {
+        var rounded = Math.sin(x);
+        var tri = Math.abs(fractJS((x + 1.5707963) / TAU_JS + 0.5) - 0.5) * 4.0 - 1.0;
+        return lerp(rounded, tri, sharp);
+    }
+
+    // The same line the shader's nearest pine band stands on (horizon +
+    // 0.01, warped by the peaks and a touch of noise). sc is the
+    // scrolled x (screen-fraction u, minus the world's own scroll) -
+    // see the GLSL "Pines along the nearest ridge" block.
+    function ridgeLineY(sc, sharpVal, agitationVal) {
+        var baseY = 0.51;
+        var pp = peakProfileJS(sc * 44.0 + 2.0, sharpVal);
+        var nz = noiseJS(sc * 8.0, baseY * 5.0) * 0.5 - 0.25;
+        return baseY + (pp + nz) * 0.007 * agitationVal;
+    }
+
+    // The same night-darkening the shader applies to the land (see
+    // darknessFactor in the GLSL background block), so a village does
+    // not stay daylit through the night it stands in.
+    function darkenRGB(rgb, darkness) {
+        return [
+            lerp(rgb[0], rgb[0] * 0.25, darkness),
+            lerp(rgb[1], rgb[1] * 0.25, darkness),
+            lerp(rgb[2], rgb[2] * 0.40, darkness)
+        ];
+    }
+    // The theme's grade (costume.js) is the one thing the shader
+    // multiplies the WHOLE frame by, right at the end (u_tint in the
+    // GLSL). These two canvases composite on top of that already-graded
+    // WebGL frame, so every colour built here needs the same multiply,
+    // or a themed session (three sessions out of every four get one -
+    // see THEMES in costume.js) leaves the koi and the scenery looking
+    // visibly flat next to a tinted scene. All colour-string building in
+    // both drawKoi() and drawScenery() goes through these two, so the
+    // grade - and the rounding - only has to be right in one place.
+    function themeTint() {
+        return (costume && costume.theme && costume.theme.tint) || [1, 1, 1];
+    }
+    function tintChannel(v, t) {
+        return Math.max(0, Math.min(255, Math.round(v * t)));
+    }
+    function rgbStr(rgb) {
+        var t = themeTint();
+        return 'rgb(' + tintChannel(rgb[0], t[0]) + ',' + tintChannel(rgb[1], t[1]) + ',' +
+               tintChannel(rgb[2], t[2]) + ')';
+    }
+    function rgbaStr(rgb, alpha) {
+        var t = themeTint();
+        return 'rgba(' + tintChannel(rgb[0], t[0]) + ',' + tintChannel(rgb[1], t[1]) + ',' +
+               tintChannel(rgb[2], t[2]) + ',' + alpha + ')';
+    }
+
+    function drawHouseShape(ctx, x0, y0, ww, hh) {
+        var wallH = hh * 0.55;
+        ctx.moveTo(x0 - ww / 2, y0);
+        ctx.lineTo(x0 - ww / 2, y0 - wallH);
+        ctx.lineTo(x0 - ww * 0.62, y0 - wallH);
+        ctx.lineTo(x0, y0 - hh);
+        ctx.lineTo(x0 + ww * 0.62, y0 - wallH);
+        ctx.lineTo(x0 + ww / 2, y0 - wallH);
+        ctx.lineTo(x0 + ww / 2, y0);
+        ctx.closePath();
+    }
+
+    // A cluster of two or three cottages, not one - a village is a
+    // gathering, and one roof alone reads as just another pine.
+    function drawHouseCluster(ctx, bx, by, w, h, seed) {
+        ctx.beginPath();
+        var n = hashJS(seed, 91) > 0.45 ? 3 : 2;
+        for (var i = 0; i < n; i++) {
+            var jx = (hashJS(seed, i * 7 + 3) - 0.5) * w * 1.3;
+            var jy = hashJS(seed, i * 7 + 9) * h * 0.08;
+            var sc = 0.6 + 0.55 * hashJS(seed, i * 7 + 5);
+            drawHouseShape(ctx, bx + jx, by + jy, w * 0.55 * sc, h * sc);
+        }
+        ctx.fill();
+    }
+
+    // The blades turn on the real clock, at a speed tuned to complete a
+    // whole number of turns every TIME_WRAP seconds - u_time (and this,
+    // its JS twin) wraps there, so the sweep never jumps.
+    var WINDMILL_TURNS_PER_WRAP = 20;
+
+    function drawWindmill(ctx, bx, by, w, h, seed, windT, silRGB) {
+        var towerW = w, towerH = h * 0.72;
+        var topW = towerW * 0.55;
+        var hubY = by - towerH;
+        ctx.beginPath();
+        ctx.moveTo(bx - towerW / 2, by);
+        ctx.lineTo(bx - topW / 2, hubY);
+        ctx.lineTo(bx + topW / 2, hubY);
+        ctx.lineTo(bx + towerW / 2, by);
+        ctx.closePath();
+        ctx.moveTo(bx - topW / 2, hubY);
+        ctx.lineTo(bx, hubY - h * 0.14);
+        ctx.lineTo(bx + topW / 2, hubY);
+        ctx.closePath();
+        ctx.fill();
+
+        // A real sail, not a turbine blade: a long thin uniform arm (not
+        // tapered to a point) with a lattice of crossbars along it - the
+        // rungs every windmill sail frame has, and the one detail that
+        // tells it apart from an aerodynamic blade at this silhouette size.
+        var cx = bx, cy = hubY - h * 0.03;
+        var bladeLen = h * 0.50, armW = h * 0.020;
+        var slatTs = [0.30, 0.50, 0.70, 0.88], slatLen = bladeLen * 0.32;
+        var baseAngle = hashJS(seed, 37) * TAU_JS + windT;
+        // The 4 blades' axes, computed once and shared by the lattice
+        // pass below and the sail pass after it, rather than each
+        // re-deriving cos/sin/perpendicular from the angle on its own.
+        var blades = [];
+        for (var bI = 0; bI < 4; bI++) {
+            var bA = baseAngle + bI * (Math.PI / 2);
+            var bDx = Math.cos(bA), bDy = Math.sin(bA);
+            blades.push({ dx: bDx, dy: bDy, px: -bDy, py: bDx });
+        }
+
+        ctx.beginPath();
+        for (var k = 0; k < 4; k++) {
+            var dx = blades[k].dx, dy = blades[k].dy, px = blades[k].px, py = blades[k].py;
+            var rootX = cx + dx * bladeLen * 0.08, rootY = cy + dy * bladeLen * 0.08;
+            var tipX = cx + dx * bladeLen, tipY = cy + dy * bladeLen;
+            ctx.moveTo(rootX + px * armW * 0.5, rootY + py * armW * 0.5);
+            ctx.lineTo(tipX + px * armW * 0.5, tipY + py * armW * 0.5);
+            ctx.lineTo(tipX - px * armW * 0.5, tipY - py * armW * 0.5);
+            ctx.lineTo(rootX - px * armW * 0.5, rootY - py * armW * 0.5);
+            ctx.closePath();
+
+            for (var r = 0; r < slatTs.length; r++) {
+                var slatCx = cx + dx * bladeLen * slatTs[r], slatCy = cy + dy * bladeLen * slatTs[r];
+                ctx.moveTo(slatCx + px * slatLen * 0.5 + dx * armW * 0.5, slatCy + py * slatLen * 0.5 + dy * armW * 0.5);
+                ctx.lineTo(slatCx + px * slatLen * 0.5 - dx * armW * 0.5, slatCy + py * slatLen * 0.5 - dy * armW * 0.5);
+                ctx.lineTo(slatCx - px * slatLen * 0.5 - dx * armW * 0.5, slatCy - py * slatLen * 0.5 - dy * armW * 0.5);
+                ctx.lineTo(slatCx - px * slatLen * 0.5 + dx * armW * 0.5, slatCy - py * slatLen * 0.5 + dy * armW * 0.5);
+                ctx.closePath();
+            }
+        }
+        ctx.fill();
+
+        // The cloth, over the lattice, loose enough that the frame still
+        // shows through it - a sail is canvas stretched on the frame,
+        // not a solid blade.
+        var sailWidth = armW * 5.0;
+        ctx.beginPath();
+        for (var m = 0; m < 4; m++) {
+            var dxm = blades[m].dx, dym = blades[m].dy, pxm = blades[m].px, pym = blades[m].py;
+            var inRootX = cx + dxm * bladeLen * 0.22, inRootY = cy + dym * bladeLen * 0.22;
+            var inTipX = cx + dxm * bladeLen * 0.92, inTipY = cy + dym * bladeLen * 0.92;
+            ctx.moveTo(inRootX, inRootY);
+            ctx.lineTo(inTipX, inTipY);
+            ctx.lineTo(inTipX + pxm * sailWidth, inTipY + pym * sailWidth);
+            ctx.lineTo(inRootX + pxm * sailWidth * 0.15, inRootY + pym * sailWidth * 0.15);
+            ctx.closePath();
+        }
+        ctx.fillStyle = rgbaStr(silRGB, 0.5);
+        ctx.fill();
+        ctx.fillStyle = rgbStr(silRGB);
+    }
+
+    function drawChurch(ctx, bx, by, w, h, seed) {
+        var naveW = w, naveH = h * 0.42;
+        var towerSide = hashJS(seed, 201) > 0.5 ? 1 : -1;
+        var towerX = bx + towerSide * naveW * 0.38;
+        var towerW = naveW * 0.30;
+        var towerH = h * 0.95;
+
+        ctx.beginPath();
+        ctx.moveTo(bx - naveW / 2, by);
+        ctx.lineTo(bx - naveW / 2, by - naveH);
+        ctx.lineTo(bx, by - naveH - naveH * 0.55);
+        ctx.lineTo(bx + naveW / 2, by - naveH);
+        ctx.lineTo(bx + naveW / 2, by);
+        ctx.closePath();
+        ctx.moveTo(towerX - towerW / 2, by);
+        ctx.lineTo(towerX - towerW / 2, by - towerH * 0.8);
+        ctx.lineTo(towerX, by - towerH);
+        ctx.lineTo(towerX + towerW / 2, by - towerH * 0.8);
+        ctx.lineTo(towerX + towerW / 2, by);
+        ctx.closePath();
+        ctx.fill();
+
+        var cyTop = by - towerH - h * 0.10;
+        ctx.beginPath();
+        ctx.moveTo(towerX, by - towerH);
+        ctx.lineTo(towerX, cyTop);
+        ctx.moveTo(towerX - h * 0.035, cyTop + h * 0.035);
+        ctx.lineTo(towerX + h * 0.035, cyTop + h * 0.035);
+        ctx.lineWidth = Math.max(1, h * 0.018);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.stroke();
+    }
+
+    // The one fantastical silhouette among the three real ones: a
+    // slender tower under an onion dome, with a tiny flag at the top.
+    function drawFantasyTower(ctx, bx, by, w, h) {
+        var shaftH = h * 0.68, shaftTopW = w * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(bx - w / 2, by);
+        ctx.lineTo(bx - shaftTopW / 2, by - shaftH);
+        ctx.lineTo(bx + shaftTopW / 2, by - shaftH);
+        ctx.lineTo(bx + w / 2, by);
+        ctx.closePath();
+        var domeW = w * 1.15, domeH = h * 0.26;
+        ctx.moveTo(bx - shaftTopW / 2, by - shaftH);
+        ctx.quadraticCurveTo(bx - domeW / 2, by - shaftH - domeH * 0.5, bx, by - shaftH - domeH);
+        ctx.quadraticCurveTo(bx + domeW / 2, by - shaftH - domeH * 0.5, bx + shaftTopW / 2, by - shaftH);
+        ctx.closePath();
+        ctx.fill();
+
+        var flagY0 = by - shaftH - domeH;
+        ctx.beginPath();
+        ctx.moveTo(bx, flagY0);
+        ctx.lineTo(bx, flagY0 - h * 0.12);
+        ctx.lineWidth = Math.max(1, h * 0.015);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(bx, flagY0 - h * 0.12);
+        ctx.lineTo(bx + w * 0.22, flagY0 - h * 0.09);
+        ctx.lineTo(bx, flagY0 - h * 0.06);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // One candidate landmark slot every SCENERY_FREQ of the pine band's
+    // own scroll space - wide enough that a village is a landmark among
+    // the trees, not wallpaper repeating with them.
+    var SCENERY_FREQ = 6.0;
+    var SCENERY_DENSITY = 0.40;
+    var SCENERY_TYPES = ['house', 'windmill', 'church', 'tower'];
+    var SCENERY_SIZES = {
+        house:    { wFrac: 0.050, hFrac: 0.050 },
+        windmill: { wFrac: 0.024, hFrac: 0.095 },
+        church:   { wFrac: 0.060, hFrac: 0.085 },
+        tower:    { wFrac: 0.022, hFrac: 0.090 }
+    };
+
+    // Whether a landmark exists in slot k, and which one, is a pure
+    // function of k alone - cached here instead of re-rolling the same
+    // three hashes for the same slot on every one of ~60 frames a
+    // second while it sits on screen (or off, waiting to scroll in).
+    var sceneryCandidateCache = {};
+    function sceneryCandidate(k) {
+        var hit = sceneryCandidateCache[k];
+        if (hit !== undefined) return hit;
+        var result = null;
+        if (hashJS(k, 501) < SCENERY_DENSITY) {
+            var typeRoll = hashJS(k, 777);
+            var type = SCENERY_TYPES[Math.min(SCENERY_TYPES.length - 1,
+                Math.floor(typeRoll * SCENERY_TYPES.length))];
+            result = {
+                type: type,
+                jitter: (hashJS(k, 314) - 0.5) * 0.7,
+                sizeJit: 0.82 + 0.4 * hashJS(k, 913)
+            };
+        }
+        sceneryCandidateCache[k] = result;
+        return result;
+    }
+
+    function drawScenery(timeWrapped) {
+        if (!sceneryCtx || !sceneryCanvasEl) return;
+        var ctx = sceneryCtx;
+        var W = sceneryCanvasEl.width, H = sceneryCanvasEl.height;
+        ctx.clearRect(0, 0, W, H);
+        if (W <= 0 || H <= 0) return;
+
+        // costume.biome is set by every real path (Costume.outfit() and
+        // defaultCostume() both always populate it - see dressScene()'s
+        // identical `if (bm)` guard), but setCostume() itself only
+        // validates outfit.livery/outfit.theme. A future caller that
+        // skips it would otherwise throw inside the rAF callback and
+        // freeze the whole scene, not just the ridge.
+        if (!costume || !costume.biome) return;
+
+        var sharpVal = sharpLevel * SHARP_MAX;
+        var agitationVal = 1.0 + chainLevel * 0.7;
+        var dayCycle = fractJS(timeWrapped / 300.0);
+        var darkness = smoothstep01(0.55, 0.75, dayCycle) *
+                        (1 - smoothstep01(0.95, 1.0, dayCycle));
+        var treeRGB255 = [costume.biome.tree[0] * 255, costume.biome.tree[1] * 255,
+                           costume.biome.tree[2] * 255];
+
+        var scroll = flow * 0.40;
+        var firstK = Math.floor(SCENERY_FREQ * (-0.12 - scroll)) - 1;
+        var lastK = Math.ceil(SCENERY_FREQ * (1.12 - scroll)) + 1;
+        var windT = (timeWrapped / TIME_WRAP) * (TAU_JS * WINDMILL_TURNS_PER_WRAP);
+        // The same sweep of light the ridge/pines answer with on a
+        // livery change (worldSweep in the GLSL) - evaluated at each
+        // building's own position, so a village lit by the sweep isn't
+        // left a flat silhouette while the hillside around it flashes.
+        var sweepX = (liverySweep - 0.5) * 3.0;
+
+        for (var k = firstK; k <= lastK; k++) {
+            var candidate = sceneryCandidate(k);
+            if (!candidate) continue;
+            var type = candidate.type;
+            var sc = (k + 0.5 + candidate.jitter) / SCENERY_FREQ;
+            var u = sc + scroll;
+            if (u < -0.1 || u > 1.1) continue;
+
+            var px = u * W;
+            var sizeDef = SCENERY_SIZES[type];
+            var sizeJit = candidate.sizeJit;
+            var w = sizeDef.wFrac * W * sizeJit;
+            var h = sizeDef.hFrac * H * sizeJit;
+
+            // The base has to clear the ridge across the whole footprint,
+            // not just at its centre - a flat-bottomed building sampled
+            // at one point can land with its centre on a peak and sky
+            // showing under both corners. Sitting it at the lowest of
+            // three samples (left edge, centre, right edge) sinks it
+            // into the hill instead of balancing it on top of one.
+            var halfWsc = (w / W) * 0.6;
+            var ryC = ridgeLineY(sc, sharpVal, agitationVal);
+            var ryL = ridgeLineY(sc - halfWsc, sharpVal, agitationVal);
+            var ryR = ridgeLineY(sc + halfWsc, sharpVal, agitationVal);
+            var ry = Math.min(ryC, ryL, ryR);
+            var py = (1 - ry) * H;
+
+            var worldSweep = liverySweep > 0.001 ?
+                Math.exp(-Math.pow((u - sweepX) * 4.5, 2.0)) : 0;
+            var pineRGB = [
+                treeRGB255[0] + 255 * 1.00 * worldSweep * 0.28,
+                treeRGB255[1] + 255 * 0.95 * worldSweep * 0.28,
+                treeRGB255[2] + 255 * 0.85 * worldSweep * 0.28
+            ];
+            var silRGB = darkenRGB(pineRGB, darkness);
+            ctx.fillStyle = rgbStr(silRGB);
+
+            if (type === 'house') drawHouseCluster(ctx, px, py, w, h, k);
+            else if (type === 'windmill') drawWindmill(ctx, px, py, w, h, k, windT, silRGB);
+            else if (type === 'church') drawChurch(ctx, px, py, w, h, k);
+            else drawFantasyTower(ctx, px, py, w, h);
+        }
+    }
+
     // How far, in metres, the ghost can be and still be drawn. Beyond
     // that it has left the screen, and there is nothing to look at.
     var GHOST_MAX_GAP_M = 400;
@@ -448,16 +1133,26 @@ var RowingAnimation = (function() {
         return sh;
     }
 
-    function resize() {
-        var canvas = gl.canvas;
-        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Sizes a canvas's backing buffer to its CSS box at the current
+    // device pixel ratio. glCanvas, koiCanvas and sceneryCanvas all share
+    // the same box (see rowing_display.css) and must all be resized the
+    // same way, or they silently drift out of sync with each other.
+    function resizeCanvasToDisplaySize(canvas, dpr) {
+        if (!canvas) return;
         var w = Math.floor(canvas.clientWidth * dpr);
         var h = Math.floor(canvas.clientHeight * dpr);
         if (canvas.width !== w || canvas.height !== h) {
             canvas.width = w;
             canvas.height = h;
         }
-        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    function resize() {
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        resizeCanvasToDisplaySize(gl.canvas, dpr);
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        resizeCanvasToDisplaySize(koiCanvasEl, dpr);
+        resizeCanvasToDisplaySize(sceneryCanvasEl, dpr);
     }
 
     // Where the ghost is, right now. Its distance at this moment of the
@@ -550,13 +1245,12 @@ var RowingAnimation = (function() {
         gl.uniform1f(uniforms.uGhostX,     ghostOffset);
         gl.uniform1f(uniforms.uGhostPhase, ghostPhase);
         gl.uniform1f(uniforms.uGhostOn,    ghostOn);
-        gl.uniform1f(uniforms.uFishOn,     (fishOn || fishExit > 0) ? 1 : 0);
-        gl.uniform1f(uniforms.uFishX,      fishX);
-        gl.uniform1f(uniforms.uFishHold,   fishHold);
-        gl.uniform1f(uniforms.uFishFade,   fishFade);
         dressScene();
         gl.uniform1f(uniforms.uLivery, liverySweep);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        drawScenery(timeWrapped);
+        drawKoi(timeWrapped);
 
         if (!shaderReadySent) {
             shaderReadySent = true;
@@ -714,6 +1408,10 @@ var RowingAnimation = (function() {
 
         var canvas = document.getElementById('glCanvas');
         gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        koiCanvasEl = document.getElementById('koiCanvas');
+        koiCtx = koiCanvasEl ? koiCanvasEl.getContext('2d') : null;
+        sceneryCanvasEl = document.getElementById('sceneryCanvas');
+        sceneryCtx = sceneryCanvasEl ? sceneryCanvasEl.getContext('2d') : null;
         if (!gl) {
             document.getElementById('wrapper').innerHTML =
                 '<p style="color:#fff;padding:20px">WebGL not supported</p>';
@@ -753,10 +1451,6 @@ var RowingAnimation = (function() {
             uGhostX:     gl.getUniformLocation(prog, 'u_ghostX'),
             uGhostPhase: gl.getUniformLocation(prog, 'u_ghostPhase'),
             uGhostOn:    gl.getUniformLocation(prog, 'u_ghostOn'),
-            uFishOn:     gl.getUniformLocation(prog, 'u_fishOn'),
-            uFishX:      gl.getUniformLocation(prog, 'u_fishX'),
-            uFishHold:   gl.getUniformLocation(prog, 'u_fishHold'),
-            uFishFade:   gl.getUniformLocation(prog, 'u_fishFade'),
             uHullA:      gl.getUniformLocation(prog, 'u_hullA'),
             uHullB:      gl.getUniformLocation(prog, 'u_hullB'),
             uShirt:      gl.getUniformLocation(prog, 'u_shirt'),
