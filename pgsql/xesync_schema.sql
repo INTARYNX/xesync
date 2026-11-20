@@ -72,6 +72,13 @@ ALTER TABLE xesync.workouts
 ALTER TABLE xesync.workouts
     ADD COLUMN IF NOT EXISTS daily_par_reached BOOLEAN;
 
+-- Whether a koi was landed during that run - the creature the chain
+-- calls, and the one thing the game ever lands (docs/GAMIFICATION.md).
+-- NULL when the session predates the koi, or when no koi was landed:
+-- a koi that surfaced and was not landed leaves no trace.
+ALTER TABLE xesync.workouts
+    ADD COLUMN IF NOT EXISTS koi_landed BOOLEAN;
+
 CREATE INDEX IF NOT EXISTS idx_workouts_user ON xesync.workouts (user_id);
 CREATE INDEX IF NOT EXISTS idx_workouts_date ON xesync.workouts (workout_date);
 
@@ -654,7 +661,7 @@ BEGIN
         workout_id, user_id, data_version,
         duration_sec, distance_m, total_strokes,
         calories, avg_spm, avg_pace_sec, avg_watts, avg_hr,
-        run_score, daily_par_reached
+        run_score, daily_par_reached, koi_landed
     ) VALUES (
         workout,
         v_user_id,
@@ -673,6 +680,13 @@ BEGIN
         -- the day had no par to chase.
         CASE
             WHEN (data -> 'runScore' -> 'dailyPar' ->> 'reached') = 'true'
+                THEN TRUE
+            ELSE NULL
+        END,
+        -- NULL when the session predates the koi, or when no koi was
+        -- landed. A koi that surfaced and was not landed is not there.
+        CASE
+            WHEN (data -> 'runScore' -> 'fish' ->> 'name') IS NOT NULL
                 THEN TRUE
             ELSE NULL
         END
@@ -978,6 +992,38 @@ BEGIN
     FROM xesync.workouts w
     WHERE w.user_id = v_user_id
       AND w.daily_par_reached IS NOT NULL
+    ORDER BY w.workout_date DESC;
+END;
+$$;
+
+
+-- Which sessions landed a koi. Same shape as the scores and the pars:
+-- a separate, additive endpoint, because list_workouts cannot change its
+-- return type.
+CREATE OR REPLACE FUNCTION xesync.list_workout_kois(token TEXT)
+RETURNS TABLE (
+    workout_id  TEXT,
+    koi_landed  BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = xesync, public
+AS $$
+DECLARE
+    v_user_id BIGINT;
+BEGIN
+    v_user_id := xesync.user_id_from_token(token);
+    IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT
+        w.workout_id::TEXT,
+        w.koi_landed
+    FROM xesync.workouts w
+    WHERE w.user_id = v_user_id
+      AND w.koi_landed IS NOT NULL
     ORDER BY w.workout_date DESC;
 END;
 $$;
@@ -1365,6 +1411,7 @@ GRANT EXECUTE ON FUNCTION xesync.save_workout(TEXT, TEXT, JSONB)        TO web_a
 GRANT EXECUTE ON FUNCTION xesync.list_workouts(TEXT)                    TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.list_workout_scores(TEXT)              TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.list_workout_daily_pars(TEXT)          TO web_anon;
+GRANT EXECUTE ON FUNCTION xesync.list_workout_kois(TEXT)                 TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.get_workout(TEXT, TEXT)                TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.change_password(TEXT, TEXT, TEXT)      TO web_anon;
 GRANT EXECUTE ON FUNCTION xesync.delete_account(TEXT, TEXT)             TO web_anon;

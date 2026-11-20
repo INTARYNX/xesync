@@ -174,6 +174,11 @@ function analyse(rawSamples, tuning) {
     }
     lastTickT = t;
     if (evt && evt.type === 'push') events.push({ t, type: 'push' });
+    // The koi, when the push called it. The event rides on the tick's
+    // own event, or is the event itself.
+    const fishEvt = evt && (evt.fish ||
+      (evt.type && evt.type.indexOf('fish_') === 0 ? evt : null));
+    if (fishEvt) events.push({ t, type: fishEvt.type });
   }
 
   const summary = RunScore.summarize(state);
@@ -300,6 +305,15 @@ function report(session, opts) {
   console.log(`  chaîne         max ×${a.summary.maxMultiplier || 1}   ` +
               `${(timeInFlow * 100).toFixed(0)} % du temps en flux`);
   console.log(`  paliers        ${tiers || 'aucun'}`);
+
+  // The koi: the creature the chain calls. It is worth knowing whether
+  // a session surfaces one, and whether it was landed.
+  const surfaced = a.events.find((e) => e.type === 'fish_appeared');
+  const landed = a.events.find((e) => e.type === 'fish_landed');
+  if (surfaced) {
+    console.log(`  carpe          apparue à ${fmt(surfaced.t, 0)} s` +
+      (landed ? `, pêchée à ${fmt(landed.t, 0)} s` : ', jamais pêchée'));
+  }
   console.log(`  score          ${a.summary.score}`);
 
   const luck = luckStats(a, session.windows || []);

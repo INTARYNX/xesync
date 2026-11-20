@@ -39,6 +39,31 @@ var RowingAnimation = (function() {
     var ghostOn = 0;
     var ghostOffset = 0;
     var ghostPhase = 0;
+
+    // The koi: the creature the chain calls. The game layer
+    // (run_score.js) says whether it is there and how close it is to
+    // being landed; the scene swims it, and says nothing.
+    var fishOn = 0;
+    var fishHold = 0;
+    var fishFade = 0;
+    var fishExit = 0;          // counts down while it swims away
+    var fishLandedSeen = false;
+    var fishX = FISH_X;
+    // How far ahead of the boat it swims, in scene units.
+    var FISH_X = 0.24;
+    // How long it takes to swim away once it has been landed.
+    var FISH_EXIT_S = 1.6;
+
+    // Where the koi keeps its station. The scene is only as wide as
+    // the screen is tall times its aspect, so on a narrow screen the
+    // koi swims closer to the boat: it never leaves the frame.
+    function fishStation() {
+        var aspect = 1.5;
+        if (gl && gl.canvas && gl.canvas.clientHeight > 0) {
+            aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+        }
+        return Math.min(FISH_X, Math.max(0.10, aspect * 0.33));
+    }
     // How far, in metres, the ghost can be and still be drawn. Beyond
     // that it has left the screen, and there is nothing to look at.
     var GHOST_MAX_GAP_M = 400;
@@ -477,6 +502,21 @@ var RowingAnimation = (function() {
             liverySweep = 0;
         }
 
+        // The koi. It keeps its station ahead of the boat, with a slow
+        // sway, and when the session has landed it, it swims away. A
+        // koi that dived is simply gone: no animation, no farewell.
+        if (fishExit > 0) {
+            fishExit = Math.max(0, fishExit - dt);
+            fishFade = fishExit / FISH_EXIT_S;
+            fishX += dt * 0.30;
+        } else if (fishOn) {
+            fishFade = 1;
+            var fishTarget = fishStation() + Math.sin(sceneClock * 0.31) * 0.025;
+            fishX += (fishTarget - fishX) * Math.min(1.0, dt * 1.5);
+        } else {
+            fishFade = 0;
+        }
+
         var targetSurge = currentSpm > 0 ? surgeFactor(animPhase) : 1.0;
         displaySurge += (targetSurge - displaySurge) * Math.min(1.0, dt * SURGE_SLEW_RATE);
         flow -= dt * currentSpeed * 0.26 * displaySurge *
@@ -510,6 +550,10 @@ var RowingAnimation = (function() {
         gl.uniform1f(uniforms.uGhostX,     ghostOffset);
         gl.uniform1f(uniforms.uGhostPhase, ghostPhase);
         gl.uniform1f(uniforms.uGhostOn,    ghostOn);
+        gl.uniform1f(uniforms.uFishOn,     (fishOn || fishExit > 0) ? 1 : 0);
+        gl.uniform1f(uniforms.uFishX,      fishX);
+        gl.uniform1f(uniforms.uFishHold,   fishHold);
+        gl.uniform1f(uniforms.uFishFade,   fishFade);
         dressScene();
         gl.uniform1f(uniforms.uLivery, liverySweep);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -709,6 +753,10 @@ var RowingAnimation = (function() {
             uGhostX:     gl.getUniformLocation(prog, 'u_ghostX'),
             uGhostPhase: gl.getUniformLocation(prog, 'u_ghostPhase'),
             uGhostOn:    gl.getUniformLocation(prog, 'u_ghostOn'),
+            uFishOn:     gl.getUniformLocation(prog, 'u_fishOn'),
+            uFishX:      gl.getUniformLocation(prog, 'u_fishX'),
+            uFishHold:   gl.getUniformLocation(prog, 'u_fishHold'),
+            uFishFade:   gl.getUniformLocation(prog, 'u_fishFade'),
             uHullA:      gl.getUniformLocation(prog, 'u_hullA'),
             uHullB:      gl.getUniformLocation(prog, 'u_hullB'),
             uShirt:      gl.getUniformLocation(prog, 'u_shirt'),
@@ -785,6 +833,26 @@ var RowingAnimation = (function() {
             ghostOn = 0;
             ghostOffset = 0;
         },
+        // The koi. The game layer says whether it is there and how
+        // close it is to being landed; the scene swims it, and says
+        // nothing. A koi that was landed swims away; a koi that dived
+        // is simply gone.
+        setFish: function(st) {
+            var present = !!(st && st.present);
+            var landed = !!(st && st.landed);
+            fishHold = (st && typeof st.hold === 'number' && isFinite(st.hold))
+                ? clamp01(st.hold)
+                : 0;
+            if (present) {
+                if (!fishOn) fishX = fishStation();
+                fishOn = 1;
+                fishExit = 0;
+            } else if (fishOn) {
+                fishOn = 0;
+                if (landed && !fishLandedSeen) fishExit = FISH_EXIT_S;
+            }
+            fishLandedSeen = landed;
+        },
         // The day's conditions: the index the shader uses to pick the
         // weather. The day's own index, so the sky is the same for
         // everyone rowing at this hour.
@@ -819,6 +887,12 @@ var RowingAnimation = (function() {
             ghostOffset: function () { return ghostOffset; },
             ghostPhase: function () { return ghostPhase; },
             ghostProfile: function () { return ghostProfile; },
+            fishOn: function () { return fishOn; },
+            fishX: function () { return fishX; },
+            fishHold: function () { return fishHold; },
+            fishFade: function () { return fishFade; },
+            fishExit: function () { return fishExit; },
+            FISH_X: FISH_X,
             costume: function () { return costume; },
             costumeKey: function () { return costumeKey; },
             liverySweep: function () { return liverySweep; },
@@ -864,3 +938,4 @@ var pulseChain = RowingAnimation.pulseChain;
 var setSceneDay = RowingAnimation.setSceneDay;
 var setGhostProfile = RowingAnimation.setGhostProfile;
 var setCostume = RowingAnimation.setCostume;
+var setFish = RowingAnimation.setFish;

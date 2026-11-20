@@ -356,6 +356,9 @@ XEBEX air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
       the biome the history has earned, and they breathe when the chain
       is up — and slowly take angles as it holds — the ambiance Alto
       makes, without a word
+- [x] The koi: the push calls it, the chain keeps it for fifteen seconds,
+      and it is worth points — the collectible the game was missing
+      ([docs/GAMIFICATION.md](docs/GAMIFICATION.md))
 - [x] Android Play Store release (production; versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 

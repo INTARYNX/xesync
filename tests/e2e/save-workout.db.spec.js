@@ -124,5 +124,17 @@ test.describe('save_workout against real PostgREST', () => {
       expect(typeof p.workout_id).toBe('string');
       expect(typeof p.daily_par_reached).toBe('boolean');
     }
+
+    // The koi, the same way. A short debug session never pushes, so no
+    // koi is landed - but the column is there, and the endpoint answers,
+    // which is what the history needs to render the mark.
+    const koiRes = await request.post(`${postgrestUrl}/rpc/list_workout_kois`, { data: { token } });
+    expect(koiRes.ok(), 'the koi endpoint answers').toBeTruthy();
+    const kois = await koiRes.json();
+    expect(Array.isArray(kois)).toBeTruthy();
+    for (const k of kois) {
+      expect(typeof k.workout_id).toBe('string');
+      expect(typeof k.koi_landed).toBe('boolean');
+    }
   });
 });

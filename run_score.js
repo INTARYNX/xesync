@@ -52,6 +52,16 @@
 // excess on top of it while the lift is positive. A run never pays
 // zero, and a calm pace is never punished.
 //
+// And one creature answers the chain: the koi. The push calls it - the
+// game's own measure of a sustained effort above the rower's own norm
+// - and it is landed by keeping the chain up for fifteen seconds. If
+// the chain is let go for longer than the grace, it dives. It is never
+// said: the koi is there, or it is not.
+//
+// The koi is a bonus, never a condition. The ground is worth the same
+// with it or without it, a calm session is never punished, and a koi
+// that was not landed leaves no trace and costs nothing.
+//
 // Pure module: state lives in the object returned by createRun(), and
 // nothing outside this file is touched. See docs/GAMIFICATION.md for the
 // design, and tests/run_score.test.js for the contract.
@@ -128,6 +138,36 @@ var RunScore = (function () {
   var SCORE_PER_METER = 10;
   var TIER_BONUS = 100;
 
+  // -- the koi ----------------------------------------------------------
+  //
+  // The one creature the chain can call. The rules are the same shape
+  // as the rest of the game: relative to the rower's own effort, and
+  // never a threshold they can fall through.
+  //
+  // The PUSH calls the koi. The push is the game's own measure of a
+  // sustained effort above the rower's own recent norm: the machine's
+  // jitter reaches the push threshold in a single sample but never
+  // holds it for five seconds, so a push is an effort and not a spike.
+  // The koi is therefore called by the same thing the chain is built
+  // from - and the simulator says why it has to be the push and not the
+  // lift: on a steady row, the machine's own jitter takes the lift to
+  // 2.7 spm (dev/sim_session.js, worst case of the noise grid), while
+  // a real push only reaches 3.0. The lift alone cannot tell an
+  // effort from a spike. The push can.
+  //
+  // The koi then has to be KEPT, not caught: fifteen seconds with the
+  // chain up and the koi alongside. It is not caught, it is kept: a
+  // rowing session has no reflex in it, and a reward that needs a
+  // reflex would not fit.
+  //
+  // If the rower lets the chain go for longer than the grace, the koi
+  // dives. Nothing is lost but the hold, and nothing is said: a koi
+  // that was not landed is not a failure.
+  var FISH_NAME = 'koi';
+  var FISH_GRACE_S = 8;           // seconds off the chain before it dives
+  var FISH_HOLD_S = 15;           // seconds of chain needed to land it
+  var FISH_BONUS = 2000;          // what landing it is worth, times the chain
+
   // -- helpers ----------------------------------------------------------
 
   function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x); }
@@ -202,6 +242,17 @@ var RunScore = (function () {
       livery: null,
       liveryChanged: false,
 
+      // The koi. The push calls it; the chain keeps it there; fifteen
+      // seconds of chain lands it.
+      fish: {
+        name: FISH_NAME,
+        present: false,
+        holdSeconds: 0,
+        outSeconds: 0,
+        landed: false,
+        bonus: 0
+      },
+
       inFlow: false,
       lastTickT: null,
       lastDistance: null,
@@ -226,6 +277,13 @@ var RunScore = (function () {
         pushMinS: opts.pushMinS === undefined ? PUSH_MIN_S : opts.pushMinS,
         pushCooldownS: opts.pushCooldownS === undefined ? PUSH_COOLDOWN_S : opts.pushCooldownS,
         flowGraceS: opts.flowGraceS === undefined ? FLOW_GRACE_S : opts.flowGraceS,
+        // How long the koi's hold survives the rower letting go.
+        fishGraceS: opts.fishGraceS === undefined ? FISH_GRACE_S : opts.fishGraceS,
+        // What landing the koi is worth, before the chain multiplies
+        // it. Zero makes the koi free: it still surfaces, it is still
+        // landed, it is simply worth nothing - which is how the
+        // calibration measures what the koi is worth.
+        fishBonus: opts.fishBonus === undefined ? FISH_BONUS : opts.fishBonus,
         // How sharply the lift counts. 1 is linear, 2 rewards intensity
         // over duration. See the heat computation in tick().
         liftExponent: opts.liftExponent === undefined ? LIFT_EXPONENT : opts.liftExponent
@@ -300,6 +358,67 @@ var RunScore = (function () {
   // 1x at the norm, up to 2x at PUSH_EXCESS_SPM above it.
   function excessFactor(lift, pushExcessSpm) {
     return 1 + clamp(lift, 0, pushExcessSpm) / pushExcessSpm;
+  }
+
+  // -- the koi ----------------------------------------------------------
+  //
+  // The push calls the koi: it surfaces beside the boat, and it is
+  // landed by keeping the chain for fifteen seconds. It dives if the
+  // chain is let go for longer than the grace.
+  //
+  // Returns the event the tick should carry, or null.
+  function appearFish(state) {
+    var f = state.fish;
+    // One koi per run once it has been landed. A koi that dived may be
+    // called again by a later push - but a landed one is the end of it.
+    if (f.landed || f.present) return null;
+    f.present = true;
+    f.holdSeconds = 0;
+    f.outSeconds = 0;
+    return { type: 'fish_appeared', t: state.lastTickT, name: f.name };
+  }
+
+  function updateFish(state, dt, inFlow) {
+    var f = state.fish;
+    if (!f.present) return null;
+
+    if (inFlow) {
+      // The chain is there: the hold fills.
+      f.outSeconds = 0;
+      f.holdSeconds += dt;
+      if (f.holdSeconds >= FISH_HOLD_S) {
+        f.holdSeconds = FISH_HOLD_S;
+        f.landed = true;
+        f.present = false;
+        var bonus = state.tuning.fishBonus * state.multiplier;
+        f.bonus = bonus;
+        state.score += bonus;
+        return { type: 'fish_landed', t: state.lastTickT, name: f.name, bonus: bonus };
+      }
+      return null;
+    }
+
+    // Off the chain: the koi waits out the grace, then leaves. The
+    // hold is lost with it, and nothing is said.
+    f.outSeconds += dt;
+    if (f.outSeconds > state.tuning.fishGraceS) {
+      f.present = false;
+      f.holdSeconds = 0;
+      return { type: 'fish_dived', t: state.lastTickT, name: f.name };
+    }
+    return null;
+  }
+
+  // What the scene needs to know about the koi: whether it is there,
+  // and how close it is to being landed. The view only draws; it never
+  // decides.
+  function fishState(state) {
+    var f = state.fish;
+    return {
+      present: !!f.present,
+      hold: clamp(f.holdSeconds / FISH_HOLD_S, 0, 1),
+      landed: !!f.landed
+    };
   }
 
   // -- the tick ---------------------------------------------------------
@@ -435,6 +554,13 @@ var RunScore = (function () {
             type: 'push', t: t, rate: rate, barSpm: bar,
             multiplier: state.multiplier, bonus: pushBonus
           });
+          // The push calls the koi. It surfaces beside the boat, and it
+          // is landed by keeping the chain up for fifteen seconds.
+          var fishEvt = appearFish(state);
+          if (fishEvt) {
+            push(state, fishEvt);
+            event.fish = fishEvt;
+          }
           // The day's par can also be reached by landing the pushes it
           // asks for. Same thing: a mark, a visual beat, no words.
           if (state.dailyPar && !state.dailyParReached &&
@@ -479,6 +605,17 @@ var RunScore = (function () {
       }
     }
 
+    // The koi, last: it is a consequence of the push and of the chain,
+    // so it is read after both have been updated. When it happens on
+    // the same tick as something else, the event of the tick carries
+    // it - the chain's own event is never lost to it.
+    var fishEvt = updateFish(state, dt, nowInFlow);
+    if (fishEvt) {
+      push(state, fishEvt);
+      if (event) event.fish = fishEvt;
+      else event = fishEvt;
+    }
+
     return event;
   }
 
@@ -518,6 +655,13 @@ var RunScore = (function () {
         chainPar: state.dailyPar.chainPar,
         pushPar: state.dailyPar.pushPar,
         reached: !!state.dailyParReached
+      } : null,
+      // The koi, if one was landed. A koi that surfaced and was not
+      // landed is not in the summary at all: the game never says what
+      // was missed.
+      fish: state.fish.landed ? {
+        name: state.fish.name,
+        bonus: state.fish.bonus
       } : null
     };
   }
@@ -536,6 +680,7 @@ var RunScore = (function () {
     tick: tick,
     summarize: summarize,
     chainLevel: chainLevel,
+    fishState: fishState,
     setDailyPar: setDailyPar,
     setLivery: setLivery,
     setGhostResult: setGhostResult,
@@ -556,7 +701,11 @@ var RunScore = (function () {
       PUSH_COOLDOWN_S: PUSH_COOLDOWN_S,
       SCORE_PER_METER: SCORE_PER_METER,
       TIER_BONUS: TIER_BONUS,
-      PUSH_BONUS: PUSH_BONUS
+      PUSH_BONUS: PUSH_BONUS,
+      FISH_NAME: FISH_NAME,
+      FISH_GRACE_S: FISH_GRACE_S,
+      FISH_HOLD_S: FISH_HOLD_S,
+      FISH_BONUS: FISH_BONUS
     }
   };
 })();

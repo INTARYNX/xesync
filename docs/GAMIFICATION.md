@@ -370,6 +370,109 @@ plus — la livrée ne change ni le score, ni la chaîne, ni le par.
 
 ---
 
+## Lot 5 — La Carpe ✅ livré
+
+Le slot du lama d'Alto était vide. Le tableau de correspondance mappe tout le
+runner d'Alto — le runner infini, le tape, les figures, le combo, le monde qui
+s'accélère, le défi du jour, le meilleur run — mais pas la créature qu'on
+attrape au passage. Ce qui s'en rapprochait le plus était la chaîne : c'est ce
+qu'on pourchasse, mais c'est un compteur dans un anneau, pas un objet dans le
+monde.
+
+Il y a maintenant une carpe.
+
+### Ce qui l'appelle
+
+**La poussée.** Le jeu a déjà une mesure de l'effort soutenu : la poussée, qui
+exige 2,5 coups/min au-dessus de sa propre norme, tenus cinq secondes. C'est
+elle qui appelle la carpe.
+
+Le pourquoi est mesuré, et c'est le même partout dans ce document : *sur une
+rampe tenue, le bruit de la machine porte l'élévation à 2,7 coups/min* (pire
+cas de la grille, `dev/sim_session.js`), *alors qu'une vraie poussée ne dépasse
+pas 3,0*. L'élévation seule ne sait pas distinguer un effort d'un pic. La
+poussée, si : le jitter du jamais atteint 2,5 pendant cinq secondes d'affilée.
+C'est exactement pour ça que la poussée a été calibrée sur une durée, et non
+sur un niveau.
+
+Conséquence : un rameur régulier ne voit jamais de carpe, et un rameur qui
+pousse la voit. Sur les quatre profils simulés (`node dev/sim_session.js
+--sweep-lift`) :
+
+| Profil | Poussées | Carpe |
+| --- | ---: | --- |
+| erg (échauffement + palier + une poussée) | 1 | apparue à 674 s, pêchée à 690 s |
+| steady (cadence tenue) | 0 | — |
+| sprint (course + sprint final) | 1 | apparition au sprint |
+| short (10 min, échauffement) | 0 | — |
+
+Et sur la grille de bruit, la carpe apparaît sur une rampe tenue **exactement
+quand la poussée en apparaît** — ni plus tôt, ni plus souvent. La carpe n'est
+pas plus maligne que le jeu qui l'appelle.
+
+### Ce qui la garde
+
+Une fois là, elle se **tient** : **quinze secondes** avec la chaîne. Elle n'est
+pas attrapée, elle est gardée — une séance d'aviron n'a pas de réflexe, et une
+récompense qui demande un réflexe ne lui va pas.
+
+Si le rameur lâche la chaîne plus de huit secondes (la grâce, la même que
+celle de la chaîne), la carpe replonge. La tenue est perdue avec elle, et
+**rien n'est dit** : une carpe qui n'a pas été pêchée n'est pas un échec. Elle
+ne laisse aucune trace, ni dans le bilan, ni dans l'historique.
+
+Une carpe pêchée vaut **2 000 points, multipliés par la chaîne** — 4 000 à ×2,
+8 000 à ×4. Le terrain, lui, vaut ce qu'il valait avant : la carpe est un
+bonus, jamais une condition. Un test le vérifie (`tests/run_score.test.js`) :
+la différence de score entre deux mêmes courses, l'une avec la carpe et l'autre
+avec la carpe à zéro, est **exactement** le bonus.
+
+### Ce qu'on voit
+
+La carpe nage à côté du bateau, un peu en avant, sur la houle. Elle bat de la
+queue — la queue est une onde, pas un drapeau : la pointe voyage plus loin que
+la racine. Et **le rouge warms vers l'or quand la tenue se remplit** : le
+rameur est renseigné sans un mot, dans la langue que la scène parle déjà.
+
+![la carpe, seule et tenue pleine](images/scene-koi-compare.png)
+
+*À gauche la carpe ; à droite, la tenue pleine : elle prend la lumière.*
+
+Le rendu est dans le shader, comme le fantôme : `u_fishOn`, `u_fishX`,
+`u_fishHold` et `u_fishFade`, et une carpe faite de SDF — le corps en deux
+ellipses pour qu'il fuse vers la queue, la queue en deux lobes, la nageoire
+dorsale, l'œil. Le tout dans un `if (u_fishOn > 0.5)`, pour ne payer le coût
+que quand elle est là.
+
+La position suit la largeur de la scène : sur un écran étroit, la carpe nage
+plus près du bateau, sinon elle sort du cadre.
+
+### La trace
+
+- **Le bilan de fin de séance** dit « koi landed », une fois, dans le vocabulaire
+  du jeu — comme « daily par reached » et « new livery ».
+- **La carte de séance** porte une petite marque rouge, comme la marque dorée du
+  par du jour. Pour cela : une colonne (`workouts.koi_landed`) et une RPC
+  **additive** (`list_workout_kois`) — le même schéma que le score et le par,
+  parce que `list_workouts` ne peut pas changer son type de retour.
+- **Rien d'autre.** Pas de compteur, pas de collection à affichage, pas de
+  message de relance.
+
+### Ce que la carpe n'est pas
+
+- ❌ **Pas une consigne.** L'app ne dit jamais « accélère ». Ce qui appelle la
+  carpe, c'est une poussée au-dessus de sa propre norme — donc relatif, et
+  jamais « plus vite » en général.
+- ❌ **Pas une cible.** Personne ne lit « koi 3/15 » nulle part. La carpe se
+  voit dans la scène, et sa tenue se lit dans sa couleur.
+- ❌ **Pas une punition.** La rater ne coûte rien et ne se dit pas.
+- ❌ **Pas une série.** Une carpe ne s'accumule pas : elle se pêche, et la
+  séance suivante repart de zéro.
+- ❌ **Pas une comparaison.** La carpe est à celui qui l'a pêchée, comme le
+  score.
+
+---
+
 ## Limites à connaître avant de construire
 
 | Limite | Conséquence | Réponse |
@@ -625,6 +728,7 @@ Les mêmes questions que `AMELIORATIONS_PRODUIT.md`, mais pour le jeu :
 | La scène qui répond est-elle ressentie ? | Observation directe : « ça avance plus vite quand je pousse » |
 | La norme est-elle perçue comme juste ? | Retours sur la difficulté ; pas sur la performance |
 | Le jeu fait-il revenir ? | Retour dans les 7 jours après une séance scorée, comparé à la période de référence |
+| La carpe sort-elle quand on pousse ? | Le rapport entre les séances qui ont une poussée et celles qui ont une carpe — il doit être proche de 1 |
 | Est-ce que ça pousse à aller plus vite **sans** que l’app le dise ? | Le nombre de montées de cadence spontanées pendant une séance |
 
 **Ne pas** prendre l’allongement des séances comme preuve : une session plus longue peut

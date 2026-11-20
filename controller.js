@@ -663,6 +663,8 @@ window.onFtmsSessionStart = function () {
   RunView.setVisible(Coaching.getMode() !== 'justRow');
   // A new run starts with an empty chain, and the scene with it.
   if (typeof setChainLevel === 'function') setChainLevel(0);
+  // And with no koi: a new session is a new run, and the water forgets.
+  if (typeof setFish === 'function') setFish({ present: false, hold: 0, landed: false });
 
   // The course of the day. Two marks in the HUD - a notch on the ring
   // and the push dots - and a sky that is the same for everyone rowing
@@ -714,6 +716,11 @@ window.onFtmsTick = function (snapshot) {
   // short surge of the boat.
   if (typeof setChainLevel === 'function') {
     setChainLevel(RunScore.chainLevel(runState));
+  }
+  // The koi. The game layer says whether it is there and how close it
+  // is to being landed; the scene swims it, and nothing is said.
+  if (typeof setFish === 'function') {
+    setFish(RunScore.fishState(runState));
   }
   if (runEvt && runEvt.type === 'chain_up' && typeof pulseChain === 'function') {
     pulseChain();

@@ -191,6 +191,11 @@ function renderRunScore(runScore) {
   if (runScore.dailyPar && runScore.dailyPar.reached) {
     bits += '<span class="pw-run-score-x">daily par reached</span>';
   }
+  // The koi, if one was landed. A koi that surfaced and was not landed
+  // is not in the summary at all: the game never says what was missed.
+  if (runScore.fish && runScore.fish.name) {
+    bits += '<span class="pw-run-score-x">' + escHtml(runScore.fish.name) + ' landed</span>';
+  }
   // The race against the ghost of the best run. The only place in the
   // app where the two are compared in metres: the scene could only
   // show it by being where it was.

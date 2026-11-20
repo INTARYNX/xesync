@@ -357,4 +357,45 @@ test.describe('rowing session (debug simulator)', () => {
     const later = await page.evaluate(() => window.__chainCalls);
     assert.ok(later > calls, `the chain level was sent ${later} time(s) in total`);
   });
+
+  test('the koi reaches the scene', async ({ page }) => {
+    test.setTimeout(45000);
+    await boot(page);
+    await connectToRower(page);
+
+    // The debug simulator rows for ten seconds: the norm never
+    // establishes, so the game never pushes and no koi is called. The
+    // koi's own rules are checked in tests/run_score.test.js; what this
+    // checks is the way the koi travels - from the rules, through the
+    // controller, to the scene, packet after packet.
+    const before = await page.evaluate(() => ({
+      sceneIsDefined: typeof window.setFish === 'function',
+      on: window.RowingAnimation._internals.fishOn()
+    }));
+    assert.ok(before.sceneIsDefined, 'the scene does not expose setFish');
+    assert.equal(before.on, 0, 'no koi to start with');
+
+    // The rules say there is one, and how close it is to being landed.
+    // The run is reset when the session starts, so the wait comes
+    // first: the state has to be set on a run that is already going.
+    await page.waitForFunction(() => window.runState.totalSeconds > 0, null, { timeout: 15000 });
+    await page.evaluate(() => {
+      runState.fish.present = true;
+      runState.fish.holdSeconds = 7;
+    });
+
+    // The next packet carries it to the scene.
+    await page.waitForFunction(
+      () => window.RowingAnimation._internals.fishOn() === 1, null, { timeout: 15000 });
+
+    const after = await page.evaluate(() => ({
+      on: window.RowingAnimation._internals.fishOn(),
+      hold: window.RowingAnimation._internals.fishHold(),
+      x: window.RowingAnimation._internals.fishX()
+    }));
+    assert.equal(after.on, 1, 'the koi should be in the scene');
+    assert.ok(Math.abs(after.hold - 7 / 15) < 0.02,
+      `the hold should be carried over (${after.hold})`);
+    assert.ok(after.x !== 0, 'the koi should have a place on the water');
+  });
 });

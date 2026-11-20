@@ -51,8 +51,8 @@ function row(state, seconds, spm, mps) {
 
 // Warm up until the norm exists (it needs MIN_REF_SAMPLES samples),
 // then put the run back to zero so a test starts from a known state.
-function startRun(spm) {
-  const state = RunScore.createRun();
+function startRun(spm, opts) {
+  const state = RunScore.createRun(opts || {});
   row(state, 30, spm, 3);
   state.score = 0;
   state.heat = 0;
@@ -388,6 +388,106 @@ test('the summary carries the livery the boat wore', () => {
   const other = startRun(20);
   row(other, 20, 23, 3);
   assert.equal(RunScore.summarize(other).livery, null);
+});
+
+// -- the koi ----------------------------------------------------------------
+
+// The koi is called by the push: a sustained excursion above the
+// rower's own norm. A steady rower never pushes, and never sees one.
+//
+// The rowing below is not decoration. The rate the game reads is a
+// median over three seconds, so a step takes a tick to be seen; and
+// the norm is a trailing median, so it catches up with a constant rate
+// after about sixteen seconds: a rower who steps up and then holds
+// that step loses the flow before the koi can be kept. To keep the
+// chain up, the rate has to keep rising - which is the ratchet the
+// whole game is built on.
+
+// The seconds it takes to land a push from a standing start: the five
+// the push needs, plus the two ticks the median takes to see the step
+// (the window holds four samples, so the step is only at its full
+// value two ticks after it starts).
+const PUSH_TICKS = I.PUSH_MIN_S + 2;
+
+test('the push calls the koi', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS, 24, 3);
+  assert.equal(state.pushes, 1, 'the push was landed');
+  assert.equal(state.fish.present, true, 'the koi is there');
+  assert.ok(state.events.some(e => e.type === 'fish_appeared'),
+    'the koi is announced by an event');
+});
+
+test('a steady rower never sees a koi', () => {
+  const state = startRun(20);
+  row(state, 180, 21, 3);           // three minutes of being themselves
+  assert.equal(state.pushes, 0);
+  assert.equal(state.fish.present, false);
+  assert.equal(state.fish.landed, false);
+  assert.equal(RunScore.summarize(state).fish, null);
+});
+
+test('the koi is landed by keeping the chain up for fifteen seconds', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS, 24, 3);    // the push: the koi surfaces
+  assert.equal(state.fish.present, true);
+  row(state, I.FISH_HOLD_S, 26, 3); // and the chain is kept
+  assert.equal(state.fish.landed, true);
+  assert.equal(state.fish.holdSeconds, I.FISH_HOLD_S);
+  assert.ok(state.fish.bonus > 0, 'landing it is worth something');
+  // And the summary carries it.
+  const s = RunScore.summarize(state);
+  assert.deepEqual(s.fish, { name: 'koi', bonus: state.fish.bonus });
+});
+
+test('the koi dives if the chain is let go for longer than the grace', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS + 3, 24, 3);
+  assert.equal(state.fish.present, true);
+  assert.ok(state.fish.holdSeconds > 0, 'the hold had started');
+  // The rower stops. The koi waits out the grace, then leaves.
+  row(state, 30, 0, 0);
+  assert.equal(state.fish.present, false);
+  assert.equal(state.fish.landed, false);
+  assert.equal(state.fish.holdSeconds, 0);
+  // And it leaves no trace: the game never says what was missed.
+  assert.equal(RunScore.summarize(state).fish, null);
+});
+
+test('the koi lands once per run', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS, 24, 3);
+  row(state, I.FISH_HOLD_S, 26, 3);
+  const bonus = state.fish.bonus;
+  assert.ok(bonus > 0);
+  // Another push, much later: the koi does not come back.
+  row(state, 40, 20, 3);
+  row(state, PUSH_TICKS + 2, 24, 3);
+  assert.equal(state.fish.landed, true);
+  assert.equal(state.fish.bonus, bonus, 'the same koi, the same bonus');
+});
+
+test('the koi is worth more when the chain is higher', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS, 24, 3);
+  row(state, I.FISH_HOLD_S, 26, 3);
+  assert.equal(state.fish.bonus, I.FISH_BONUS * state.multiplier);
+});
+
+test('the koi never touches the base points', () => {
+  // The same rowing twice: once with the koi worth something, once with
+  // it worth nothing. The ground covered is the same, the chain is the
+  // same - the only difference in the score is the koi.
+  const withKoi = startRun(20);
+  row(withKoi, PUSH_TICKS, 24, 3);
+  row(withKoi, I.FISH_HOLD_S, 26, 3);
+  const plain = startRun(20, { fishBonus: 0 });
+  row(plain, PUSH_TICKS, 24, 3);
+  row(plain, I.FISH_HOLD_S, 26, 3);
+  assert.ok(withKoi.fish.landed, 'the koi was landed');
+  assert.ok(plain.fish.landed, 'the koi was landed either way');
+  assert.equal(plain.fish.bonus, 0);
+  assert.equal(withKoi.score - plain.score, withKoi.fish.bonus);
 });
 
 // -- summary ---------------------------------------------------------------

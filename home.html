@@ -134,7 +134,7 @@
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       }
 
-      function renderCard(w, runScore, dailyPar) {
+      function renderCard(w, runScore, dailyPar, koiLanded) {
         // The score, when the session had one. Old workouts have none and
         // simply do not show it.
         var score = (runScore === null || runScore === undefined)
@@ -148,8 +148,17 @@
             + ' stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/>'
             + '<path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg></div>'
           : '';
+        // The koi, when one was landed: a small mark, the way the course
+        // of the day leaves one.
+        var koi = koiLanded === true
+          ? '<div class="card-koi" title="a koi was landed">'
+            + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+            + ' stroke-linecap="round" stroke-linejoin="round">'
+            + '<path d="M3 12c3.5-4 11-4 14.5 0C14 16 6.5 16 3 12z"/>'
+            + '<path d="M17.5 12L21 8.5v7L17.5 12z"/></svg></div>'
+          : '';
         return '<div class="rowing-card" onclick="openWorkout(\'' + escHtml(w.workout_id) + '\')">'
-          + '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + par + score + '</div>'
+          + '<div class="card-header">' + escHtml(fmtDate(w.workout_date)) + par + koi + score + '</div>'
           + '<div class="card-stats">'
           + stat('Distance',   (w.distance_m || 0) + 'm')
           + stat('Elapsed',    fmtDuration(w.duration_sec))
@@ -538,13 +547,21 @@
               // existed simply has none.
               return post('/rpc/list_workout_daily_pars', { token: hToken })
                 .then(function (pars) {
-                  return { rows: rows, scores: scores, pars: pars };
+                  // The koi is a fourth: a workout saved before the koi
+                  // existed simply has none.
+                  return post('/rpc/list_workout_kois', { token: hToken })
+                    .then(function (kois) {
+                      return { rows: rows, scores: scores, pars: pars, kois: kois };
+                    })
+                    .catch(function () {
+                      return { rows: rows, scores: scores, pars: pars, kois: [] };
+                    });
                 })
                 .catch(function () {
-                  return { rows: rows, scores: scores, pars: [] };
+                  return { rows: rows, scores: scores, pars: [], kois: [] };
                 });
             })
-            .catch(function () { return { rows: rows, scores: [], pars: [] }; });
+            .catch(function () { return { rows: rows, scores: [], pars: [], kois: [] }; });
         })
         .then(function (both) {
           if (!both) return;
@@ -552,8 +569,10 @@
           (both.scores || []).forEach(function (s) { byId[s.workout_id] = s.run_score; });
           var byPar = {};
           (both.pars || []).forEach(function (p) { byPar[p.workout_id] = p.daily_par_reached; });
+          var byKoi = {};
+          (both.kois || []).forEach(function (k) { byKoi[k.workout_id] = k.koi_landed; });
           dashEl.innerHTML = both.rows.map(function (r) {
-            return renderCard(r, byId[r.workout_id], byPar[r.workout_id]);
+            return renderCard(r, byId[r.workout_id], byPar[r.workout_id], byKoi[r.workout_id]);
           }).join('');
         })
         .catch(function (err) {

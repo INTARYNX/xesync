@@ -374,6 +374,21 @@ body.rowing-dashboard {
   height: 15px;
 }
 
+/* A koi was landed: a small mark, the way the course of the day leaves
+   one. Red like the fish itself, because it is the fish. */
+.card-koi {
+  display: inline-flex;
+  align-items: center;
+  color: #ff8a5c;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.card-koi svg {
+  width: 16px;
+  height: 16px;
+}
+
 .card-score span {
   color: #666;
   font-weight: 600;

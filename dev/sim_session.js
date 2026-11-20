@@ -309,13 +309,34 @@ function sweepLift(opts) {
       });
       const luck = calibrate.luckStats(a, session.meta.steadyWindows);
       const times = a.tierTimes.map((x) => `×${x.m}@${Math.round(x.t)}`).join(' ');
+      // The koi: the push calls it, and the chain keeps it there.
+      const fish = a.state.fish.landed ? 'pêchée'
+        : (a.state.fish.present ? 'là' : '—');
       console.log(`    LIFT ${String(lift).padStart(4)}  max ×${a.summary.maxMultiplier}  ` +
         `score ${String(a.summary.score).padStart(7)}  ` +
-        `pushes ${a.state.pushes}  ` +
+        `pushes ${a.state.pushes}  carpe ${fish}  ` +
         `hasard σ ${luck ? luck.sd.toFixed(2) : '-'}  ${times || '(aucun palier)'}`);
     }
     console.log('');
   }
+
+  // The koi at the settings the game actually runs with. The sweep
+  // above moves the thresholds around to find them; this is what they
+  // are worth when they are left alone.
+  console.log('── la carpe, aux réglages actuels ───────────────────────────');
+  console.log('   la poussée appelle la carpe, et la chaîne la garde 15 s\n');
+  for (const profile of profiles) {
+    const session = buildSession({ profile, noise: opts.noise, rho: opts.rho, seed: opts.seed });
+    const a = calibrate.analyse(session.samples);
+    const fish = a.events.find((e) => e.type === 'fish_appeared');
+    const landed = a.events.find((e) => e.type === 'fish_landed');
+    console.log(`  ${profile.padEnd(8)} pushes ${String(a.state.pushes).padStart(2)}  ` +
+      `max ×${a.summary.maxMultiplier}  ` +
+      `carpe ${fish ? (landed ? `pêchée à ${Math.round(landed.t)} s` : `apparue à ${Math.round(fish.t)} s, jamais pêchée`)
+        : '—'}  ` +
+      `score ${a.summary.score}`);
+  }
+  console.log('');
 }
 
 // -- main -------------------------------------------------------------
