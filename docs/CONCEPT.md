@@ -271,19 +271,20 @@ zéro.
 
 ![les trois façons de ramer](images/game-panel.png)
 
-| | **ALONE** | **COACHED** | **THE RUN** |
+| | **JUST ROW** | **COACHING** | **JUST PLAY** |
 |---|---|---|---|
 | Le coaching (messages, jalons, défis) | | ✓ | |
 | Le score, la chaîne, le par du jour | | ✓ | ✓ |
 | Le fantôme, l'habillage, la carpe | | ✓ | ✓ |
 | Le jour qui tourne, la pluie, l'aurore | ✓ | ✓ | ✓ |
 
-- **ALONE** — les mesures, l'eau, et rien d'autre. La scène reste ce
+- **JUST ROW** — les mesures, l'eau, et rien d'autre. La scène reste ce
   qu'elle est, les collines restent rondes, la coque porte les couleurs
-  d'avant l'habillage.
-- **COACHED** — le coaching parle, et le jeu joue avec lui. C'est le
-  comportement d'origine de l'app.
-- **THE RUN** — le jeu joue, et ne dit rien : la chaîne fait bouger le
+  d'avant l'habillage. C'est l'ancien mode calme : le même silence, mais
+  cette fois il se lit comme un choix et pas comme un réglage.
+- **COACHING** — le coaching parle, et le jeu joue avec lui. C'est le
+  comportement d'origine de l'app, et le mode par défaut.
+- **JUST PLAY** — le jeu joue, et ne dit rien : la chaîne fait bouger le
   monde, le score compte, le fantôme est sur l'eau, la carpe vient.
 
 **Le jeu ne peut pas être à moitié.** Le score, le par du jour, le

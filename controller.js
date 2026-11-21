@@ -613,7 +613,7 @@ window.onWorkoutComplete = function (savedState, extra) {
 // The coaching mode used to be its own switch in the top bar, stored
 // under its own key. It is now one of the three ways to row (see
 // game_modes.js), and the mode that replaces it carries the same
-// silence: 'justRow' became 'alone'.
+// silence: 'justRow' became the mode of its own.
 function coachingModeKey() { return 'coachingMode_' + (ui.username || 'guest'); }
 
 
@@ -623,7 +623,7 @@ function coachingModeKey() { return 'coachingMode_' + (ui.username || 'guest'); 
 // ways to row (see game_modes.js), chosen on the screen that waits for
 // the first stroke. The choice is a same-device preference - plain
 // localStorage, no server, no migration.
-var gameMode = (typeof GameModes !== 'undefined') ? GameModes.defaultMode() : 'coached';
+var gameMode = (typeof GameModes !== 'undefined') ? GameModes.defaultMode() : 'coaching';
 
 function gameModeKey() { return 'xesync.gameMode.' + (ui.username || 'guest'); }
 function loadGameMode() {
@@ -633,10 +633,10 @@ function loadGameMode() {
     if (raw) { gameMode = GameModes.parse(raw); return; }
   } catch (e) {}
   // A rower who had chosen the calm mode keeps it: the calm mode is
-  // now ALONE - the same silence, and no game either.
+  // now JUST ROW - the same silence, and no game either.
   try {
     if (localStorage.getItem('coachingMode_' + (ui.username || 'guest')) === 'justRow') {
-      gameMode = 'alone';
+      gameMode = 'justRow';
     }
   } catch (e) {}
 }

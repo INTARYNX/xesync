@@ -37,20 +37,20 @@ test.describe('the three ways to row', () => {
     // Three choices, and one of them is the one.
     await expect(page.locator('#game-panel-rows .gi-row')).toHaveCount(3);
     await expect(page.locator('#game-panel-rows .gi-row.selected')).toHaveCount(1);
-    expect(await selected(page)).toBe('COACHED');
+    expect(await selected(page)).toBe('COACHING');
 
     // And nothing else: the scene and the measures are not on this screen.
     await expect(page.locator('#screen-rowing.active')).toHaveCount(0);
   });
 
-  test('alone is the measures and nothing else', async ({ page }) => {
+  test('just row is the measures and nothing else', async ({ page }) => {
     test.setTimeout(40000);
     await boot(page);
     await connectToReady(page);
 
-    await page.locator('#game-panel-rows .gi-row').first().click();   // ALONE
+    await page.locator('#game-panel-rows .gi-row').first().click();   // JUST ROW
     await page.waitForTimeout(250);
-    expect(await selected(page)).toBe('ALONE');
+    expect(await selected(page)).toBe('JUST ROW');
 
     // The coaching is off.
     expect(await page.evaluate(() => Coaching.getMode())).toBe('justRow');
@@ -62,14 +62,14 @@ test.describe('the three ways to row', () => {
     expect(await page.evaluate(() => window.runState.dailyPar)).toBe(null);
   });
 
-  test('the run is the game, and says nothing', async ({ page }) => {
+  test('just play is the game, and says nothing', async ({ page }) => {
     test.setTimeout(40000);
     await boot(page);
     await connectToReady(page);
 
-    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // THE RUN
+    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // JUST PLAY
     await page.waitForTimeout(250);
-    expect(await selected(page)).toBe('THE RUN');
+    expect(await selected(page)).toBe('JUST PLAY');
 
     // The coaching is off...
     expect(await page.evaluate(() => Coaching.getMode())).toBe('justRow');
@@ -90,7 +90,7 @@ test.describe('the three ways to row', () => {
     // The day's index, the same one the scene is given.
     const day = await page.evaluate(() => DailyCourse.forDate(new Date()).dayIndex);
 
-    await page.locator('#game-panel-rows .gi-row').first().click();   // ALONE
+    await page.locator('#game-panel-rows .gi-row').first().click();   // JUST ROW
     await page.waitForTimeout(200);
     await startSimulatedSession(page);
 
@@ -104,9 +104,9 @@ test.describe('the three ways to row', () => {
     await boot(page);
     await connectToReady(page);
 
-    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // THE RUN
+    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // JUST PLAY
     await page.waitForTimeout(250);
-    expect(await page.evaluate(() => window.gameMode)).toBe('run');
+    expect(await page.evaluate(() => window.gameMode)).toBe('play');
 
     await page.reload();
     await page.locator('#boot-splash').waitFor({ state: 'hidden' });
@@ -115,6 +115,6 @@ test.describe('the three ways to row', () => {
     await page.locator('#screen-ready.active').waitFor({ state: 'visible' });
     await page.waitForTimeout(400);
 
-    expect(await selected(page)).toBe('THE RUN');
+    expect(await selected(page)).toBe('JUST PLAY');
   });
 });

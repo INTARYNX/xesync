@@ -4,19 +4,20 @@
 // The game layer is not something the rower has to accept, and the
 // coaching is not either. There are three ways to row:
 //
-//   ALONE   - the measures, the water, and nothing else. No voice, no
-//             game: the scene stays as it is, the hills stay round,
-//             the boat wears the colours it had before there was a
-//             dressing.
+//   JUST ROW  - the measures, the water, and nothing else. No voice, no
+//               game: the scene stays as it is, the hills stay round,
+//               the boat wears the colours it had before there was a
+//               dressing. This is the calm mode the app already had,
+//               renamed so it reads as a choice and not as a setting.
 //
-//   COACHED - the coaching talks - messages, milestones, the "sprint
-//             X m" challenge - and the game plays with it. This is
-//             what the app did before any of this.
+//   COACHING  - the coaching talks - messages, milestones, the "sprint
+//               X m" challenge - and the game plays with it. This is
+//               what the app did before any of this.
 //
-//   THE RUN - the game plays, and says nothing. The chain still makes
-//             the world move, the score still counts, the ghost is
-//             still on the water and the koi still comes: none of it
-//             is ever said.
+//   JUST PLAY - the game plays, and says nothing. The chain still makes
+//               the world move, the score still counts, the ghost is
+//               still on the water and the koi still comes: none of it
+//               is ever said.
 //
 // The rower chooses on the screen that waits for the first stroke, and
 // the choice is the phone's own - a same-device preference, like the
@@ -42,22 +43,22 @@ var GameModes = (function () {
   // way a session belongs together.
   var MODES = [
     {
-      key: 'alone',
-      label: 'ALONE',
+      key: 'justRow',
+      label: 'JUST ROW',
       hint: 'the measures, the water, and nothing else',
       coaching: false,
       game: false
     },
     {
-      key: 'coached',
-      label: 'COACHED',
+      key: 'coaching',
+      label: 'COACHING',
       hint: 'the coaching talks, and the game plays with it',
       coaching: true,
       game: true
     },
     {
-      key: 'run',
-      label: 'THE RUN',
+      key: 'play',
+      label: 'JUST PLAY',
       hint: 'the game plays, and says nothing',
       coaching: false,
       game: true
@@ -66,7 +67,7 @@ var GameModes = (function () {
 
   // What the app does by default: the coaching and the game, the way
   // the app behaved before the modes existed.
-  var DEFAULT = 'coached';
+  var DEFAULT = 'coaching';
 
   function keys() {
     var out = [];
