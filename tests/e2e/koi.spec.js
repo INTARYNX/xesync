@@ -93,7 +93,7 @@ test('the koi is drawn on its own canvas, not the shader\'s', async ({ page }) =
   expect(after.opaque).toBeLessThan(after.total * 0.2);
 });
 
-test('the koi clears from its canvas once it has swum away', async ({ page }) => {
+test('the koi clears from its canvas once it has dived away', async ({ page }) => {
   await loadFixture(page);
   await page.evaluate(() => { initRowing(); setFish({ present: true, hold: 0.0 }); });
   await page.waitForTimeout(300);
@@ -144,4 +144,26 @@ test('the koi comes closer to the boat as the chain is held', async ({ page }) =
   // The catch is something you watch happen: the closer the chain is
   // held, the closer the koi comes to the boat.
   expect(near).toBeLessThan(far - 0.05);
+});
+
+test('the koi goes transparent where the boat caught it', async ({ page }) => {
+  await loadFixture(page);
+  await page.evaluate(() => { initRowing(); setFish({ present: true, hold: 1.0 }); });
+  await page.waitForTimeout(600);
+  const before = await koiPixelStats(page);
+  expect(before.opaque).toBeGreaterThan(50);
+  const xBefore = await page.evaluate(() => RowingAnimation._internals.fishX());
+
+  // Caught: the koi is taken aboard. It goes transparent where the boat
+  // caught it - it does not swim off down the river.
+  await page.evaluate(() => { setFish({ present: false, landed: true }); });
+  await page.waitForTimeout(700);
+  const half = await koiPixelStats(page);
+  expect(half.opaque).toBeGreaterThan(0);
+  expect(half.opaque).toBeLessThan(before.opaque);
+  const xHalf = await page.evaluate(() => RowingAnimation._internals.fishX());
+  expect(Math.abs(xHalf - xBefore)).toBeLessThan(0.01);
+
+  await page.waitForTimeout(1400);
+  expect((await koiPixelStats(page)).opaque).toBe(0);
 });

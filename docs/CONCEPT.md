@@ -288,7 +288,9 @@ Trois choses que ces images ont fait corriger :
   pleine eau, à l'instant où la chaîne l'appelait. Elle **remonte des
   profondeurs**, elle **se rapproche du bateau** à mesure que la chaîne est
   tenue, et elle **plonge** quand la chaîne casse — au lieu de disparaître
-  d'un coup. La capture est quelque chose qu'on regarde se produire.
+  d'un coup. La capture est quelque chose qu'on regarde se produire. Quand le
+  bateau l'attrape, elle **devient transparente sur place** : embarquée, pas
+  fugitive.
 - **les lucioles étaient des lanternes.** Roses, bleues et blanches, avec un
   halo deux fois trop large. Elles sont **jaunes**, et le halo fait la moitié
   de la taille.

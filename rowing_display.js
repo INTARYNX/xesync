@@ -55,7 +55,7 @@ var RowingAnimation = (function() {
     var fishOn = 0;
     var fishHold = 0;
     var fishFade = 0;
-    var fishExit = 0;          // counts down while it swims away
+    var fishExit = 0;          // counts down while it goes transparent
     var fishDive = 0;          // counts down while it dives back down
     var fishLandedSeen = false;
     var fishX = FISH_X;
@@ -69,7 +69,7 @@ var RowingAnimation = (function() {
     var FISH_CATCH_X = 0.12;
     // How deep it starts, below its station, when it surfaces.
     var FISH_RISE_DEPTH = 0.11;
-    // How long it takes to swim away once it has been landed.
+    // How long it takes to go transparent once it has been caught.
     var FISH_EXIT_S = 1.6;
     // How long it takes to sink back down when the chain breaks.
     var FISH_DIVE_S = 1.4;
@@ -1227,12 +1227,12 @@ var RowingAnimation = (function() {
         }
 
         // The koi. It keeps its station ahead of the boat, with a slow
-        // sway, and when the session has landed it, it swims away. A
-        // koi that dived is simply gone: no animation, no farewell.
+        // sway. When the boat catches it, it goes transparent where it
+        // was caught - taken aboard, not swimming off. A koi that dived
+        // goes back down into the depths.
         if (fishExit > 0) {
             fishExit = Math.max(0, fishExit - dt);
             fishFade = fishExit / FISH_EXIT_S;
-            fishX += dt * 0.30;
         } else if (fishDive > 0) {
             // The chain broke. It goes back down into the depths it came
             // from, rather than blinking out of the picture.
@@ -1578,8 +1578,8 @@ var RowingAnimation = (function() {
         },
         // The koi. The game layer says whether it is there and how
         // close it is to being landed; the scene swims it, and says
-        // nothing. A koi that was landed swims away; a koi that dived
-        // goes back down into the depths.
+        // nothing. A koi that was caught goes transparent where the boat
+        // caught it; a koi that dived goes back down into the depths.
         setFish: function(st) {
             var present = !!(st && st.present);
             var landed = !!(st && st.landed);
