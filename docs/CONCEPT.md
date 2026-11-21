@@ -256,8 +256,42 @@ Et surtout, **le décor répond** :
   Ils sont posés sur la même ligne de crête que les pins (la math du shader
   portée en JS), et échantillonnée aux deux bords de leur emprise, pour qu'une
   maison à pied plat ne se retrouve pas en équilibre sur une seule pointe.
+  Ils sont sur la **crête du milieu**, pas sur celle du premier plan : posés sur
+  la crête la plus rapide du paysage, un village filait deux fois plus vite que
+  les collines qu'il habite, et lisait comme un autocollant qui glisse sur le
+  décor. Au milieu du tableau, ils défilent à la vitesse du paysage (0,22 au
+  lieu de 0,40), et le premier plan garde sa vitesse — c'est le premier plan,
+  et la vitesse est le but du jeu.
 
 ![collines rondes / pics anguleux](images/scene-peaks.png)
+
+### La scène, en mouvement
+
+La scène n'a été regardée qu'en photos fixes jusque-là. Elle tourne maintenant :
+[`tests/e2e/scene-loop.js`](../tests/e2e/scene-loop.js) charge la vraie page,
+laisse tourner la vraie boucle d'animation et saisit l'image composée après
+chaque dessin (le WebGL, puis le décor par-dessus, puis la carpe par-dessus) —
+c'est l'app, en mouvement, pas une reconstitution.
+
+![la scène qui roule](images/scene-loop.gif)
+
+Trois choses que ces images ont fait corriger :
+
+- **le fantôme ramait à l'envers.** Il avait sa propre pose — un torse qui ne
+  bougeait pas, une rame qui balayait dans l'autre sens — et passait pour un
+  miroir du rameur plutôt que pour un rival. Il prend maintenant les **mêmes
+  keyframes** que le joueur, à sa propre phase : mêmes sept articulations,
+  même œillet de rame, même pale. Sa phase est remise sur la piste du joueur
+  avant de partir au shader, parce que le profil compte ses tractions depuis la prise
+  d'eau et le traqueur les compte depuis la fin de l'appui.
+- **la carpe apparaissait de nulle part.** Elle était déjà à sa station, en
+  pleine eau, à l'instant où la chaîne l'appelait. Elle **remonte des
+  profondeurs**, elle **se rapproche du bateau** à mesure que la chaîne est
+  tenue, et elle **plonge** quand la chaîne casse — au lieu de disparaître
+  d'un coup. La capture est quelque chose qu'on regarde se produire.
+- **les lucioles étaient des lanternes.** Roses, bleues et blanches, avec un
+  halo deux fois trop large. Elles sont **jaunes**, et le halo fait la moitié
+  de la taille.
 
 ---
 
@@ -356,14 +390,23 @@ Deux couches qui ne se connaissent pas :
 
 - **Le rendu animé n'a jamais été vu sur un vrai GPU.** Le sandbox de
   développement n'a pas de GPU : le shader est compilé, lié et comparé pixel
-  par pixel dans un vrai contexte WebGL (`tests/e2e/shader.spec.js`), mais le
-  mouvement lui-même — la traînée qui grandit, le fantôme qui dérive, le
-  balayage de livrée — n'a été vu que par le code. **C'est la première chose à
-  regarder sur le téléphone.**
+  par pixel dans un vrai contexte WebGL (`tests/e2e/shader.spec.js`), et
+  `tests/e2e/scene-loop.js` en tire une animation complète (l'app réelle, au
+  ralenti) — mais sur un vrai GPU, **la première chose à regarder sur le
+  téléphone**. La scène ne s'est jamais vue qu'à 0,6 image par seconde.
 - **Le bruit réel du XEBEX est inconnu.** Les constantes sont calibrées sur une
   grille simulée (`dev/sim_session.js`, `dev/calibrate.js`), pas sur une séance
   réelle : elles sont justes *à l'intérieur de la grille*, et une vraie séance
   permettrait de les corriger.
+- **Le retard de l'animation est mesuré, mais pas jusqu'au bout.** Le traqueur
+  accroche le cycle de rame aux ticks du rameur, qui arrivent **une fois par
+  seconde** et disent seulement « une traction a eu lieu » : chaque traction est
+  donc connue à la demi-seconde près, et le filtre ramène ça à environ 0,1 s de
+  tremblement. `dev/phase_lag.js` le mesure : **0,09 à 0,19 s** en allure
+  stable, **0,23 s** sur une rampe de tempo (le cas d'un rameur qui pousse — il
+  regarde l'animation à ce moment-là). Ce qui reste **sur le bateau**, en plus,
+  c'est le délai de livraison du Bluetooth, sous l'app. La seule chose que le
+  logiciel ne peut pas faire, c'est devenir plus fin que le paquet.
 - **Le score n'est pas comparable entre personnes**, et le fantôme n'est pas
   encore fair au-delà de 400 m d'écart.
 
