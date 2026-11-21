@@ -261,7 +261,42 @@ Et surtout, **le décor répond** :
 
 ---
 
-## 9. Ce que le jeu ne fera jamais
+## 9. Le jeu devient optionnel
+
+La couche de jeu n'est pas une religion. Chaque pièce se coupe, et les
+interrupteurs sont sur **l'écran qui attend la première rame** — celui qui
+dit *ne rame pas avant le départ*, parce qu'une séance part toujours à
+froid : le score, la chaîne et l'élévation recommencent à zéro, quoi que
+le rameur ait fait avant.
+
+![les interrupteurs du jeu](images/game-panel.png)
+
+*Les interrupteurs, sur l'écran d'attente. (Le fond est une image de la
+scène rendue hors ligne, pas une capture.)*
+
+| Interrupteur | Ce qu'il éteint |
+|---|---|
+| `COACHING` | les messages, les jalons et les défis |
+| `SCORE` | la puce (score, anneau de chaîne, barre d'élévation), le score au bilan, le score sur la carte |
+| `DAILY PAR` | le par du jour : la coche sur l'anneau, la marque sur la carte |
+| `GHOST` | le fantôme dans la scène, et la ligne de résultat |
+| `DRESSING` | livrée, maillot, thème de l'heure et décor : la scène porte ce qu'elle portait avant l'habillage |
+| `KOI` | la carpe : la poussée n'appelle plus rien |
+
+**Éteint veut dire éteint.** Pas de score affiché, pas de score enregistré
+(donc pas de score sur la carte de séance), pas de marque de carpe. Le ciel,
+lui, suit toujours le jour : la météo est celle de la scène, pas celle du
+jeu.
+
+**Un interrupteur qu'on n'a pas touché suit le mode.** En mode calme le jeu
+est éteint par défaut — comme il l'a toujours été — et revenir en mode
+coaching le rallume. Un interrupteur touché à la main, lui, survit au mode :
+c'est vous qui avez tranché.
+
+L'état est celui du téléphone (comme le mode coaching) : rien n'est
+synchronisé, rien n'est demandé au serveur.
+
+## 10. Ce que le jeu ne fera jamais
 
 - ❌ **Pas de séance d'entraînement.** Aucun intervalle, aucune pyramide, aucune
   cible de distance, aucun chronomètre de série, aucun écran de préparation. On
@@ -280,7 +315,7 @@ Et surtout, **le décor répond** :
 
 ---
 
-## 10. Comment c'est fait
+## 11. Comment c'est fait
 
 Deux couches qui ne se connaissent pas :
 
@@ -293,11 +328,14 @@ Deux couches qui ne se connaissent pas :
 
 - **Les règles sont pures** : `run_score.js` (score, chaîne, poussée, carpe),
   `daily_course.js` (Course du Jour), `ghost.js` (Fantôme), `costume.js`
-  (habillage) — quatre modules sans DOM, sans réseau, sans timers, testés sans
-  navigateur (`node --test tests/*.test.js`).
+  (habillage), `game_modes.js` (les interrupteurs) — cinq modules sans DOM, sans
+  réseau, sans timers, testés sans navigateur (`node --test tests/*.test.js`).
 - **Un seul point de contact** avec la scène : `RunScore.chainLevel(state)` →
   `setChainLevel(level)` → l'uniform `u_chain`. Le coaching ignore que la scène
   existe ; la scène ignore qu'on rame.
+- **Les interrupteurs agissent sur la règle, pas sur l'affichage** :
+  `RunScore.setFishEnabled()`, `Costume.plain()`, et le `runScore` du payload
+  sans son score. Éteint, ce n'est pas caché — c'est absent.
 - **La carpe et les repères sont en 2D**, sur leurs propres `<canvas>` posés
   au-dessus du canvas WebGL : un chemin de Bézier se dessine à la main, une
   SDF ne se dessine pas. La géométrie du bateau, elle, reste dans le shader.
@@ -308,7 +346,7 @@ Deux couches qui ne se connaissent pas :
 
 ---
 
-## 11. Ce qui n'est pas encore vérifié
+## 12. Ce qui n'est pas encore vérifié
 
 - **Le rendu animé n'a jamais été vu sur un vrai GPU.** Le sandbox de
   développement n'a pas de GPU : le shader est compilé, lié et comparé pixel
