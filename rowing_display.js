@@ -430,15 +430,19 @@ var RowingAnimation = (function() {
         return lerp(rounded, tri, sharp);
     }
 
-    // The same line the shader's nearest pine band stands on (horizon +
-    // 0.01, warped by the peaks and a touch of noise). sc is the
-    // scrolled x (screen-fraction u, minus the world's own scroll) -
-    // see the GLSL "Pines along the nearest ridge" block.
+    // The same line the shader's middle-distance band stands on: the
+    // LAYER at DEPTH 0.51 - LAYER(0.09, 0.014, 28.0, 0.5, 0.51, 0.22)
+    // in the GLSL. sc is the scrolled x (screen-fraction u, minus the
+    // world's own scroll).
+    //
+    // The landmarks used to stand on the nearest ridge, the one the
+    // pines stand on, which moves at nearly twice the pace of the land
+    // they are part of: a village running away from its own hillside.
     function ridgeLineY(sc, sharpVal, agitationVal) {
-        var baseY = 0.51;
-        var pp = peakProfileJS(sc * 44.0 + 2.0, sharpVal);
+        var baseY = 0.59;                    // horizon(0.5) + 0.09
+        var pp = peakProfileJS(sc * 28.0 + 0.5, sharpVal);
         var nz = noiseJS(sc * 8.0, baseY * 5.0) * 0.5 - 0.25;
-        return baseY + (pp + nz) * 0.007 * agitationVal;
+        return baseY + (pp + nz) * 0.014 * agitationVal;
     }
 
     // The same night-darkening the shader applies to the land (see
@@ -708,7 +712,11 @@ var RowingAnimation = (function() {
         var treeRGB255 = [costume.biome.tree[0] * 255, costume.biome.tree[1] * 255,
                            costume.biome.tree[2] * 255];
 
-        var scroll = flow * 0.40;
+        // The landmarks stand on the middle-distance band, so they scroll
+        // at that band's pace - the same 0.22 the shader gives it, and
+        // nearly half the speed of the foreground ridge they used to
+        // ride on.
+        var scroll = flow * 0.22;
         var firstK = Math.floor(SCENERY_FREQ * (-0.12 - scroll)) - 1;
         var lastK = Math.ceil(SCENERY_FREQ * (1.12 - scroll)) + 1;
         var windT = (timeWrapped / TIME_WRAP) * (TAU_JS * WINDMILL_TURNS_PER_WRAP);

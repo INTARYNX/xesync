@@ -57,17 +57,25 @@ test('the GLSL and JS hash/noise/peakProfile use the same constants', () => {
   expect(js).toContain('(x + 1.5707963) / TAU_JS + 0.5');
   expect(js).toContain('* 4.0 - 1.0');
 
-  // The pine band's own ridge line (not the LAYER macro - see its
-  // comment: "same line as the last LAYER"), and ridgeLineY's port of
-  // it, each naming the same baseY/frequency/phase/amplitude constants.
+  // The band the landmarks stand on: the shader's own LAYER at
+  // DEPTH 0.51 - the middle distance, behind the foreground ridge the
+  // pines stand on - and ridgeLineY's port of it, each naming the same
+  // baseY/frequency/phase/amplitude constants, and each scrolling at
+  // that band's own pace.
+  expect(html).toContain('LAYER(0.09, 0.014, 28.0, 0.5,  0.51, 0.22)');
+  expect(html).toContain('float scrolled = u - flow * SPD;');
+  expect(js).toContain('var baseY = 0.59;'); // horizon(0.5) + 0.09, baked in on the JS side
+  expect(js).toContain('peakProfileJS(sc * 28.0 + 0.5, sharpVal)');
+  expect(js).toContain('noiseJS(sc * 8.0, baseY * 5.0)');
+  expect(js).toContain('* 0.014 * agitationVal;');
+  // The scroll has to be that band's own speed, or the landmarks slide
+  // along the hillside instead of standing on it.
+  expect(js).toContain('flow * 0.22');
+
+  // The pine band keeps its own line, on the foreground ridge.
   expect(html).toContain('float baseY = horizon + 0.01;');
   expect(html).toContain('peakProfile(sc * 44.0 + 2.0, u_sharp)');
-  expect(html).toContain('noise(vec2(sc * 8.0, baseY * 5.0))');
   expect(html).toContain('* 0.007 * agitation;');
-  expect(js).toContain('var baseY = 0.51;'); // horizon(0.5) + 0.01, baked in on the JS side
-  expect(js).toContain('peakProfileJS(sc * 44.0 + 2.0, sharpVal)');
-  expect(js).toContain('noiseJS(sc * 8.0, baseY * 5.0)');
-  expect(js).toContain('* 0.007 * agitationVal;');
 });
 
 // wrapCoord()'s own job (mod(p, 1024.0), both sides true mathematical
