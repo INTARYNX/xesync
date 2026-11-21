@@ -2,14 +2,14 @@
 // game_modes_view.js - the switches of the game layer, on the screen
 // that waits for the first stroke.
 //
-// The panel says one thing before the session starts: do not row yet,
+// That screen has a job of its own: the rower is asked not to row yet,
 // because a session always starts cold - the score, the chain and the
-// lift all begin at zero whatever the rower did before. And it holds
-// the switches.
+// lift all begin at zero whatever was done before. And it holds the
+// switches.
 //
-// It is a card that collapses into a small pill once the rower is
-// rowing: a card of switches over a session would be in the way. The
-// pill stays, to open it again.
+// It is a screen of its own, not a card over the scene: the rowing
+// screen belongs to the session, and the rower should not have to look
+// at a panel of switches to reach the water.
 //
 // Reads what controller.js hands it, decides nothing itself - same
 // contract as coaching_view.js.
@@ -18,12 +18,8 @@
 var GameModesView = (function () {
   'use strict';
 
-  var expanded = true;
-
-  function root() { return document.getElementById('game-init'); }
-  function body() { return document.getElementById('game-init-body'); }
-  function toggleBtn() { return document.getElementById('game-init-toggle'); }
-  function rowsHost() { return document.getElementById('game-init-rows'); }
+  function panel() { return document.getElementById('game-panel'); }
+  function rowsHost() { return document.getElementById('game-panel-rows'); }
 
   // One row: a label, a line of explanation, and a switch. The
   // explanation is not decoration - a switch nobody understands is a
@@ -97,8 +93,7 @@ var GameModesView = (function () {
     // The first switch is the coaching mode, the rest are the features
     // in the order they were built.
     if (switches.length) {
-      var calm = isCalmMode();
-      setSwitch(switches[0], !calm);
+      setSwitch(switches[0], !isCalmMode());
     }
     if (typeof GameModes !== 'undefined') {
       for (var i = 0; i < GameModes.FEATURES.length; i++) {
@@ -113,39 +108,20 @@ var GameModesView = (function () {
     sw.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
-  // Expanded: the card with the instruction and the switches.
-  // Collapsed: a small pill, so the scene is clear while rowing.
-  function setExpanded(on) {
-    expanded = !!on;
-    var el = root();
-    if (el) el.classList.toggle('collapsed', !expanded);
-  }
-
-  function isExpanded() { return expanded; }
-
-  function toggle() { setExpanded(!expanded); }
-
-  // The screen that waits for the first stroke: the card is open, and
-  // the rower is told not to row yet.
+  // The screen that waits for the first stroke: the card is built and
+  // shows the state the rower chose last time.
   function showWaiting() {
     buildRows();
-    setExpanded(true);
-    var el = root();
-    if (el) el.classList.add('visible');
     if (typeof renderGameModes === 'function') renderGameModes();
   }
 
-  // The session has started: the card gets out of the way, the pill
-  // stays - the rower can always open it again.
-  function hideWaiting() {
-    setExpanded(false);
-  }
+  // The session has started: the screen goes away with it, and the game
+  // keeps whatever the rower chose.
+  function hideWaiting() {}
 
   return {
     showWaiting: showWaiting,
     hideWaiting: hideWaiting,
-    render: render,
-    toggle: toggle,
-    isExpanded: isExpanded
+    render: render
   };
 })();

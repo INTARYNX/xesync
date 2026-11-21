@@ -401,59 +401,43 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
   .ftms-btn { padding: 10px; font-size: 0.85em; flex: 1; }
 }
 /* ── The game switches ──────────────────────────────────────────────
-   The card lives on the screen that waits for the first stroke, under
-   the top bar and to the right: the scene is a canvas underneath, and
-   the rower should still see the water. The card collapses into a
-   small pill once the session is running.                            */
+   The card that configures the game layer. It has a screen of its
+   own - the one that waits for the first stroke - because the rowing
+   screen belongs to the session: the scene, the measures and the
+   score chip live there, and the rower should not have to look at a
+   card of switches to get to them.                             */
 
-.game-init {
-  position: absolute;
-  top: 64px;
-  right: 10px;
-  /* Above the coaching banner (z-index 15) and the phase strip (10):
-     the card is what the rower is reading at that moment. */
-  z-index: 20;
-  width: min(86vw, 320px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  pointer-events: none;
-}
-.game-init .gi-body,
-.game-init .gi-toggle { pointer-events: auto; }
+#screen-ready { padding: 12px; }
 
-.gi-body {
-  width: 100%;
+.game-panel {
+  width: min(94%, 430px);
   box-sizing: border-box;
-  padding: 12px 14px;
-  background: rgba(8, 10, 16, 0.88);
+  padding: 12px 16px;
+  background: rgba(8, 10, 16, 0.92);
   border: 1px solid #1e2430;
   border-radius: 10px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: none;
 }
-.game-init:not(.collapsed) .gi-body { display: block; }
 
-.gi-head { border-bottom: 1px solid #1a202b; padding-bottom: 8px; }
+.gi-head { border-bottom: 1px solid #1a202b; padding-bottom: 6px; }
 .gi-title {
-  font-size: 0.82em;
+  font-size: 0.8em;
   letter-spacing: 0.18em;
   color: #00A2E8;
 }
 .gi-sub {
-  font-size: 0.72em;
+  font-size: 0.68em;
   color: #9aa4b2;
-  margin-top: 4px;
+  margin-top: 3px;
   letter-spacing: 0.02em;
 }
 
+/* Compact on purpose: the app is landscape-locked, and on a phone the
+   whole card has to fit in ~360px of height. */
 .gi-rows {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 5px;
 }
 .gi-row {
   display: flex;
@@ -462,14 +446,14 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
   gap: 10px;
 }
 .gi-label {
-  font-size: 0.76em;
+  font-size: 0.72em;
   letter-spacing: 0.12em;
   color: #d7dce4;
 }
 .gi-hint {
-  font-size: 0.66em;
+  font-size: 0.62em;
   color: #6b7280;
-  margin-top: 3px;
+  margin-top: 2px;
   letter-spacing: 0.01em;
 }
 
@@ -478,8 +462,8 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
 .gi-switch {
   flex: 0 0 auto;
   position: relative;
-  width: 46px;
-  height: 24px;
+  width: 44px;
+  height: 22px;
   padding: 0;
   border-radius: 999px;
   border: 1px solid #2a3240;
@@ -491,25 +475,11 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #5a6472;
   transition: transform .15s ease, background .15s ease;
 }
 .gi-switch.on { border-color: #00A2E8; background: rgba(0, 162, 232, 0.16); }
 .gi-switch.on::after { transform: translateX(22px); background: #00A2E8; }
-
-.gi-toggle {
-  align-self: flex-end;
-  padding: 4px 12px;
-  font-family: inherit;
-  font-size: 0.68em;
-  letter-spacing: 0.18em;
-  color: #8a93a2;
-  background: rgba(8, 10, 16, 0.8);
-  border: 1px solid #232a36;
-  border-radius: 999px;
-  cursor: pointer;
-}
-.gi-toggle:active { color: #00A2E8; border-color: #00A2E8; }

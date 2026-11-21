@@ -27,11 +27,14 @@ function render() {
   // Top bar buttons
   if (showBar) {
     var onConnecting = ui.screen === 'connecting';
-    setDisplay('tbar-scan-btn',       !onConnecting && !ui.connected && !ui.scanning);
+    // The ready screen carries the coaching switch of its own, and
+    // "row again" would only restart what it just did.
+    var onReady = ui.screen === 'ready';
+    setDisplay('tbar-scan-btn',       !onConnecting && !onReady && !ui.connected && !ui.scanning);
     setDisplay('tbar-debug-btn',      ui.debug && !onConnecting);
-    setDisplay('tbar-row-btn',        ui.connected);
+    setDisplay('tbar-row-btn',        ui.connected && !onReady);
     setDisplay('tbar-disconnect-btn', ui.connected);
-    setDisplay('tbar-coaching-btn',   ui.connected);
+    setDisplay('tbar-coaching-btn',   ui.connected && !onReady);
     var coachingBtn = document.getElementById('tbar-coaching-btn');
     if (coachingBtn) {
       var justRow = typeof Coaching !== 'undefined' && Coaching.getMode() === 'justRow';

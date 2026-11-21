@@ -95,22 +95,22 @@
       <div class="big-label">RECONNECTING...</div>
       <button class="btn danger" onclick="doGiveUp()">STOP</button>
     </div>
+  </div>
 
-    <!-- The screen that waits for the first stroke. The session always
-         starts cold - the score, the chain and the lift all begin at
-         zero - so the rower is asked not to row yet. This is also where
-         the game layer is configured: the switches are here, in the
-         game's own vocabulary, and nowhere else. -->
-    <div id="game-init" class="game-init visible">
-      <div id="game-init-body" class="gi-body">
-        <div class="gi-head">
-          <div class="gi-title">READY TO ROW</div>
-          <div class="gi-sub">don't row yet - the session starts cold</div>
-        </div>
-        <div id="game-init-rows" class="gi-rows"></div>
+  <!-- ── READY ─────────────────────────────────────────────── -->
+  <!-- The screen that waits for the first stroke. The session always
+       starts cold - the score, the chain and the lift all begin at
+       zero - so the rower is asked not to row yet. This is also where
+       the game layer is configured: the switches are here, in the
+       game's own vocabulary, and nowhere else. Nothing else is on
+       screen: the scene and the measures wait for the real start. -->
+  <div id="screen-ready" class="screen">
+    <div id="game-panel" class="game-panel">
+      <div class="gi-head">
+        <div class="gi-title">READY TO ROW</div>
+        <div class="gi-sub">don't row yet - the session starts cold</div>
       </div>
-      <button id="game-init-toggle" class="gi-toggle" type="button"
-              onclick="toggleGamePanel()" aria-label="game settings">GAME</button>
+      <div id="game-panel-rows" class="gi-rows"></div>
     </div>
   </div>
 

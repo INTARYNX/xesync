@@ -30,6 +30,11 @@ async function bootLogin(page) {
 // Drives scan -> pick the fake device -> connect -> rowing screen.
 // Debug.fakeScan resolves after 1200ms, Debug.fakeConnect after 800ms
 // (debug.js) - both real setTimeouts, sped up by the installed fake clock.
+//
+// The app now lands on the screen that waits for the first stroke, and
+// only moves to the rowing screen when the session actually starts. So
+// this waits for the rowing screen, which means waiting for the first
+// strokes of the simulated session.
 async function connectToRower(page) {
   await page.locator('#tbar-scan-btn').click();
   await page.locator('.device-item').waitFor({ state: 'visible' });
@@ -37,4 +42,25 @@ async function connectToRower(page) {
   await page.locator('#screen-rowing.active').waitFor({ state: 'visible' });
 }
 
-module.exports = { boot, bootLogin, connectToRower };
+// The same drive, but stopping on the screen that waits for the first
+// stroke - the one that holds the game's switches.
+//
+// The simulator is silenced on the way in: it would otherwise start
+// rowing within a couple of seconds and take the app to the rowing
+// screen, and the session would start under the test's feet.
+async function connectToReady(page) {
+  await page.evaluate(() => { if (window.Debug) window.Debug.startSim = function () {}; });
+  await page.locator('#tbar-scan-btn').click();
+  await page.locator('.device-item').waitFor({ state: 'visible' });
+  await page.locator('.device-item').first().click();
+  await page.locator('#screen-ready.active').waitFor({ state: 'visible' });
+}
+
+// Lets the simulated session begin: from here the app moves to the
+// rowing screen.
+async function startSimulatedSession(page) {
+  await page.evaluate(() => { window.DebugSim.reset(); window.DebugSim.start(); });
+  await page.locator('#screen-rowing.active').waitFor({ state: 'visible' });
+}
+
+module.exports = { boot, bootLogin, connectToRower, connectToReady, startSimulatedSession };

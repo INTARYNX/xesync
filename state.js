@@ -20,6 +20,7 @@ var SCREEN_IDS = {
   home:       'screen-home',
   scan:       'screen-scan',
   connecting: 'screen-connecting',
+  ready:      'screen-ready',
   rowing:     'screen-rowing'
 };
 

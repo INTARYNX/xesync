@@ -425,16 +425,18 @@ function onConnectResult(msg) {
 
 function enterRowing() {
   showLoadingOverlay();
-  goScreen('rowing');
+  // The screen that waits for the first stroke. Not the rowing screen:
+  // that one belongs to the session, and a session starts cold - the
+  // score, the chain and the lift all begin at zero. The scene and the
+  // measures wait for the real start.
+  goScreen('ready');
   Coaching.setMode(loadCoachingMode());
   // The switches of the game layer, read before the screen that shows
   // them: the card has to draw the state the rower chose last time.
   loadGameModes();
   initRowing();
   initFtmsTracking();
-  // The screen that waits for the first stroke: the rower is asked not
-  // to row yet, because the session starts cold, and this is where the
-  // game layer is configured.
+  // The card of switches, on that screen.
   if (typeof GameModesView !== 'undefined') GameModesView.showWaiting();
   if (Debug.isOn()) Debug.startSim();
 }
@@ -667,9 +669,6 @@ function toggleGameFeature(key) {
   renderGameModes();
   applyGameModes();
 }
-function toggleGamePanel() {
-  if (typeof GameModesView !== 'undefined') GameModesView.toggle();
-}
 function renderGameModes() {
   if (typeof GameModesView !== 'undefined') GameModesView.render(gameModesResolved());
 }
@@ -784,7 +783,9 @@ window.onFtmsSessionStart = function () {
   // the ghost, the dressing and the koi to the session that is starting.
   applyGameModes();
 
-  // The screen that waited for the first stroke has done its job.
+  // The rower has started: the screen that waited for it has done its
+  // job, and the session gets the screen it belongs to.
+  goScreen('rowing');
   if (typeof GameModesView !== 'undefined') GameModesView.hideWaiting();
 };
 window.onFtmsPause = function () {

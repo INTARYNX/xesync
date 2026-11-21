@@ -490,7 +490,10 @@
     stopWatchdog();
     inactivityTimerId = setInterval(tickInactivity, INACTIVITY_TICK);
     goIdle();
-    showBanner('READY TO ROW !');
+    // No "READY TO ROW !" banner here: the app waits for the first
+    // stroke on a screen of its own (see controller.js's enterRowing),
+    // and that screen says it. A banner floating over it would say the
+    // same thing twice.
   }
 
   function ingestData(csv) {
