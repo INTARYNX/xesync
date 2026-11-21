@@ -99,11 +99,16 @@ test('the koi clears from its canvas once it has swum away', async ({ page }) =>
   await page.waitForTimeout(300);
   expect((await koiPixelStats(page)).opaque).toBeGreaterThan(50);
 
-  // present:false with no prior landing -> fishExit stays 0 -> fishFade
-  // drops to 0 on the very next frame (no swim-away animation to wait out).
+  // present:false with no prior landing -> the koi does not blink out:
+  // it dives back down into the depths it came from, and its canvas is
+  // cleared once it is gone.
   await page.evaluate(() => { setFish({ present: false }); });
   await page.waitForTimeout(150);
 
+  // Still on its way down: a koi that dived is not a koi that vanishes.
+  expect((await koiPixelStats(page)).opaque).toBeGreaterThan(0);
+
+  await page.waitForTimeout(2200);
   expect((await koiPixelStats(page)).opaque).toBe(0);
 });
 
@@ -124,4 +129,19 @@ test('the koi warms towards gold as the hold fills', async ({ page }) => {
   const lowRatio = low.avg[1] / Math.max(1, low.avg[0]);
   const highRatio = high.avg[1] / Math.max(1, high.avg[0]);
   expect(highRatio).toBeGreaterThan(lowRatio);
+});
+
+test('the koi comes closer to the boat as the chain is held', async ({ page }) => {
+  await loadFixture(page);
+  await page.evaluate(() => { initRowing(); setFish({ present: true, hold: 0.0 }); });
+  await page.waitForTimeout(400);
+  const far = await page.evaluate(() => RowingAnimation._internals.fishX());
+
+  await page.evaluate(() => { setFish({ present: true, hold: 1.0 }); });
+  await page.waitForTimeout(1200);
+  const near = await page.evaluate(() => RowingAnimation._internals.fishX());
+
+  // The catch is something you watch happen: the closer the chain is
+  // held, the closer the koi comes to the boat.
+  expect(near).toBeLessThan(far - 0.05);
 });
