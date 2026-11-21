@@ -1243,7 +1243,14 @@ var RowingAnimation = (function() {
         gl.uniform1f(uniforms.uScale,  spriteScale * (1.0 + chainPulse * PULSE_SCALE));
         gl.uniform1f(uniforms.uAspect, gl.canvas.clientWidth / gl.canvas.clientHeight);
         gl.uniform1f(uniforms.uGhostX,     ghostOffset);
-        gl.uniform1f(uniforms.uGhostPhase, ghostPhase);
+        // The ghost's phase is put on the same track as the player's
+        // before it reaches the shader: the profile counts its strokes
+        // from the catch, the tracker counts them from the finish, and
+        // the render maps the cycle the same way for both. Without this
+        // the ghost rows a third of a cycle out of step - and a third of
+        // a cycle is enough to make it look like a mirror.
+        gl.uniform1f(uniforms.uGhostPhase,
+                     toRenderPhase(wrap01(ghostPhase + FINISH_PHASE), driveFraction));
         gl.uniform1f(uniforms.uGhostOn,    ghostOn);
         dressScene();
         gl.uniform1f(uniforms.uLivery, liverySweep);

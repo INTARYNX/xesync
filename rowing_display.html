@@ -226,6 +226,20 @@
       return c * glow * tw * step(1.0 - dens, h3);
     }
 
+    // The rower's keyframes: eight poses around the stroke cycle, seven
+    // joints each (foot, knee, hip, shoulder, elbow, hand, head). The
+    // table is read by the loops in main(), which interpolate it - the
+    // player's pose, and the ghost's, come from the same table.
+    vec2 KF[56];
+
+    // Catmull-Rom through the keyframes: the joints keep their speed
+    // across a keyframe instead of changing direction abruptly.
+    vec2 catmull(vec2 a, vec2 b, vec2 a0, vec2 b1, float t) {
+      return 0.5 * (2.0 * a + (b - a0) * t +
+                    (2.0 * a0 - 5.0 * a + 4.0 * b - b1) * t * t +
+                    (3.0 * a - a0 - 3.0 * b + b1) * t * t * t);
+    }
+
     // Stars: one fine point per cell at most, each with its own size and
     // twinkle (whole cycles per u_time wrap). tt = u_time / 300.
     float starField(vec2 p, float tt){
@@ -600,7 +614,6 @@
       // rowing_display.js.
       float finishPhase = 0.375;
 
-      vec2 KF[56];
       KF[0]  = vec2(0.00, 0.00); KF[1]  = vec2(0.10, 0.55); KF[2]  = vec2(0.55, 0.45);
       KF[3]  = vec2(0.40, 1.30); KF[4]  = vec2(-0.30, 1.10); KF[5] = vec2(-0.95, 0.95);
       KF[6]  = vec2(0.45, 1.55);
@@ -633,20 +646,12 @@
         vec2 b = vec2(0.0);
         vec2 b1 = vec2(0.0);
         for (int k = 0; k < 8; k++) {
-          for (int q = 0; q < 7; q++) {
-            if (q == p) {
-              if (k == iPrev) a0 = KF[k * 7 + q];
-              if (k == i0)    a  = KF[k * 7 + q];
-              if (k == i1)    b  = KF[k * 7 + q];
-              if (k == iNext) b1 = KF[k * 7 + q];
-            }
-          }
+          if (k == iPrev) a0 = KF[k * 7 + p];
+          if (k == i0)    a  = KF[k * 7 + p];
+          if (k == i1)    b  = KF[k * 7 + p];
+          if (k == iNext) b1 = KF[k * 7 + p];
         }
-        // Catmull-Rom through the keyframes: the joints keep their speed
-        // across a keyframe instead of changing direction abruptly.
-        pts[p] = 0.5 * (2.0 * a + (b - a0) * t +
-                        (2.0 * a0 - 5.0 * a + 4.0 * b - b1) * t * t +
-                        (3.0 * a - a0 - 3.0 * b + b1) * t * t * t);
+        pts[p] = catmull(a, b, a0, b1, t);
       }
 
       float scale = 0.075 * u_scale;
@@ -863,7 +868,36 @@
       // live in a 0..1.55 space scaled by `scale`, so the ghost is the
       // same size as the boat it is racing.
       if (u_ghostOn > 0.5) {
-        float gCycle = 0.5 - 0.5 * cos(u_ghostPhase * TAU);   // catch -> finish
+        // The ghost rows the way the player rows: the same seven joints,
+        // the same keyframes, the same oarlock and the same blade - at
+        // the ghost's own phase, because the ghost rows at its own pace.
+        //
+        // Everything here is in the player's own units: the pose
+        // keyframes live in a 0..1.55 space scaled by `scale`, so the
+        // ghost is the same size as the boat it is racing.
+        vec2 gPts[7];
+        {
+          float gfIdx = u_ghostPhase * 8.0;
+          int gi0 = int(floor(gfIdx));
+          int gi1 = int(mod(float(gi0 + 1), 8.0));
+          int giPrev = int(mod(float(gi0 + 7), 8.0));
+          int giNext = int(mod(float(gi0 + 2), 8.0));
+          float gt = fract(gfIdx);
+          for (int p = 0; p < 7; p++) {
+            vec2 a0 = vec2(0.0);
+            vec2 a = vec2(0.0);
+            vec2 b = vec2(0.0);
+            vec2 b1 = vec2(0.0);
+            for (int k = 0; k < 8; k++) {
+              if (k == giPrev) a0 = KF[k * 7 + p];
+              if (k == gi0)    a  = KF[k * 7 + p];
+              if (k == gi1)    b  = KF[k * 7 + p];
+              if (k == giNext) b1 = KF[k * 7 + p];
+            }
+            gPts[p] = catmull(a, b, a0, b1, gt);
+          }
+        }
+
         vec2 gOrigin = origin + vec2(u_ghostX, 0.0);
         vec2 gBoat = boatCenter + vec2(u_ghostX, 0.0);
         vec2 gK = (P - gOrigin) / scale;
@@ -873,23 +907,27 @@
         float gHullMask = smoothstep(0.002, -0.002, gHull);
 
         // The rower, in the ghost's own cycle.
-        vec2 gSeat = vec2(0.0, 0.0);
-        vec2 gTorso = vec2(0.05 + 0.26 * gCycle, 0.95);
-        vec2 gHead = vec2(0.36 + 0.14 * gCycle, 1.36);
-        vec2 gHands = vec2(mix(-0.60, 1.05, gCycle), 0.45);
-        // The blade is on the opposite side of the lock from the hands:
-        // hands back means the blade is planted ahead in the water,
-        // hands forward means it has left the water behind.
-        vec2 gBlade = vec2(mix(3.2, -3.0, gCycle),
-                           mix(-0.80, 0.60, smoothstep(0.55, 0.95, gCycle)));
+        vec2 gHip = gPts[2];
+        vec2 gShoulder = gPts[3];
+        vec2 gElbow = gPts[4];
+        vec2 gHand = gPts[5];
+        vec2 gHead = gPts[6];
+        vec2 gLock = vec2(-0.4, 0.7);
+        vec2 gOarDir = normalize(gLock - gHand);
+        float gHandToLock = length(gLock - gHand);
+        float gPCycle = pow(u_ghostPhase, 0.7);
+        float gBladeCycle = 0.5 + 0.5 * cos(gPCycle * 2.0 * 3.14159265);
+        float gBladeArm = mix(0.24, 0.32, gBladeCycle) * u_scale;
+        vec2 gBlade = gHand + gOarDir * (gHandToLock + gBladeArm);
 
-        float gBody = sdSegment(gK, gSeat, gTorso) - 0.17;
-        float gArm = sdSegment(gK, gTorso, gHands) - 0.10;
+        float gBody = sdSegment(gK, gHip, gShoulder) - 0.17;
+        float gArm = sdSegment(gK, gShoulder, gElbow) - 0.10;
+        float gFore = sdSegment(gK, gElbow, gHand) - 0.10;
         float gHeadD = length(gK - gHead) - 0.20;
-        float gOar = sdSegment(gK, gHands, gBlade) - 0.05;
-
+        float gOar = sdSegment(gK, gHand, gBlade) - 0.05;
         float gSil = max(max(gHullMask, smoothstep(0.03, -0.03, gBody)),
-                         max(smoothstep(0.03, -0.03, gArm),
+                         max(max(smoothstep(0.03, -0.03, gArm),
+                                 smoothstep(0.03, -0.03, gFore)),
                              max(smoothstep(0.03, -0.03, gHeadD),
                                  smoothstep(0.03, -0.03, gOar))));
         // A cold blue, unmistakably not the player: it has to read as
