@@ -1022,11 +1022,15 @@ var RowingAnimation = (function() {
     var DEFAULT_PERIOD_S  = 2.5;   // first tick, no usable spm
     // Steady-state share of a tick's timing error taken into the finish time
     // (ALPHA) and the period (BETA); both start higher, see stroke(). Tuned
-    // on simulated 1 Hz packets: mean finish-pose error ~0.10-0.14 s steady,
-    // 0.23 s on an 18->30 spm ramp (peaks ~0.3 s and ~0.55 s). Lower BETA is
-    // quieter when steady but lags a tempo change more; higher is the reverse.
+    // on simulated 1 Hz packets, and measured by dev/phase_lag.js: the drawn
+    // rower is 0.09-0.19 s from the real one at a steady rate, and 0.23 s
+    // on an 18->30 spm ramp (peaks 0.33 s and 0.55 s). BETA was raised from
+    // 0.15 to 0.20 for the ramp - a rower who changes tempo is the one who
+    // is watching the animation - at the cost of 0.02 s of wobble when the
+    // rate is steady. Lower BETA is quieter when steady but lags a tempo
+    // change more; higher is the reverse.
     var ALPHA             = 0.3;
-    var BETA              = 0.15;
+    var BETA              = 0.2;
     var OUTLIER_FRACTION  = 0.4;   // tick timing error clamp, as a share of the period
     var AGREE_FRACTION    = 0.3;   // measured period within this of the spm guess: blend
     var GUESS_WEIGHT      = 0.7;   // ... weighting the guess this much
@@ -1138,6 +1142,10 @@ var RowingAnimation = (function() {
 
             isLocked: isLocked,
             period:   function () { return lock ? lock.period : null; },
+            // The time of the last stroke, as the tracker believes it.
+            // The harness reads it to see how far the belief drifts from
+            // the real stroke (dev/phase_lag.js).
+            finishT:  function () { return lock ? lock.finishT : null; },
             reset:    function () { lock = null; }
         };
     }
@@ -1651,6 +1659,8 @@ var RowingAnimation = (function() {
         surgeFactor: surgeFactor,
         driveFractionForSpm: driveFractionForSpm,
         FINISH_PHASE: FINISH_PHASE,
+        DRIVE_EASE_RATE: DRIVE_EASE_RATE,
+        DRIVE_FRACTION: DRIVE_FRACTION,
         // The four phases of the stroke, and which one a pose track
         // position falls in. Exposed for tests/rowing_phases.test.js.
         PHASES: PHASES,
