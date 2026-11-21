@@ -261,40 +261,41 @@ Et surtout, **le décor répond** :
 
 ---
 
-## 9. Le jeu devient optionnel
+## 9. Les trois façons de ramer
 
-La couche de jeu n'est pas une religion. Chaque pièce se coupe, et les
-interrupteurs sont sur **l'écran qui attend la première rame** — celui qui
-dit *ne rame pas avant le départ*, parce qu'une séance part toujours à
-froid : le score, la chaîne et l'élévation recommencent à zéro, quoi que
-le rameur ait fait avant.
+La couche de jeu n'est pas une religion, et le coaching non plus. Il y a
+**trois façons de ramer**, choisies sur l'écran qui attend la première
+rame — celui qui dit *ne rame pas avant le départ*, parce qu'une séance
+part toujours à froid : le score, la chaîne et l'élévation recommencent à
+zéro.
 
-![les interrupteurs du jeu](images/game-panel.png)
+![les trois façons de ramer](images/game-panel.png)
 
-*Les interrupteurs, sur l'écran d'attente. (Le fond est une image de la
-scène rendue hors ligne, pas une capture.)*
+| | **ALONE** | **COACHED** | **THE RUN** |
+|---|---|---|---|
+| Le coaching (messages, jalons, défis) | | ✓ | |
+| Le score, la chaîne, le par du jour | | ✓ | ✓ |
+| Le fantôme, l'habillage, la carpe | | ✓ | ✓ |
+| Le jour qui tourne, la pluie, l'aurore | ✓ | ✓ | ✓ |
 
-| Interrupteur | Ce qu'il éteint |
-|---|---|
-| `COACHING` | les messages, les jalons et les défis |
-| `SCORE` | la puce (score, anneau de chaîne, barre d'élévation), le score au bilan, le score sur la carte |
-| `DAILY PAR` | le par du jour : la coche sur l'anneau, la marque sur la carte |
-| `GHOST` | le fantôme dans la scène, et la ligne de résultat |
-| `DRESSING` | livrée, maillot, thème de l'heure et décor : la scène porte ce qu'elle portait avant l'habillage |
-| `KOI` | la carpe : la poussée n'appelle plus rien |
+- **ALONE** — les mesures, l'eau, et rien d'autre. La scène reste ce
+  qu'elle est, les collines restent rondes, la coque porte les couleurs
+  d'avant l'habillage.
+- **COACHED** — le coaching parle, et le jeu joue avec lui. C'est le
+  comportement d'origine de l'app.
+- **THE RUN** — le jeu joue, et ne dit rien : la chaîne fait bouger le
+  monde, le score compte, le fantôme est sur l'eau, la carpe vient.
 
-**Éteint veut dire éteint.** Pas de score affiché, pas de score enregistré
-(donc pas de score sur la carte de séance), pas de marque de carpe. Le ciel,
-lui, suit toujours le jour : la météo est celle de la scène, pas celle du
-jeu.
+**Le jeu ne peut pas être à moitié.** Le score, le par du jour, le
+fantôme, l'habillage et la carpe s'allument ensemble ou s'éteignent
+ensemble : il n'y a pas six interrupteurs, il y a trois façons de ramer.
 
-**Un interrupteur qu'on n'a pas touché suit le mode.** En mode calme le jeu
-est éteint par défaut — comme il l'a toujours été — et revenir en mode
-coaching le rallume. Un interrupteur touché à la main, lui, survit au mode :
-c'est vous qui avez tranché.
+**La météo n'appartient à personne.** Le cycle jour/nuit, la pluie et
+l'aurore tournent dans les trois modes : c'est la scène, pas le jeu. Seul
+le *par* du jour est une marque du jeu, et il s'éteint avec lui.
 
-L'état est celui du téléphone (comme le mode coaching) : rien n'est
-synchronisé, rien n'est demandé au serveur.
+Le choix est celui du téléphone (comme le mode coaching qu'il remplace) :
+rien n'est synchronisé, rien n'est demandé au serveur.
 
 ## 10. Ce que le jeu ne fera jamais
 
@@ -328,12 +329,12 @@ Deux couches qui ne se connaissent pas :
 
 - **Les règles sont pures** : `run_score.js` (score, chaîne, poussée, carpe),
   `daily_course.js` (Course du Jour), `ghost.js` (Fantôme), `costume.js`
-  (habillage), `game_modes.js` (les interrupteurs) — cinq modules sans DOM, sans
+  (habillage), `game_modes.js` (les trois façons de ramer) — cinq modules sans DOM, sans
   réseau, sans timers, testés sans navigateur (`node --test tests/*.test.js`).
 - **Un seul point de contact** avec la scène : `RunScore.chainLevel(state)` →
   `setChainLevel(level)` → l'uniform `u_chain`. Le coaching ignore que la scène
   existe ; la scène ignore qu'on rame.
-- **Les interrupteurs agissent sur la règle, pas sur l'affichage** :
+- **Un mode agit sur la règle, pas sur l'affichage** :
   `RunScore.setFishEnabled()`, `Costume.plain()`, et le `runScore` du payload
   sans son score. Éteint, ce n'est pas caché — c'est absent.
 - **La carpe et les repères sont en 2D**, sur leurs propres `<canvas>` posés

@@ -104,7 +104,7 @@ function applyCostume(count, course) {
   if (typeof Costume === 'undefined') return false;
   // With the dressing off, the scene wears what it wore before there
   // was a dressing: the boat's own colours, the first land, no grade.
-  var dressed = gameModesResolved().dressing;
+  var dressed = gameFeatures().dressing;
   var outfit = dressed ? Costume.outfit(count, course) : Costume.plain();
   var previous = currentLivery;
   currentLivery = outfit.livery;
@@ -430,10 +430,10 @@ function enterRowing() {
   // score, the chain and the lift all begin at zero. The scene and the
   // measures wait for the real start.
   goScreen('ready');
-  Coaching.setMode(loadCoachingMode());
-  // The switches of the game layer, read before the screen that shows
-  // them: the card has to draw the state the rower chose last time.
-  loadGameModes();
+  // The way to row, read before the screen that offers it: the card has
+  // to show the choice the rower made last time.
+  loadGameMode();
+  Coaching.setMode(gameFeatures().coaching ? 'coaching' : 'justRow');
   initRowing();
   initFtmsTracking();
   // The card of switches, on that screen.
@@ -610,73 +610,67 @@ window.onWorkoutComplete = function (savedState, extra) {
 // window.onFtms*/onBeforeSave hooks it calls if present - all the rule
 // logic lives in coaching.js, all the DOM in coaching_view.js.
 //
-// Mode is a same-device UI preference, not account data that needs to
-// survive a reinstall, so plain localStorage is enough here - it avoids
-// adding a new bridge action on both platforms just to flip one toggle.
+// The coaching mode used to be its own switch in the top bar, stored
+// under its own key. It is now one of the three ways to row (see
+// game_modes.js), and the mode that replaces it carries the same
+// silence: 'justRow' became 'alone'.
 function coachingModeKey() { return 'coachingMode_' + (ui.username || 'guest'); }
-function loadCoachingMode() {
-  try { return localStorage.getItem(coachingModeKey()) === 'justRow' ? 'justRow' : 'coaching'; }
-  catch (e) { return 'coaching'; }
-}
-function saveCoachingMode(mode) {
-  try { localStorage.setItem(coachingModeKey(), mode); } catch (e) {}
-}
-function toggleCoachingMode() {
-  var next = Coaching.getMode() === 'coaching' ? 'justRow' : 'coaching';
-  Coaching.setMode(next);
-  saveCoachingMode(next);
-  if (next === 'justRow') CoachingView.reset();
-  // The switches follow the mode: in the calm mode a feature nobody has
-  // touched is off, so the score chip goes with it - the way it always
-  // did. The run keeps being scored; only the display is quiet.
-  renderGameModes();
-  applyGameModes();
-  render();
-}
 
-// -- The switches of the game layer ------------------------------------
-//
-// The game layer is optional: the rower decides what they want to see.
-// The switches live on the screen that waits for the first stroke (see
-// game_modes_view.js), and they are a same-device preference like the
-// coaching mode - plain localStorage, no server, no migration.
-//
-// Two rules, from game_modes.js: off means off - not shown, not saved -
-// and a switch nobody has touched follows the mode.
-var gameModes = (typeof GameModes !== 'undefined') ? GameModes.empty() : {};
 
-function gameModesKey() { return 'xesync.gameModes.' + (ui.username || 'guest'); }
-function loadGameModes() {
+// -- The three ways to row ---------------------------------------------
+//
+// The game layer is optional, and so is the coaching: there are three
+// ways to row (see game_modes.js), chosen on the screen that waits for
+// the first stroke. The choice is a same-device preference - plain
+// localStorage, no server, no migration.
+var gameMode = (typeof GameModes !== 'undefined') ? GameModes.defaultMode() : 'coached';
+
+function gameModeKey() { return 'xesync.gameMode.' + (ui.username || 'guest'); }
+function loadGameMode() {
   if (typeof GameModes === 'undefined') return;
-  try { gameModes = GameModes.parse(localStorage.getItem(gameModesKey())); }
-  catch (e) { gameModes = GameModes.empty(); }
+  try {
+    var raw = localStorage.getItem(gameModeKey());
+    if (raw) { gameMode = GameModes.parse(raw); return; }
+  } catch (e) {}
+  // A rower who had chosen the calm mode keeps it: the calm mode is
+  // now ALONE - the same silence, and no game either.
+  try {
+    if (localStorage.getItem('coachingMode_' + (ui.username || 'guest')) === 'justRow') {
+      gameMode = 'alone';
+    }
+  } catch (e) {}
 }
-function saveGameModes() {
+function saveGameMode() {
   if (typeof GameModes === 'undefined') return;
-  try { localStorage.setItem(gameModesKey(), GameModes.serialize(gameModes)); } catch (e) {}
+  try { localStorage.setItem(gameModeKey(), GameModes.serialize(gameMode)); } catch (e) {}
 }
-// What is on, right now: the switches, resolved against the mode.
-function gameModesResolved() {
+// What is on, right now.
+function gameFeatures() {
   if (typeof GameModes === 'undefined') {
-    return { score: true, daily: true, ghost: true, dressing: true, koi: true };
+    return { coaching: true, score: true, daily: true, ghost: true, dressing: true, koi: true };
   }
-  return GameModes.resolve(gameModes, Coaching.getMode() === 'justRow');
+  return GameModes.features(gameMode);
 }
-function toggleGameFeature(key) {
-  var resolved = gameModesResolved();
-  GameModes.set(gameModes, key, !resolved[key]);
-  saveGameModes();
+function chooseGameMode(key) {
+  if (typeof GameModes === 'undefined' || !GameModes.has(key)) return;
+  gameMode = key;
+  saveGameMode();
+  var f = gameFeatures();
+  Coaching.setMode(f.coaching ? 'coaching' : 'justRow');
+  // A challenge running under the old mode has nothing to say in this
+  // one.
+  if (!f.coaching) CoachingView.reset();
   renderGameModes();
   applyGameModes();
 }
 function renderGameModes() {
-  if (typeof GameModesView !== 'undefined') GameModesView.render(gameModesResolved());
+  if (typeof GameModesView !== 'undefined') GameModesView.render(gameMode);
 }
 
-// What the switches do, right now. Each feature follows its own
-// switch: the chip, the day's par, the ghost, the dressing, the koi.
+// What the mode does, right now. The game comes as a whole: the chip,
+// the day's par, the ghost, the dressing and the koi all follow it.
 function applyGameModes() {
-  var m = gameModesResolved();
+  var m = gameFeatures();
 
   // The chip: the score, the chain ring and the lift bar.
   RunView.setVisible(m.score);
@@ -686,7 +680,7 @@ function applyGameModes() {
   RunScore.setDailyPar(runState, m.daily ? dailyCourse : null);
   RunView.setDailyCourse(m.daily ? dailyCourse : null);
 
-  // The koi: the push calls it only when the koi is on.
+  // The koi: the push calls it only when the game is on.
   RunScore.setFishEnabled(runState, m.koi);
   if (!m.koi && typeof setFish === 'function') {
     setFish({ present: false, hold: 0, landed: false });
@@ -714,7 +708,7 @@ function loadGhost() {
   if (!ui.token || typeof Ghost === 'undefined') return;
   // With the ghost off, there is nobody to race: the best run is not
   // even looked up.
-  if (!gameModesResolved().ghost) return;
+  if (!gameFeatures().ghost) return;
   Api.listWorkouts(ui.token)
     .then(function (rows) {
       var list = rows || [];
@@ -740,10 +734,9 @@ function loadGhost() {
 
 window.onFtmsSessionStart = function () {
   Coaching.reset();
-  Coaching.setMode(loadCoachingMode());
-  // The switches of the game layer, read like everything else at the
-  // start of the session.
-  loadGameModes();
+  // The way to row, and the coaching it implies.
+  loadGameMode();
+  Coaching.setMode(gameFeatures().coaching ? 'coaching' : 'justRow');
   // A new session is a new run: the score, the chain and the lift all
   // start from zero.
   RunScore.reset(runState);
@@ -848,7 +841,7 @@ window.onBeforeSave = function (payload) {
   // shows no score. The par and the koi keep their own marks: they are
   // their own features, and they live in the same summary.
   var runSummary = RunScore.summarize(runState);
-  if (!gameModesResolved().score) delete runSummary.score;
+  if (!gameFeatures().score) delete runSummary.score;
   payload.runScore = runSummary;
 };
 

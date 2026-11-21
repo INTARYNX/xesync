@@ -437,18 +437,26 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
 }
 .gi-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
+  padding: 5px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #141a23;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+.gi-row:last-child { border-bottom: none; }
 .gi-label {
-  font-size: 0.72em;
-  letter-spacing: 0.12em;
-  color: #d7dce4;
+  font-size: 0.74em;
+  letter-spacing: 0.14em;
+  color: #b9c0cb;
 }
 .gi-hint {
   font-size: 0.62em;
@@ -456,30 +464,20 @@ body.with-bar .ftms-overlay { inset: 56px 0 0 0; }
   margin-top: 2px;
   letter-spacing: 0.01em;
 }
+.gi-row.selected .gi-label { color: #fff; }
+.gi-row.selected .gi-hint { color: #9aa4b2; }
 
-/* The switch: off is dark, on is the accent, and the knob says which
-   without a word. */
-.gi-switch {
+/* The mark: one choice, one dot. */
+.gi-mark {
   flex: 0 0 auto;
-  position: relative;
-  width: 44px;
-  height: 22px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid #2a3240;
-  background: #10141b;
-  cursor: pointer;
-}
-.gi-switch::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #5a6472;
-  transition: transform .15s ease, background .15s ease;
+  border: 1px solid #2a3240;
+  background: #10141b;
 }
-.gi-switch.on { border-color: #00A2E8; background: rgba(0, 162, 232, 0.16); }
-.gi-switch.on::after { transform: translateX(22px); background: #00A2E8; }
+.gi-row.selected .gi-mark {
+  border-color: #00A2E8;
+  background: #00A2E8;
+  box-shadow: 0 0 0 3px rgba(0, 162, 232, 0.18);
+}

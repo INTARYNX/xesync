@@ -1,15 +1,15 @@
 // =====================================================================
-// game_modes_view.js - the switches of the game layer, on the screen
-// that waits for the first stroke.
+// game_modes_view.js - the three ways to row, on the screen that waits
+// for the first stroke.
 //
 // That screen has a job of its own: the rower is asked not to row yet,
 // because a session always starts cold - the score, the chain and the
 // lift all begin at zero whatever was done before. And it holds the
-// switches.
+// choice.
 //
 // It is a screen of its own, not a card over the scene: the rowing
 // screen belongs to the session, and the rower should not have to look
-// at a panel of switches to reach the water.
+// at a panel of choices to reach the water.
 //
 // Reads what controller.js hands it, decides nothing itself - same
 // contract as coaching_view.js.
@@ -21,95 +21,68 @@ var GameModesView = (function () {
   function panel() { return document.getElementById('game-panel'); }
   function rowsHost() { return document.getElementById('game-panel-rows'); }
 
-  // One row: a label, a line of explanation, and a switch. The
-  // explanation is not decoration - a switch nobody understands is a
-  // switch nobody touches.
-  function makeRow(label, hint, isOn, onClick) {
-    var row = document.createElement('div');
-    row.className = 'gi-row';
+  // One choice: a label, a line of explanation, and the mark that says
+  // this is the one. The explanation is not decoration - a choice
+  // nobody understands is a choice nobody makes.
+  function makeRow(mode, selected, onClick) {
+    var row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'gi-row' + (selected ? ' selected' : '');
+    row.setAttribute('aria-pressed', selected ? 'true' : 'false');
 
     var text = document.createElement('div');
     text.className = 'gi-text';
 
     var name = document.createElement('div');
     name.className = 'gi-label';
-    name.textContent = label;
+    name.textContent = mode.label;
     text.appendChild(name);
 
     var sub = document.createElement('div');
     sub.className = 'gi-hint';
-    sub.textContent = hint;
+    sub.textContent = mode.hint;
     text.appendChild(sub);
 
     row.appendChild(text);
 
-    var sw = document.createElement('button');
-    sw.type = 'button';
-    sw.className = 'gi-switch' + (isOn ? ' on' : '');
-    sw.setAttribute('aria-pressed', isOn ? 'true' : 'false');
-    sw.setAttribute('aria-label', label);
-    sw.addEventListener('click', onClick);
-    row.appendChild(sw);
+    var mark = document.createElement('span');
+    mark.className = 'gi-mark';
+    row.appendChild(mark);
 
+    row.addEventListener('click', onClick);
     return row;
   }
 
-  // The rows are built once - the features do not change while the app
-  // runs - and only their state is refreshed afterwards.
+  // The rows are built once - the ways to row do not change while the
+  // app runs - and only the selected one is refreshed afterwards.
   function buildRows() {
     var host = rowsHost();
-    if (!host) return;
+    if (!host || typeof GameModes === 'undefined') return;
     host.innerHTML = '';
 
-    // The coaching mode comes first: it is the app's mode, and every
-    // other switch follows it until the rower says otherwise.
-    host.appendChild(makeRow(
-      'COACHING',
-      'the coaching messages, the milestones and the challenges',
-      !isCalmMode(),
-      function () { toggleCoachingMode(); }
-    ));
-
-    if (typeof GameModes === 'undefined') return;
-    for (var i = 0; i < GameModes.FEATURES.length; i++) {
-      (function (f) {
-        host.appendChild(makeRow(f.label, f.hint, false, function () {
-          toggleGameFeature(f.key);
+    for (var i = 0; i < GameModes.MODES.length; i++) {
+      (function (mode) {
+        host.appendChild(makeRow(mode, false, function () {
+          chooseGameMode(mode.key);
         }));
-      })(GameModes.FEATURES[i]);
+      })(GameModes.MODES[i]);
     }
   }
 
-  function isCalmMode() {
-    return typeof Coaching !== 'undefined' && Coaching.getMode() === 'justRow';
-  }
-
-  // The state of every switch, as the game sees it.
-  function render(resolved) {
+  // The state of every choice, as the game sees it.
+  function render(selected) {
     var host = rowsHost();
-    if (!host || !resolved) return;
-    var switches = host.getElementsByClassName('gi-switch');
-
-    // The first switch is the coaching mode, the rest are the features
-    // in the order they were built.
-    if (switches.length) {
-      setSwitch(switches[0], !isCalmMode());
-    }
-    if (typeof GameModes !== 'undefined') {
-      for (var i = 0; i < GameModes.FEATURES.length; i++) {
-        var idx = i + 1;
-        if (switches[idx]) setSwitch(switches[idx], !!resolved[GameModes.FEATURES[i].key]);
-      }
+    if (!host || !selected || typeof GameModes === 'undefined') return;
+    var rows = host.getElementsByClassName('gi-row');
+    for (var i = 0; i < rows.length && i < GameModes.MODES.length; i++) {
+      var on = GameModes.MODES[i].key === selected;
+      rows[i].classList.toggle('selected', on);
+      rows[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
 
-  function setSwitch(sw, on) {
-    sw.classList.toggle('on', !!on);
-    sw.setAttribute('aria-pressed', on ? 'true' : 'false');
-  }
-
-  // The screen that waits for the first stroke: the card is built and
-  // shows the state the rower chose last time.
+  // The screen that waits for the first stroke: the choices are built
+  // and show what the rower chose last time.
   function showWaiting() {
     buildRows();
     if (typeof renderGameModes === 'function') renderGameModes();

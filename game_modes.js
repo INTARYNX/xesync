@@ -1,72 +1,76 @@
 // =====================================================================
-// game_modes.js - what the game layer is allowed to do.
+// game_modes.js - the three ways to row.
 //
-// The game layer is not a religion: the rower decides what they want to
-// see. Each piece of it can be switched on or off, and the switches live
-// on the screen that waits for the first stroke - the screen that says
-// "do not row yet", because a session always starts cold.
+// The game layer is not something the rower has to accept, and the
+// coaching is not either. There are three ways to row:
 //
-// Two rules make the switches worth having:
+//   ALONE   - the measures, the water, and nothing else. No voice, no
+//             game: the scene stays as it is, the hills stay round,
+//             the boat wears the colours it had before there was a
+//             dressing.
 //
-//   1. Off means off. A feature that is off is neither shown nor saved:
-//      no score on the card, no koi mark, no ghost in the water. Nothing
-//      half-on, where the game quietly counts something nobody can see.
+//   COACHED - the coaching talks - messages, milestones, the "sprint
+//             X m" challenge - and the game plays with it. This is
+//             what the app did before any of this.
 //
-//   2. A feature nobody has touched follows the mode: on while the
-//      coaching talks, off in the calm mode. So the calm mode quiets the
-//      game the way it always did, and leaving it brings the game back -
-//      unless the rower has decided otherwise.
+//   THE RUN - the game plays, and says nothing. The chain still makes
+//             the world move, the score still counts, the ghost is
+//             still on the water and the koi still comes: none of it
+//             is ever said.
 //
-// The state is a plain object - { score: true|false|null, ... } - where
-// null means "never touched". The storage is the caller's business.
+// The rower chooses on the screen that waits for the first stroke, and
+// the choice is the phone's own - a same-device preference, like the
+// coaching mode it replaces.
+//
+// One value, not a list of switches: three ways to row, one of them
+// chosen. A mode that says nothing more cannot be half-on.
 //
 // Pure module: no DOM, no network, no timers. See tests/game_modes.test.js
-// for the contract, and docs/CONCEPT.md for why the switches are there.
+// for the contract, and docs/CONCEPT.md for why the modes are there.
 // =====================================================================
 
 var GameModes = (function () {
   'use strict';
 
-  // The features, in the order the panel shows them.
+  // The three ways to row, in the order they are offered.
   //
-  // `key` is what is stored, `label` is what the switch says, `hint` is
-  // the line under it - a switch nobody understands is a switch nobody
-  // touches.
+  // `label` is what the screen says, `hint` is the line under it - a
+  // choice nobody understands is a choice nobody makes.
   //
-  // The coaching mode is not in this list: it is the app's mode, it
-  // already has its own button in the top bar, and it is stored under
-  // its own key. It is what the untouched features follow.
-  var FEATURES = [
+  // `coaching` is the verbal layer, `game` the visual one. The pieces
+  // of the game are not separate switches: they belong together, the
+  // way a session belongs together.
+  var MODES = [
     {
-      key: 'score',
-      label: 'SCORE',
-      hint: 'the score, the chain ring and the lift bar'
+      key: 'alone',
+      label: 'ALONE',
+      hint: 'the measures, the water, and nothing else',
+      coaching: false,
+      game: false
     },
     {
-      key: 'daily',
-      label: 'DAILY PAR',
-      hint: "today's par: the notch on the ring, the mark on the card"
+      key: 'coached',
+      label: 'COACHED',
+      hint: 'the coaching talks, and the game plays with it',
+      coaching: true,
+      game: true
     },
     {
-      key: 'ghost',
-      label: 'GHOST',
-      hint: 'the ghost of your best run'
-    },
-    {
-      key: 'dressing',
-      label: 'DRESSING',
-      hint: 'the livery, the kit, the theme of the hour, the land'
-    },
-    {
-      key: 'koi',
-      label: 'KOI',
-      hint: 'the koi the push calls'
+      key: 'run',
+      label: 'THE RUN',
+      hint: 'the game plays, and says nothing',
+      coaching: false,
+      game: true
     }
   ];
 
+  // What the app does by default: the coaching and the game, the way
+  // the app behaved before the modes existed.
+  var DEFAULT = 'coached';
+
   function keys() {
     var out = [];
-    for (var i = 0; i < FEATURES.length; i++) out.push(FEATURES[i].key);
+    for (var i = 0; i < MODES.length; i++) out.push(MODES[i].key);
     return out;
   }
 
@@ -74,73 +78,50 @@ var GameModes = (function () {
     return keys().indexOf(key) >= 0;
   }
 
-  // A fresh state: nothing touched, so everything follows the mode.
-  function empty() {
-    var s = {};
-    var ks = keys();
-    for (var i = 0; i < ks.length; i++) s[ks[i]] = null;
-    return s;
-  }
-
-  // What is actually on, right now.
-  //
-  // `justRow` is the calm mode: there, the game is off unless the
-  // rower has explicitly asked for it. Everywhere else it is on unless
-  // the rower has explicitly turned it off.
-  function resolve(state, justRow) {
-    var out = { justRow: !!justRow };
-    var ks = keys();
-    for (var i = 0; i < ks.length; i++) {
-      var v = state ? state[ks[i]] : null;
-      out[ks[i]] = (v === true || v === false) ? v : !justRow;
+  function find(key) {
+    for (var i = 0; i < MODES.length; i++) {
+      if (MODES[i].key === key) return MODES[i];
     }
-    return out;
+    return null;
   }
 
-  // An explicit choice. This is what survives: from here on, the mode
-  // has no say about this feature.
-  function set(state, key, on) {
-    if (!state || !has(key)) return state;
-    state[key] = !!on;
-    return state;
+  // What is on, right now. The game comes as a whole: score, day's par,
+  // ghost, dressing and koi. There is no half a game.
+  function features(key) {
+    var m = find(key) || find(DEFAULT);
+    var game = !!m.game;
+    return {
+      coaching: !!m.coaching,
+      score: game,
+      daily: game,
+      ghost: game,
+      dressing: game,
+      koi: game
+    };
   }
 
-  // Storage. The raw string in, the state out, and a broken or partial
-  // string never takes the game down: an unreadable state is an
-  // untouched state.
+  // The mode the app starts in.
+  function defaultMode() { return DEFAULT; }
+
+  // A mode that is not one of the three is not a mode: it reads as the
+  // default, never as something broken.
   function parse(raw) {
-    var s = empty();
-    if (!raw) return s;
-    var o = null;
-    try { o = JSON.parse(raw); } catch (e) { return s; }
-    if (!o || typeof o !== 'object') return s;
-    var ks = keys();
-    for (var i = 0; i < ks.length; i++) {
-      if (o[ks[i]] === true || o[ks[i]] === false) s[ks[i]] = o[ks[i]];
-    }
-    return s;
+    if (typeof raw === 'string' && has(raw)) return raw;
+    return DEFAULT;
   }
 
-  // Only the explicit choices are written: "never touched" stays
-  // "never touched", so the mode keeps the last word on it.
-  function serialize(state) {
-    var o = {};
-    var ks = keys();
-    for (var i = 0; i < ks.length; i++) {
-      if (state && (state[ks[i]] === true || state[ks[i]] === false)) {
-        o[ks[i]] = state[ks[i]];
-      }
-    }
-    return JSON.stringify(o);
+  function serialize(key) {
+    return has(key) ? key : DEFAULT;
   }
 
   return {
-    FEATURES: FEATURES,
+    MODES: MODES,
+    DEFAULT: DEFAULT,
     keys: keys,
     has: has,
-    empty: empty,
-    resolve: resolve,
-    set: set,
+    find: find,
+    features: features,
+    defaultMode: defaultMode,
     parse: parse,
     serialize: serialize
   };
