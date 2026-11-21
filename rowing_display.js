@@ -56,12 +56,23 @@ var RowingAnimation = (function() {
     var fishHold = 0;
     var fishFade = 0;
     var fishExit = 0;          // counts down while it swims away
+    var fishDive = 0;          // counts down while it dives back down
     var fishLandedSeen = false;
     var fishX = FISH_X;
+    // How deep it is below its station. A koi surfaces: it comes up
+    // from the depths, it does not appear in mid-water.
+    var fishDepth = 0;
     // How far ahead of the boat it swims, in scene units.
     var FISH_X = 0.24;
+    // How close it comes when it is being caught: the catch is
+    // something you watch happen, not a number that flips.
+    var FISH_CATCH_X = 0.12;
+    // How deep it starts, below its station, when it surfaces.
+    var FISH_RISE_DEPTH = 0.11;
     // How long it takes to swim away once it has been landed.
     var FISH_EXIT_S = 1.6;
+    // How long it takes to sink back down when the chain breaks.
+    var FISH_DIVE_S = 1.4;
 
     // Where the koi keeps its station. The scene is only as wide as
     // the screen is tall times its aspect, so on a narrow screen the
@@ -272,8 +283,11 @@ var RowingAnimation = (function() {
         var swim = timeWrapped * 2.2;
         var koiBob = Math.sin(swim * 0.55) * 0.006;
         var koiYaw = Math.sin(swim * 0.42) * 0.08;
+        var hold = clamp01(fishHold);
         var koiPosX = 0.5 + fishX;
-        var koiPosY = boatCenterY + 0.030 + koiBob;
+        // The catch: as the chain is held, the koi comes up to the
+        // surface beside the boat. You watch it come in.
+        var koiPosY = boatCenterY + 0.030 + fishDepth - hold * 0.022 + koiBob;
 
         // P-space -> pixels: x is aspect-corrected in the shader, so
         // undoing that and using the canvas height as the common unit
@@ -286,7 +300,6 @@ var RowingAnimation = (function() {
         var s = H * KOI_SCALE;
 
         var beatTail = Math.sin(swim * 1.9) * 0.011;
-        var hold = clamp01(fishHold);
         var holdWarm = hold * 0.8;
         var koiRedRGB = [
             Math.round(lerp(0.90, 1.00, holdWarm) * 255),
@@ -1204,10 +1217,23 @@ var RowingAnimation = (function() {
             fishExit = Math.max(0, fishExit - dt);
             fishFade = fishExit / FISH_EXIT_S;
             fishX += dt * 0.30;
+        } else if (fishDive > 0) {
+            // The chain broke. It goes back down into the depths it came
+            // from, rather than blinking out of the picture.
+            fishDive = Math.max(0, fishDive - dt);
+            fishFade = fishDive / FISH_DIVE_S;
+            fishDepth += (FISH_RISE_DEPTH - fishDepth) * Math.min(1.0, dt * 1.6);
         } else if (fishOn) {
             fishFade = 1;
-            var fishTarget = fishStation() + Math.sin(sceneClock * 0.31) * 0.025;
-            fishX += (fishTarget - fishX) * Math.min(1.0, dt * 1.5);
+            // The hold is the catch: the closer the chain is held, the
+            // closer the koi comes to the boat. You watch it come in.
+            var hold = clamp01(fishHold);
+            var station = fishStation();
+            var target = lerp(station, FISH_CATCH_X, hold) +
+                         Math.sin(sceneClock * 0.31) * 0.025 * (1.0 - hold);
+            fishX += (target - fishX) * Math.min(1.0, dt * 1.5);
+            // It comes up from the depths when it surfaces.
+            fishDepth += (0 - fishDepth) * Math.min(1.0, dt * 1.2);
         } else {
             fishFade = 0;
         }
@@ -1537,7 +1563,7 @@ var RowingAnimation = (function() {
         // The koi. The game layer says whether it is there and how
         // close it is to being landed; the scene swims it, and says
         // nothing. A koi that was landed swims away; a koi that dived
-        // is simply gone.
+        // goes back down into the depths.
         setFish: function(st) {
             var present = !!(st && st.present);
             var landed = !!(st && st.landed);
@@ -1545,12 +1571,18 @@ var RowingAnimation = (function() {
                 ? clamp01(st.hold)
                 : 0;
             if (present) {
-                if (!fishOn) fishX = fishStation();
+                if (!fishOn) {
+                    fishX = fishStation();
+                    // It surfaces: it starts in the depths and comes up.
+                    fishDepth = FISH_RISE_DEPTH;
+                    fishDive = 0;
+                }
                 fishOn = 1;
                 fishExit = 0;
             } else if (fishOn) {
                 fishOn = 0;
                 if (landed && !fishLandedSeen) fishExit = FISH_EXIT_S;
+                else if (!fishLandedSeen) fishDive = FISH_DIVE_S;
             }
             fishLandedSeen = landed;
         },
