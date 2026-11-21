@@ -361,8 +361,9 @@ XEBEX air rowers use a non-standard 20-byte FTMS payload where 16-bit values are
       ([docs/GAMIFICATION.md](docs/GAMIFICATION.md))
 - [x] The concept of the game layer, in one reading, after lots 1 to 5
       ([docs/CONCEPT.md](docs/CONCEPT.md))
-- [x] The game layer becomes optional: three ways to row — alone, coached,
-      or the run — chosen on the screen that waits for the first stroke
+- [x] The game layer becomes optional: three ways to row — just row,
+      coached, or the run — chosen on the screen that waits for the first
+      stroke; the voice and the game never at the same time
 - [x] Android Play Store release (production; versioning policy: [pgsql/API.md](pgsql/API.md#versioning-policy))
 - [ ] LISTEN/NOTIFY-based mail worker (no cron lag)
 

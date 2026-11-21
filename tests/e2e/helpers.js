@@ -56,6 +56,16 @@ async function connectToReady(page) {
   await page.locator('#screen-ready.active').waitFor({ state: 'visible' });
 }
 
+// The same, but with the game layer on: THE RUN. The game is off by
+// default now - the coaching is what the app does - so a test that
+// exercises the game has to ask for it, the way a rower does.
+async function connectWithGame(page) {
+  await connectToReady(page);
+  await page.locator('#game-panel-rows .gi-row').nth(2).click();   // THE RUN
+  await page.waitForTimeout(200);
+  await startSimulatedSession(page);
+}
+
 // Lets the simulated session begin: from here the app moves to the
 // rowing screen.
 async function startSimulatedSession(page) {
@@ -63,4 +73,4 @@ async function startSimulatedSession(page) {
   await page.locator('#screen-rowing.active').waitFor({ state: 'visible' });
 }
 
-module.exports = { boot, bootLogin, connectToRower, connectToReady, startSimulatedSession };
+module.exports = { boot, bootLogin, connectToRower, connectToReady, connectWithGame, startSimulatedSession };

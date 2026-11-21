@@ -37,7 +37,7 @@ test.describe('the three ways to row', () => {
     // Three choices, and one of them is the one.
     await expect(page.locator('#game-panel-rows .gi-row')).toHaveCount(3);
     await expect(page.locator('#game-panel-rows .gi-row.selected')).toHaveCount(1);
-    expect(await selected(page)).toBe('COACHING');
+    expect(await selected(page)).toBe('COACHED');
 
     // And nothing else: the scene and the measures are not on this screen.
     await expect(page.locator('#screen-rowing.active')).toHaveCount(0);
@@ -62,14 +62,14 @@ test.describe('the three ways to row', () => {
     expect(await page.evaluate(() => window.runState.dailyPar)).toBe(null);
   });
 
-  test('just play is the game, and says nothing', async ({ page }) => {
+  test('the run is the game, and says nothing', async ({ page }) => {
     test.setTimeout(40000);
     await boot(page);
     await connectToReady(page);
 
-    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // JUST PLAY
+    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // THE RUN
     await page.waitForTimeout(250);
-    expect(await selected(page)).toBe('JUST PLAY');
+    expect(await selected(page)).toBe('THE RUN');
 
     // The coaching is off...
     expect(await page.evaluate(() => Coaching.getMode())).toBe('justRow');
@@ -80,6 +80,23 @@ test.describe('the three ways to row', () => {
     expect(await page.locator('#run-hud').evaluate((e) => getComputedStyle(e).display)).not.toBe('none');
     expect(await page.evaluate(() => window.runState.fishEnabled)).toBe(true);
     expect(await page.evaluate(() => !!window.runState.dailyPar)).toBe(true);
+  });
+
+  test('coached is the coaching, and the game is off', async ({ page }) => {
+    test.setTimeout(40000);
+    await boot(page);
+    await connectToReady(page);
+
+    // COACHED is the second row, and it is the one the app starts in.
+    expect(await selected(page)).toBe('COACHED');
+
+    await startSimulatedSession(page);
+    // The coaching talks...
+    expect(await page.evaluate(() => Coaching.getMode())).toBe('coaching');
+    // ...and the game is off: no chip, no koi, no day's par.
+    expect(await page.locator('#run-hud').evaluate((e) => getComputedStyle(e).display)).toBe('none');
+    expect(await page.evaluate(() => window.runState.fishEnabled)).toBe(false);
+    expect(await page.evaluate(() => window.runState.dailyPar)).toBe(null);
   });
 
   test('the day still turns in every mode', async ({ page }) => {
@@ -104,9 +121,9 @@ test.describe('the three ways to row', () => {
     await boot(page);
     await connectToReady(page);
 
-    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // JUST PLAY
+    await page.locator('#game-panel-rows .gi-row').nth(2).click();   // THE RUN
     await page.waitForTimeout(250);
-    expect(await page.evaluate(() => window.gameMode)).toBe('play');
+    expect(await page.evaluate(() => window.gameMode)).toBe('run');
 
     await page.reload();
     await page.locator('#boot-splash').waitFor({ state: 'hidden' });
@@ -115,6 +132,6 @@ test.describe('the three ways to row', () => {
     await page.locator('#screen-ready.active').waitFor({ state: 'visible' });
     await page.waitForTimeout(400);
 
-    expect(await selected(page)).toBe('JUST PLAY');
+    expect(await selected(page)).toBe('THE RUN');
   });
 });

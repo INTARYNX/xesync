@@ -498,22 +498,23 @@ façons de ramer**, choisies sur l'écran qui attend la première rame — celui
 qui dit *ne rame pas avant le départ*, parce qu'une séance part toujours à
 froid.
 
-| | **JUST ROW** | **COACHING** | **JUST PLAY** |
+| | **JUST ROW** | **COACHED** | **THE RUN** |
 |---|---|---|---|
 | Le coaching (messages, jalons, défis) | | ✓ | |
-| Le score, la chaîne, le par du jour, le fantôme, l'habillage, la carpe | | ✓ | ✓ |
+| Le score, la chaîne, le par du jour, le fantôme, l'habillage, la carpe | | | ✓ |
 | Le jour qui tourne, la pluie, l'aurore | ✓ | ✓ | ✓ |
 
 - **JUST ROW** — l'ancien mode calme, renommé pour se lire comme un vrai
   choix : les mesures, l'eau, et rien d'autre.
-- **COACHING** — le coaching parle et le jeu joue avec lui : ce que
-  l'app faisait avant.
-- **JUST PLAY** — le jeu joue, et ne dit rien.
+- **COACHED** — le coaching parle, et le jeu est éteint. Le mode par
+  défaut : le jeu est ce que le rameur allume, pas ce que l'app impose.
+- **THE RUN** — le jeu joue, et ne dit rien.
 
-Le jeu ne peut pas être à moitié : les cinq pièces s'allument ensemble ou
-s'éteignent ensemble. La météo, elle, n'appartient à personne — le cycle
-jour/nuit, la pluie et l'aurore tournent dans les trois modes, parce que
-c'est la scène et pas le jeu.
+La voix et le jeu ne coexistent pas : les trois choix sont exclusifs. Le
+jeu ne peut pas être à moitié non plus — les cinq pièces s'allument
+ensemble ou s'éteignent ensemble. La météo, elle, n'appartient à personne :
+le cycle jour/nuit, la pluie et l'aurore tournent dans les trois modes,
+parce que c'est la scène et pas le jeu.
 
 Le choix est celui du téléphone, comme le mode coaching qu'il remplace :
 rien n'est synchronisé, rien n'est demandé au serveur.

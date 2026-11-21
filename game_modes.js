@@ -4,20 +4,23 @@
 // The game layer is not something the rower has to accept, and the
 // coaching is not either. There are three ways to row:
 //
-//   JUST ROW  - the measures, the water, and nothing else. No voice, no
-//               game: the scene stays as it is, the hills stay round,
-//               the boat wears the colours it had before there was a
-//               dressing. This is the calm mode the app already had,
-//               renamed so it reads as a choice and not as a setting.
+//   JUST ROW - the measures, the water, and nothing else. No voice, no
+//              game: the scene stays as it is, the hills stay round, the
+//              boat wears the colours it had before there was a dressing.
+//              This is the calm mode the app already had, renamed so it
+//              reads as a choice and not as a setting.
 //
-//   COACHING  - the coaching talks - messages, milestones, the "sprint
-//               X m" challenge - and the game plays with it. This is
-//               what the app did before any of this.
+//   COACHED - the coaching talks - messages, milestones, the "sprint
+//              X m" challenge - and the game is off.
 //
-//   JUST PLAY - the game plays, and says nothing. The chain still makes
-//               the world move, the score still counts, the ghost is
-//               still on the water and the koi still comes: none of it
-//               is ever said.
+//   THE RUN - the game plays, and says nothing. The chain still makes
+//              the world move, the score still counts, the ghost is
+//              still on the water and the koi still comes: none of it
+//              is ever said.
+//
+// The three are exclusive: the voice and the game never at the same
+// time. A rower who wants both has to pick one, and the app does not
+// ask which - it offers the three, and keeps the answer.
 //
 // The rower chooses on the screen that waits for the first stroke, and
 // the choice is the phone's own - a same-device preference, like the
@@ -50,24 +53,24 @@ var GameModes = (function () {
       game: false
     },
     {
-      key: 'coaching',
-      label: 'COACHING',
-      hint: 'the coaching talks, and the game plays with it',
+      key: 'coached',
+      label: 'COACHED',
+      hint: 'the coaching talks, and the game is off',
       coaching: true,
-      game: true
+      game: false
     },
     {
-      key: 'play',
-      label: 'JUST PLAY',
+      key: 'run',
+      label: 'THE RUN',
       hint: 'the game plays, and says nothing',
       coaching: false,
       game: true
     }
   ];
 
-  // What the app does by default: the coaching and the game, the way
-  // the app behaved before the modes existed.
-  var DEFAULT = 'coaching';
+  // What the app does by default: the coaching, and the game off. The
+  // game is a thing the rower turns on, not a thing the app imposes.
+  var DEFAULT = 'coached';
 
   function keys() {
     var out = [];

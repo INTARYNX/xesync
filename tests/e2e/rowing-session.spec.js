@@ -28,7 +28,7 @@
 
 const { test, expect } = require('@playwright/test');
 const assert = require('node:assert/strict');
-const { boot, connectToRower } = require('./helpers');
+const { boot, connectToRower, connectWithGame } = require('./helpers');
 
 test.describe('rowing session (debug simulator)', () => {
   test('metrics update live once a device is connected', async ({ page }) => {
@@ -119,7 +119,7 @@ test.describe('rowing session (debug simulator)', () => {
   test('the run score shows in the HUD and grows with the session', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
-    await connectToRower(page);
+    await connectWithGame(page);
 
     // The game layer's chip: a number, a ring that fills with the chain,
     // and the lift bar. Quiet by design - no text, no banner.
@@ -186,7 +186,7 @@ test.describe('rowing session (debug simulator)', () => {
   test('the course of the day shows in the HUD, and the sky follows it', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
-    await connectToRower(page);
+    await connectWithGame(page);
 
     // The par of the day is a notch on the ring. No label, no text -
     // just a mark at the angle where today's chain par sits.
@@ -220,7 +220,7 @@ test.describe('rowing session (debug simulator)', () => {
   test('the boat wears the livery the history earned', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
-    await connectToRower(page);
+    await connectWithGame(page);
     // The session has to have started: the dressing is put on when the
     // run starts, not before.
     await expect(page.locator('#run-chain-par')).toBeVisible({ timeout: 10000 });
@@ -266,7 +266,7 @@ test.describe('rowing session (debug simulator)', () => {
   test('the ghost of the best run is placed in the scene', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
-    await connectToRower(page);
+    await connectWithGame(page);
 
     // A past run, fed through the real module: the ghost rows at 30 spm
     // while the debug rower is slower, so it pulls ahead.
@@ -333,7 +333,7 @@ test.describe('rowing session (debug simulator)', () => {
       };
     });
 
-    await connectToRower(page);
+    await connectWithGame(page);
 
     // The packets arrive, and each one carries the chain level to the scene.
     await page.waitForFunction(() => window.__chainCalls > 0, null, { timeout: 15000 });
@@ -361,7 +361,7 @@ test.describe('rowing session (debug simulator)', () => {
   test('the koi reaches the scene', async ({ page }) => {
     test.setTimeout(45000);
     await boot(page);
-    await connectToRower(page);
+    await connectWithGame(page);
 
     // The debug simulator rows for ten seconds: the norm never
     // establishes, so the game never pushes and no koi is called. The

@@ -23,7 +23,7 @@ const GameModes = require('../game_modes.js');
 const GAME = ['score', 'daily', 'ghost', 'dressing', 'koi'];
 
 test('there are three ways to row', () => {
-  assert.deepEqual(GameModes.keys(), ['justRow', 'coaching', 'play']);
+  assert.deepEqual(GameModes.keys(), ['justRow', 'coached', 'run']);
   for (const m of GameModes.MODES) {
     assert.ok(m.label && m.label.length > 0, m.key + ' needs a label');
     assert.ok(m.hint && m.hint.length > 0, m.key + ' needs a hint');
@@ -36,14 +36,14 @@ test('just row is the measures and nothing else', () => {
   for (const k of GAME) assert.equal(f[k], false, k + ' is off');
 });
 
-test('coaching is the coaching and the game', () => {
-  const f = GameModes.features('coaching');
+test('coached is the coaching, and the game is off', () => {
+  const f = GameModes.features('coached');
   assert.equal(f.coaching, true);
-  for (const k of GAME) assert.equal(f[k], true, k + ' is on');
+  for (const k of GAME) assert.equal(f[k], false, k + ' is off');
 });
 
-test('just play is the game, and says nothing', () => {
-  const f = GameModes.features('play');
+test('the run is the game, and says nothing', () => {
+  const f = GameModes.features('run');
   assert.equal(f.coaching, false);
   for (const k of GAME) assert.equal(f[k], true, k + ' is on');
 });
@@ -57,22 +57,31 @@ test('the game is never half-on', () => {
   }
 });
 
-test('the default is what the app did before the modes existed', () => {
-  assert.equal(GameModes.defaultMode(), 'coaching');
+test('the default is the coaching, and the game is off', () => {
+  assert.equal(GameModes.defaultMode(), 'coached');
   assert.equal(GameModes.features(GameModes.defaultMode()).coaching, true);
+  assert.equal(GameModes.features(GameModes.defaultMode()).score, false);
 });
 
 test('a mode that is not one of the three is not a mode', () => {
   for (const bad of ['', 'nope', 'JUST ROW', null, undefined, 42, {}]) {
-    assert.equal(GameModes.parse(bad), 'coaching');
-    assert.equal(GameModes.serialize(bad), 'coaching');
+    assert.equal(GameModes.parse(bad), 'coached');
+    assert.equal(GameModes.serialize(bad), 'coached');
   }
-  assert.equal(GameModes.parse('play'), 'play');
+  assert.equal(GameModes.parse('run'), 'run');
   assert.equal(GameModes.serialize('justRow'), 'justRow');
 });
 
 test('an unknown mode falls back on the default, not on nothing', () => {
   const f = GameModes.features('nope');
   assert.equal(f.coaching, true);
-  for (const k of GAME) assert.equal(f[k], true, k + ' is on');
+  for (const k of GAME) assert.equal(f[k], false, k + ' is off');
+});
+
+test('the voice and the game never at the same time', () => {
+  for (const m of GameModes.MODES) {
+    const f = GameModes.features(m.key);
+    assert.ok(!(f.coaching && f.score),
+      m.key + ' has both the voice and the game');
+  }
 });
