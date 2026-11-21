@@ -218,11 +218,13 @@
                              cos(TAU * (tt * 5.0 + h2 * 5.0)));
       float d = length(f - pos);
       float tw = 0.35 + 0.65 * (0.5 + 0.5 * sin(TAU * (tt * (90.0 + floor(h2 * 90.0)) + h * 9.0)));
-      float glow = exp(-d * d * 60.0) * 0.45 + smoothstep(0.06, 0.0, d);
-      float k = fract(h * 3.7);
-      vec3 c = k < 0.34 ? vec3(1.00, 0.86, 0.55)
-             : k < 0.67 ? vec3(1.00, 0.62, 0.86)
-             :            vec3(0.55, 0.95, 1.00);
+      // A firefly's light is small: a point with a halo around it, not
+      // a lamp. The halo was twice this wide, and read as a spark of
+      // confetti rather than an insect.
+      float glow = exp(-d * d * 220.0) * 0.38 + smoothstep(0.025, 0.0, d);
+      // Fireflies are yellow. The pink and the blue of the first
+      // version were fairy lights: pretty, but not insects.
+      vec3 c = vec3(1.00, 0.92, 0.42);
       return c * glow * tw * step(1.0 - dens, h3);
     }
 
