@@ -173,18 +173,26 @@ function renderPostWorkout(savedState, hasToken, splitsTable, coachingSummary, r
 // The run's score. One line, no fuss: the score is a number the rower
 // earned, not a compliment. A run that never built a chain still shows
 // its base score - the game never says "you failed".
+//
+// The score itself can be switched off (game_modes.js), and then it is
+// not in the summary at all. The other marks of the game are their own
+// features and keep their place: the day's par, the koi, the ghost, the
+// livery - none of them is the score.
 function renderRunScore(runScore) {
   var el = document.getElementById('pw-run-score');
   if (!el) return;
-  if (!runScore || !runScore.score) {
+  if (!runScore) {
     el.style.display = 'none';
     el.innerHTML = '';
     return;
   }
-  var bits = '<span class="pw-run-score-value">' + Math.round(runScore.score) + '</span>' +
-             '<span class="pw-run-score-label">SCORE</span>';
-  if (runScore.maxMultiplier > 1) {
-    bits += '<span class="pw-run-score-x">×' + runScore.maxMultiplier + ' best chain</span>';
+  var bits = '';
+  if (typeof runScore.score === 'number') {
+    bits += '<span class="pw-run-score-value">' + Math.round(runScore.score) + '</span>' +
+            '<span class="pw-run-score-label">SCORE</span>';
+    if (runScore.maxMultiplier > 1) {
+      bits += '<span class="pw-run-score-x">×' + runScore.maxMultiplier + ' best chain</span>';
+    }
   }
   // The course of the day, if it was met. A mark, like the rest: no
   // congratulation, no "you missed it".
@@ -209,6 +217,11 @@ function renderRunScore(runScore) {
     bits += '<span class="pw-run-score-x">' +
       (gap >= 0 ? gap + ' m ahead of ghost' : (-gap) + ' m behind ghost') +
       '</span>';
+  }
+  if (!bits) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
   }
   el.innerHTML = bits;
   el.style.display = '';

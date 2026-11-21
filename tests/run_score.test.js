@@ -467,6 +467,30 @@ test('the koi lands once per run', () => {
   assert.equal(state.fish.bonus, bonus, 'the same koi, the same bonus');
 });
 
+test('with the koi switched off, the push calls nothing', () => {
+  const state = startRun(20);
+  RunScore.setFishEnabled(state, false);
+  row(state, PUSH_TICKS, 24, 3);
+  // The push still happened - it is the rower's effort, not the game's.
+  assert.equal(state.pushes, 1);
+  // But nothing came out of the water.
+  assert.equal(state.fish.present, false);
+  assert.equal(state.fish.landed, false);
+  assert.ok(!state.events.some(e => e.type === 'fish_appeared'),
+    'the koi is never announced');
+  assert.equal(RunScore.fishState(state).present, false);
+  assert.equal(RunScore.summarize(state).fish, null);
+});
+
+test('the koi can be switched off after it surfaced', () => {
+  const state = startRun(20);
+  row(state, PUSH_TICKS, 24, 3);
+  assert.equal(state.fish.present, true);
+  RunScore.setFishEnabled(state, false);
+  assert.equal(state.fish.present, false, 'the water empties');
+  assert.equal(state.fish.holdSeconds, 0);
+});
+
 test('the koi is worth more when the chain is higher', () => {
   const state = startRun(20);
   row(state, PUSH_TICKS, 24, 3);

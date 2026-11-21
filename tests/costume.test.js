@@ -209,6 +209,18 @@ test('the outfit carries everything the scene needs', () => {
   }
 });
 
+test('with the dressing off, the scene is the one before the dressing', () => {
+  const plain = Costume.plain();
+  // The boat's own colours, the first land, and no grade over the frame.
+  assert.equal(plain.livery.key, 'club');
+  assert.equal(plain.biome.key, 'conifers');
+  assert.deepEqual(plain.theme.tint, [1, 1, 1], 'no grade at all');
+  assert.deepEqual(plain.livery.hull[0], ORIGINAL.hullTop);
+  // And it does not depend on the history or the hour: the same scene,
+  // whatever the rower has done.
+  assert.deepEqual(Costume.plain(), Costume.plain());
+});
+
 test('the game says when the livery changed, and only then', () => {
   assert.equal(Costume.changed({ key: 'club' }, { key: 'club' }), false);
   assert.equal(Costume.changed({ key: 'club' }, { key: 'stripe' }), true);

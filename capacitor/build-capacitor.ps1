@@ -62,6 +62,7 @@ $sharedFiles = @(
     'coaching_text.js', 'coaching.js', 'splits.js', 'coaching_view.js', 'coaching.css',
     'ftms_integration.js', 'controller.js', 'debug_sim.js', 'config.js',
     'run_score.js', 'run_view.js', 'daily_course.js', 'ghost.js', 'costume.js',
+    'game_modes.js', 'game_modes_view.js',
     'rowing_display.css', 'rowing_display.js', 'dialog.css',
     'SpaceGrotesk-Regular.ttf'
 )

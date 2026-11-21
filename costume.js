@@ -240,6 +240,18 @@ var Costume = (function () {
     };
   }
 
+  // The scene as it was before there was a dressing at all: the boat's
+  // own colours, the first land, and no grade over the frame. This is
+  // what the rower gets when the dressing is switched off
+  // (game_modes.js) - the scene exactly as it was, not a poorer one.
+  function plain() {
+    return {
+      livery: LIVERIES[0],
+      biome: BIOMES[0],
+      theme: THEMES[0]
+    };
+  }
+
   // Whether two liveries are different outfits, and so whether the
   // scene has something to show: a sweep of light along the hull, the
   // only thing the game ever announces by itself.
@@ -253,6 +265,7 @@ var Costume = (function () {
     biome: biome,
     theme: theme,
     outfit: outfit,
+    plain: plain,
     changed: changed,
     LIVERIES: LIVERIES,
     BIOMES: BIOMES,

@@ -62,6 +62,9 @@
 // with it or without it, a calm session is never punished, and a koi
 // that was not landed leaves no trace and costs nothing.
 //
+// The rower can also turn the koi off altogether (game_modes.js): then
+// the push calls nothing, and the water stays empty.
+//
 // Pure module: state lives in the object returned by createRun(), and
 // nothing outside this file is touched. See docs/GAMIFICATION.md for the
 // design, and tests/run_score.test.js for the contract.
@@ -253,6 +256,11 @@ var RunScore = (function () {
         bonus: 0
       },
 
+      // Whether the koi is part of this run at all. The rower can turn
+      // it off (see game_modes.js): then the push calls nothing, and the
+      // water stays empty.
+      fishEnabled: true,
+
       inFlow: false,
       lastTickT: null,
       lastDistance: null,
@@ -315,6 +323,18 @@ var RunScore = (function () {
     return state;
   }
 
+  // Whether the koi is part of the run. Off means off: the push calls
+  // nothing, and there is nothing to keep.
+  function setFishEnabled(state, on) {
+    state.fishEnabled = !!on;
+    if (!state.fishEnabled) {
+      state.fish.present = false;
+      state.fish.holdSeconds = 0;
+      state.fish.outSeconds = 0;
+    }
+    return state;
+  }
+
   function reset(state) {
     var tuning = state.tuning;
     var fresh = createRun({});
@@ -371,7 +391,7 @@ var RunScore = (function () {
     var f = state.fish;
     // One koi per run once it has been landed. A koi that dived may be
     // called again by a later push - but a landed one is the end of it.
-    if (f.landed || f.present) return null;
+    if (!state.fishEnabled || f.landed || f.present) return null;
     f.present = true;
     f.holdSeconds = 0;
     f.outSeconds = 0;
@@ -380,7 +400,7 @@ var RunScore = (function () {
 
   function updateFish(state, dt, inFlow) {
     var f = state.fish;
-    if (!f.present) return null;
+    if (!state.fishEnabled || !f.present) return null;
 
     if (inFlow) {
       // The chain is there: the hold fills.
@@ -684,6 +704,7 @@ var RunScore = (function () {
     setDailyPar: setDailyPar,
     setLivery: setLivery,
     setGhostResult: setGhostResult,
+    setFishEnabled: setFishEnabled,
     // Exposed for tests.
     _internals: {
       TIER_S: TIER_S,

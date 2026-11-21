@@ -102,12 +102,15 @@ function saveCachedSessionCount(n) {
 // thing the game announces by itself.
 function applyCostume(count, course) {
   if (typeof Costume === 'undefined') return false;
-  var outfit = Costume.outfit(count, course);
+  // With the dressing off, the scene wears what it wore before there
+  // was a dressing: the boat's own colours, the first land, no grade.
+  var dressed = gameModesResolved().dressing;
+  var outfit = dressed ? Costume.outfit(count, course) : Costume.plain();
   var previous = currentLivery;
   currentLivery = outfit.livery;
   if (typeof setCostume === 'function') setCostume(outfit);
-  var changed = Costume.changed(previous, outfit.livery);
-  if (typeof RunScore !== 'undefined') {
+  var changed = dressed && Costume.changed(previous, outfit.livery);
+  if (dressed && typeof RunScore !== 'undefined') {
     RunScore.setLivery(runState, {
       key: outfit.livery.key,
       name: outfit.livery.name,
@@ -424,8 +427,15 @@ function enterRowing() {
   showLoadingOverlay();
   goScreen('rowing');
   Coaching.setMode(loadCoachingMode());
+  // The switches of the game layer, read before the screen that shows
+  // them: the card has to draw the state the rower chose last time.
+  loadGameModes();
   initRowing();
   initFtmsTracking();
+  // The screen that waits for the first stroke: the rower is asked not
+  // to row yet, because the session starts cold, and this is where the
+  // game layer is configured.
+  if (typeof GameModesView !== 'undefined') GameModesView.showWaiting();
   if (Debug.isOn()) Debug.startSim();
 }
 
@@ -614,11 +624,85 @@ function toggleCoachingMode() {
   Coaching.setMode(next);
   saveCoachingMode(next);
   if (next === 'justRow') CoachingView.reset();
-  // The calm mode promises a screen with nothing but the measures, so the
-  // score chip goes with it. The run keeps being scored and saved - only
-  // the display is quiet.
-  RunView.setVisible(next !== 'justRow');
+  // The switches follow the mode: in the calm mode a feature nobody has
+  // touched is off, so the score chip goes with it - the way it always
+  // did. The run keeps being scored; only the display is quiet.
+  renderGameModes();
+  applyGameModes();
   render();
+}
+
+// -- The switches of the game layer ------------------------------------
+//
+// The game layer is optional: the rower decides what they want to see.
+// The switches live on the screen that waits for the first stroke (see
+// game_modes_view.js), and they are a same-device preference like the
+// coaching mode - plain localStorage, no server, no migration.
+//
+// Two rules, from game_modes.js: off means off - not shown, not saved -
+// and a switch nobody has touched follows the mode.
+var gameModes = (typeof GameModes !== 'undefined') ? GameModes.empty() : {};
+
+function gameModesKey() { return 'xesync.gameModes.' + (ui.username || 'guest'); }
+function loadGameModes() {
+  if (typeof GameModes === 'undefined') return;
+  try { gameModes = GameModes.parse(localStorage.getItem(gameModesKey())); }
+  catch (e) { gameModes = GameModes.empty(); }
+}
+function saveGameModes() {
+  if (typeof GameModes === 'undefined') return;
+  try { localStorage.setItem(gameModesKey(), GameModes.serialize(gameModes)); } catch (e) {}
+}
+// What is on, right now: the switches, resolved against the mode.
+function gameModesResolved() {
+  if (typeof GameModes === 'undefined') {
+    return { score: true, daily: true, ghost: true, dressing: true, koi: true };
+  }
+  return GameModes.resolve(gameModes, Coaching.getMode() === 'justRow');
+}
+function toggleGameFeature(key) {
+  var resolved = gameModesResolved();
+  GameModes.set(gameModes, key, !resolved[key]);
+  saveGameModes();
+  renderGameModes();
+  applyGameModes();
+}
+function toggleGamePanel() {
+  if (typeof GameModesView !== 'undefined') GameModesView.toggle();
+}
+function renderGameModes() {
+  if (typeof GameModesView !== 'undefined') GameModesView.render(gameModesResolved());
+}
+
+// What the switches do, right now. Each feature follows its own
+// switch: the chip, the day's par, the ghost, the dressing, the koi.
+function applyGameModes() {
+  var m = gameModesResolved();
+
+  // The chip: the score, the chain ring and the lift bar.
+  RunView.setVisible(m.score);
+
+  // The day's par. The sky still follows the day - that is the scene's
+  // weather, not the game's business.
+  RunScore.setDailyPar(runState, m.daily ? dailyCourse : null);
+  RunView.setDailyCourse(m.daily ? dailyCourse : null);
+
+  // The koi: the push calls it only when the koi is on.
+  RunScore.setFishEnabled(runState, m.koi);
+  if (!m.koi && typeof setFish === 'function') {
+    setFish({ present: false, hold: 0, landed: false });
+  }
+
+  // The ghost.
+  if (!m.ghost) {
+    ghostProfile = null;
+    if (typeof setGhostProfile === 'function') setGhostProfile(null);
+  } else {
+    loadGhost();
+  }
+
+  // The dressing: the livery, the kit, the theme of the hour, the land.
+  applyCostume(sessionCount, dailyCourse);
 }
 
 // The ghost of your best run.
@@ -629,6 +713,9 @@ function toggleCoachingMode() {
 // simply no ghost - and the game says nothing about it either way.
 function loadGhost() {
   if (!ui.token || typeof Ghost === 'undefined') return;
+  // With the ghost off, there is nobody to race: the best run is not
+  // even looked up.
+  if (!gameModesResolved().ghost) return;
   Api.listWorkouts(ui.token)
     .then(function (rows) {
       var list = rows || [];
@@ -655,12 +742,14 @@ function loadGhost() {
 window.onFtmsSessionStart = function () {
   Coaching.reset();
   Coaching.setMode(loadCoachingMode());
+  // The switches of the game layer, read like everything else at the
+  // start of the session.
+  loadGameModes();
   // A new session is a new run: the score, the chain and the lift all
   // start from zero.
   RunScore.reset(runState);
   RunView.mount();
   RunView.reset();
-  RunView.setVisible(Coaching.getMode() !== 'justRow');
   // A new run starts with an empty chain, and the scene with it.
   if (typeof setChainLevel === 'function') setChainLevel(0);
   // And with no koi: a new session is a new run, and the water forgets.
@@ -672,8 +761,6 @@ window.onFtmsSessionStart = function () {
   dailyCourse = (typeof DailyCourse !== 'undefined')
     ? DailyCourse.forDate(new Date())
     : null;
-  RunScore.setDailyPar(runState, dailyCourse);
-  RunView.setDailyCourse(dailyCourse);
   if (dailyCourse && typeof setSceneDay === 'function') {
     setSceneDay(dailyCourse.dayIndex);
   }
@@ -683,7 +770,6 @@ window.onFtmsSessionStart = function () {
   // without a network still wears the right livery.
   sessionCount = loadCachedSessionCount();
   currentLivery = null;
-  applyCostume(sessionCount, dailyCourse);
 
   // And the ghost of the best run. The cached one is put in place
   // straight away, so a session without a network still has a ghost;
@@ -693,7 +779,13 @@ window.onFtmsSessionStart = function () {
     ghostProfile = cached;
     if (typeof setGhostProfile === 'function') setGhostProfile(cached);
   }
-  loadGhost();
+
+  // Then the switches, last: they are what applies the chip, the par,
+  // the ghost, the dressing and the koi to the session that is starting.
+  applyGameModes();
+
+  // The screen that waited for the first stroke has done its job.
+  if (typeof GameModesView !== 'undefined') GameModesView.hideWaiting();
 };
 window.onFtmsPause = function () {
   Coaching.onPause();
@@ -749,7 +841,14 @@ window.onBeforeSave = function (payload) {
   // The run's score. The payload is archived verbatim in
   // xesync.workout_data, so this is stored as-is - no schema change
   // needed for the data itself.
-  payload.runScore = RunScore.summarize(runState);
+  //
+  // Off means off: with the score switched off, the number is not
+  // saved at all - the server reads it from here, so the session card
+  // shows no score. The par and the koi keep their own marks: they are
+  // their own features, and they live in the same summary.
+  var runSummary = RunScore.summarize(runState);
+  if (!gameModesResolved().score) delete runSummary.score;
+  payload.runScore = runSummary;
 };
 
 // Best sprint time per exact target distance, per account. A same-device
